@@ -6,7 +6,6 @@ import { RoleGate } from '../components/auth';
 import { AssetTable, AssetDetailModal, AssetFormModal, ImportAssetsModal } from '../components/assets';
 import QRScannerModal from '../components/assets/QRScannerModal';
 import PendingRequestsModal from '../components/assets/PendingRequestsModal';
-import { Button } from '../components/ui/button';
 import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue
@@ -276,17 +275,17 @@ export default function AssetsPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-screen bg-white">
       {/* Top toolbar: title + filters + search + action */}
-      <header className="shrink-0 border-b border-border px-6 py-3">
+      <header className="shrink-0 border-b border-gray-200 px-6 py-3 bg-white">
         <div className="flex items-center justify-between flex-wrap gap-2">
           {/* Left: title */}
-          <h1 className="text-lg font-bold shrink-0">Assets</h1>
+          <h1 className="text-lg font-bold shrink-0 text-gray-900">Assets</h1>
 
           {/* Center: inline filters */}
           <div className="flex items-center gap-2 flex-wrap">
             <Select value={filters.type || ''} onValueChange={(val) => val != null && setFilters({ ...filters, type: val || undefined, page: 1 })}>
-              <SelectTrigger className="w-[130px] h-8 text-xs">
+              <SelectTrigger className="w-[130px] h-8 text-xs bg-white border-gray-300">
                 <SelectValue placeholder="Type: All" />
               </SelectTrigger>
               <SelectContent>
@@ -300,7 +299,7 @@ export default function AssetsPage() {
             <select
               value={filters.status || ''}
               onChange={e => setFilters({ ...filters, status: e.target.value || undefined, page: 1 })}
-              className="rounded-md border border-input bg-background px-2 py-1.5 text-xs"
+              className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-700"
             >
               <option value="">Status: All</option>
               {ASSET_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -311,11 +310,11 @@ export default function AssetsPage() {
               placeholder="Filter by location..."
               value={filters.location || ''}
               onChange={e => setFilters({ ...filters, location: e.target.value || undefined, page: 1 })}
-              className="rounded-md border border-input bg-background px-2 py-1.5 text-xs w-36"
+              className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-700 w-36"
             />
 
             {hasActiveFilters && (
-              <button onClick={handleClearFilters} className="text-xs text-primary hover:underline">
+              <button onClick={handleClearFilters} className="text-xs text-blue-600 hover:underline">
                 Clear filters
               </button>
             )}
@@ -328,15 +327,15 @@ export default function AssetsPage() {
               placeholder="Search assets..."
               value={filters.search || ''}
               onChange={e => setFilters({ ...filters, search: e.target.value || undefined, page: 1 })}
-              className="rounded-md border border-input bg-background px-3 py-1.5 text-sm w-56"
+              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 w-56"
             />
-            <Button variant="outline" size="sm" onClick={() => setScannerOpen(true)}>📷 Scan QR</Button>
+            <button onClick={() => setScannerOpen(true)} className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 shadow-sm">📷 Scan QR</button>
             <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
-              <Button variant="outline" size="sm" onClick={() => setPendingModalOpen(true)}>📥 Requests</Button>
+              <button onClick={() => setPendingModalOpen(true)} className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 shadow-sm">📥 Requests</button>
             </RoleGate>
             <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
-              <Button variant="outline" size="sm" onClick={() => setIsImportModalOpen(true)}>↑ Import CSV</Button>
-              <Button onClick={() => { setEditAsset(null); setShowForm(true); }} size="sm">+ Add Asset</Button>
+              <button onClick={() => setIsImportModalOpen(true)} className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 shadow-sm">↑ Import CSV</button>
+              <button onClick={() => { setEditAsset(null); setShowForm(true); }} className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 shadow-sm">+ Add Asset</button>
             </RoleGate>
           </div>
         </div>
@@ -354,17 +353,17 @@ export default function AssetsPage() {
               <button
                 onClick={() => setStatusDropdown(!statusDropdown)}
                 disabled={bulkLoading}
-                className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                className="rounded-md bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-50 shadow-sm"
               >
                 Change Status ▾
               </button>
               {statusDropdown && (
-                <div className="absolute right-0 mt-1 w-44 rounded-md border border-border bg-card shadow-lg z-50 py-1">
+                <div className="absolute right-0 mt-1 w-44 rounded-md border border-gray-200 bg-white shadow-lg z-50 py-1">
                   {BULK_STATUS_OPTIONS.map(s => (
                     <button
                       key={s}
                       onClick={() => handleBulkStatus(s)}
-                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted transition-colors"
+                      className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                     >
                       {s}
                     </button>
@@ -377,7 +376,7 @@ export default function AssetsPage() {
             <button
               onClick={handlePrintQR}
               disabled={printLoading}
-              className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              className="rounded-md bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-50 shadow-sm"
             >
               {printLoading ? 'Generating...' : 'Print QR'}
             </button>
@@ -386,7 +385,7 @@ export default function AssetsPage() {
             <button
               onClick={handleExportCSV}
               disabled={exportLoading}
-              className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              className="rounded-md bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-50 shadow-sm"
             >
               {exportLoading ? 'Exporting...' : 'Export CSV'}
             </button>
@@ -396,7 +395,7 @@ export default function AssetsPage() {
               <button
                 onClick={() => setConfirmDelete(true)}
                 disabled={bulkLoading}
-                className="rounded-md bg-destructive px-3 py-1 text-xs text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
+                className="rounded-md bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-50 shadow-sm"
               >
                 Delete Selected
               </button>
@@ -404,7 +403,7 @@ export default function AssetsPage() {
 
             <button
               onClick={deselectAll}
-              className="rounded-md border border-input px-3 py-1 text-xs hover:bg-accent"
+              className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs text-gray-700 hover:bg-gray-50 shadow-sm"
             >
               Deselect All
             </button>
@@ -415,17 +414,17 @@ export default function AssetsPage() {
       {/* Confirm delete modal */}
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-card rounded-lg border border-border shadow-lg p-6 w-96">
-            <h3 className="text-lg font-semibold mb-2">Confirm Delete</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              You are about to retire <strong>{selectedIds.size}</strong> asset{selectedIds.size !== 1 ? 's' : ''}. 
+          <div className="bg-white rounded-lg border border-gray-200 shadow-lg p-6 w-96">
+            <h3 className="text-lg font-semibold mb-2 text-gray-900">Confirm Delete</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              You are about to retire <strong className="text-gray-900">{selectedIds.size}</strong> asset{selectedIds.size !== 1 ? 's' : ''}. 
               This will set their status to RETIRED. This action can be undone by changing status back.
             </p>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setConfirmDelete(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleBulkDelete} disabled={bulkLoading}>
+              <button className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50" onClick={() => setConfirmDelete(false)}>Cancel</button>
+              <button className="rounded-md bg-red-600 px-3 py-1.5 text-xs text-white hover:bg-red-700" onClick={handleBulkDelete} disabled={bulkLoading}>
                 {bulkLoading ? 'Deleting...' : 'Confirm Delete'}
-              </Button>
+              </button>
             </div>
           </div>
         </div>
@@ -439,9 +438,9 @@ export default function AssetsPage() {
       )}
 
       {/* Full-width table */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-6 bg-white">
         {loading && assets.length === 0 ? (
-          <p className="text-muted-foreground">Loading assets...</p>
+          <p className="text-gray-500">Loading assets...</p>
         ) : (
           <AssetTable
             assets={assets}
@@ -460,10 +459,10 @@ export default function AssetsPage() {
 
       {/* Pagination */}
       {meta && meta.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 border-t border-border px-6 py-2 shrink-0">
-          <Button size="sm" variant="outline" disabled={meta.page <= 1} onClick={() => setFilters({ ...filters, page: meta.page - 1 })}>Prev</Button>
-          <span className="text-sm text-muted-foreground">Page {meta.page} of {meta.totalPages}</span>
-          <Button size="sm" variant="outline" disabled={meta.page >= meta.totalPages} onClick={() => setFilters({ ...filters, page: meta.page + 1 })}>Next</Button>
+        <div className="flex items-center justify-center gap-2 border-t border-gray-200 px-6 py-2 shrink-0 bg-white">
+          <button className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50" disabled={meta.page <= 1} onClick={() => setFilters({ ...filters, page: meta.page - 1 })}>Prev</button>
+          <span className="text-sm text-gray-500">Page {meta.page} of {meta.totalPages}</span>
+          <button className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50" disabled={meta.page >= meta.totalPages} onClick={() => setFilters({ ...filters, page: meta.page + 1 })}>Next</button>
         </div>
       )}
 
@@ -484,19 +483,19 @@ export default function AssetsPage() {
       {/* Request Asset modal */}
       {requestModalOpen && requestAssetId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-card rounded-lg border border-border shadow-xl w-full max-w-sm mx-4 p-5">
-            <h3 className="text-sm font-semibold mb-3">Request Asset</h3>
+          <div className="bg-white rounded-lg border border-gray-200 shadow-xl w-full max-w-sm mx-4 p-5">
+            <h3 className="text-sm font-semibold mb-3 text-gray-900">Request Asset</h3>
             <textarea
               id="request-note"
               placeholder="Why do you need this asset? (optional)"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm mb-3 min-h-[80px] resize-none"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 mb-3 min-h-[80px] resize-none"
             />
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => { setRequestModalOpen(false); setRequestAssetId(null); }}>Cancel</Button>
-              <Button size="sm" onClick={() => {
+              <button className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50" onClick={() => { setRequestModalOpen(false); setRequestAssetId(null); }}>Cancel</button>
+              <button className="rounded-md bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700" onClick={() => {
                 const note = (document.getElementById('request-note') as HTMLTextAreaElement)?.value;
                 handleRequestAsset(note);
-              }}>Submit Request</Button>
+              }}>Submit Request</button>
             </div>
           </div>
         </div>

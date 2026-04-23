@@ -30,7 +30,7 @@ export function AssetTable({ assets, onView, onSort, sortBy, sortOrder, selected
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border text-left text-muted-foreground">
+          <tr className="border-b border-gray-200 text-left text-gray-500">
             <th className="px-3 py-2 w-10">
               <input
                 type="checkbox"
@@ -52,7 +52,7 @@ export function AssetTable({ assets, onView, onSort, sortBy, sortOrder, selected
         </thead>
         <tbody>
           {assets.map(a => (
-            <tr key={a.id} className={`border-b border-border hover:bg-muted/50 cursor-pointer ${selectedIds.has(a.id) ? 'bg-primary/5' : ''}`} onClick={() => onView(a)}>
+            <tr key={a.id} className={`border-b border-gray-200 hover:bg-gray-50 cursor-pointer ${selectedIds.has(a.id) ? 'bg-blue-50' : ''}`} onClick={() => onView(a)}>
               <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                 <input
                   type="checkbox"
@@ -86,7 +86,7 @@ export function AssetTable({ assets, onView, onSort, sortBy, sortOrder, selected
             </tr>
           ))}
           {assets.length === 0 && (
-            <tr><td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">No assets found</td></tr>
+            <tr><td colSpan={9} className="px-3 py-8 text-center text-gray-400">No assets found</td></tr>
           )}
         </tbody>
       </table>
