@@ -110,10 +110,13 @@ export function DashboardWidgets() {
 
   return (
     <div className="space-y-6">
-      {/* Quick Actions — Print Labels removed */}
+      {/* Quick Actions */}
       <div className="flex flex-wrap gap-3">
         <button onClick={() => navigate('/assets')} className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90">
           📦 View Assets
+        </button>
+        <button onClick={() => navigate('/assets?action=scan')} className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90">
+          📷 Scan QR
         </button>
         <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
           <button onClick={() => navigate('/assets?action=create')} className="rounded-md border border-input px-4 py-2 text-sm hover:bg-accent">

@@ -2,17 +2,19 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+const notDeleted = { deletedAt: null };
+
 export async function getDashboardStats() {
   const [totalAssets, byStatus, byType, recentAudit, byLocation] = await Promise.all([
-    prisma.asset.count(),
-    prisma.asset.groupBy({ by: ['status'], _count: { status: true } }),
-    prisma.asset.groupBy({ by: ['type'], _count: { type: true } }),
+    prisma.asset.count({ where: notDeleted }),
+    prisma.asset.groupBy({ by: ['status'], where: notDeleted, _count: { status: true } }),
+    prisma.asset.groupBy({ by: ['type'], where: notDeleted, _count: { type: true } }),
     prisma.auditLog.findMany({
       take: 20,
       orderBy: { performedAt: 'desc' },
       include: { performedBy: { select: { username: true } } },
     }),
-    prisma.asset.groupBy({ by: ['location'], _count: { location: true } }),
+    prisma.asset.groupBy({ by: ['location'], where: notDeleted, _count: { location: true } }),
   ]);
 
   const statusMap = Object.fromEntries(byStatus.map(s => [s.status, s._count.status]));
@@ -73,6 +75,7 @@ function cleanActivityValue(value: string | null): string {
 export async function getLocationStats() {
   const locationGroups = await prisma.asset.groupBy({
     by: ['location'],
+    where: notDeleted,
     _count: { id: true },
     orderBy: { _count: { id: 'desc' } },
   });
@@ -85,7 +88,7 @@ export async function getLocationStats() {
 
 export async function getAgeStats() {
   const assets = await prisma.asset.findMany({
-    where: { purchaseDate: { not: null } },
+    where: { purchaseDate: { not: null }, ...notDeleted },
     select: { id: true, purchaseDate: true },
   });
 
@@ -99,7 +102,7 @@ export async function getAgeStats() {
   };
 
   let unknownCount = 0;
-  const allAssets = await prisma.asset.count();
+  const allAssets = await prisma.asset.count({ where: notDeleted });
 
   assets.forEach(asset => {
     if (!asset.purchaseDate) { unknownCount++; return; }
@@ -135,6 +138,7 @@ export async function getWarrantiesExpiring() {
         lte: in90Days,
         not: null,
       },
+      ...notDeleted,
     },
     select: {
       id: true,

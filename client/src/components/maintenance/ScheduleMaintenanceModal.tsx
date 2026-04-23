@@ -7,10 +7,18 @@ interface Props {
   onSuccess: () => void;
 }
 
+const FREQUENCY_OPTIONS = [
+  { value: 'none', label: 'Does not repeat' },
+  { value: '3months', label: 'Every 3 Months' },
+  { value: '6months', label: 'Every 6 Months' },
+  { value: 'yearly', label: 'Yearly' },
+];
+
 export function ScheduleMaintenanceModal({ isOpen, assetId, onClose, onSuccess }: Props) {
   const [title, setTitle] = useState('');
   const [scheduledDate, setScheduledDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [frequency, setFrequency] = useState('none');
   const [titleError, setTitleError] = useState('');
   const [dateError, setDateError] = useState('');
   const [serverError, setServerError] = useState('');
@@ -22,6 +30,7 @@ export function ScheduleMaintenanceModal({ isOpen, assetId, onClose, onSuccess }
       setTitle('');
       setScheduledDate('');
       setNotes('');
+      setFrequency('none');
       setTitleError('');
       setDateError('');
       setServerError('');
@@ -29,7 +38,6 @@ export function ScheduleMaintenanceModal({ isOpen, assetId, onClose, onSuccess }
   }, [isOpen]);
 
   const handleSubmit = async () => {
-    // Validation
     let valid = true;
     setTitleError('');
     setDateError('');
@@ -62,20 +70,21 @@ export function ScheduleMaintenanceModal({ isOpen, assetId, onClose, onSuccess }
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
             title: title.trim(),
             scheduledDate,
-            notes: notes.trim() || null
-          })
+            notes: notes.trim() || null,
+            frequency,
+          }),
         }
       );
 
       const result = await response.json();
 
       if (!response.ok) {
-        setServerError(result.error || 'Failed to schedule maintenance');
+        setServerError(result.error?.message || 'Failed to schedule maintenance');
         return;
       }
 
@@ -91,11 +100,13 @@ export function ScheduleMaintenanceModal({ isOpen, assetId, onClose, onSuccess }
 
   if (!isOpen) return null;
 
+  const selectedFreq = FREQUENCY_OPTIONS.find(f => f.value === frequency);
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div className="bg-card rounded-lg border border-border shadow-xl max-w-md w-full mx-4">
         {/* Header */}
-        <div className="px-4 py-3 border-b">
+        <div className="px-4 py-3 border-b border-border">
           <h2 className="text-sm font-semibold">Schedule Maintenance</h2>
         </div>
 
@@ -132,6 +143,24 @@ export function ScheduleMaintenanceModal({ isOpen, assetId, onClose, onSuccess }
           </div>
 
           <div>
+            <label className="block text-xs font-medium mb-1">Repeat Task?</label>
+            <select
+              value={frequency}
+              onChange={e => setFrequency(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
+            >
+              {FREQUENCY_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            {frequency !== 'none' && scheduledDate && (
+              <p className="text-xs text-muted-foreground mt-1">
+                🔄 Next auto-scheduled date will be calculated when this task is completed
+              </p>
+            )}
+          </div>
+
+          <div>
             <label className="block text-xs font-medium mb-1">Notes</label>
             <textarea
               value={notes}
@@ -144,20 +173,25 @@ export function ScheduleMaintenanceModal({ isOpen, assetId, onClose, onSuccess }
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="text-xs px-3 py-1.5 border rounded hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="text-xs px-3 py-1.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {isSubmitting ? 'Scheduling...' : 'Schedule'}
-          </button>
+        <div className="px-4 py-3 border-t border-border flex justify-between items-center">
+          {frequency !== 'none' && (
+            <span className="text-xs text-blue-600">🔁 {selectedFreq?.label}</span>
+          )}
+          <div className="flex gap-2 ml-auto">
+            <button
+              onClick={onClose}
+              className="text-xs px-3 py-1.5 border border-input rounded-md hover:bg-accent"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {isSubmitting ? 'Scheduling...' : 'Schedule'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

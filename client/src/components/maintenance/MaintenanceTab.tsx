@@ -16,7 +16,15 @@ interface Schedule {
   scheduledDate: string;
   status: string;
   completedAt?: string;
+  frequency?: string;
 }
+
+const FREQ_LABELS: Record<string, string> = {
+  none: '',
+  '3months': '🔁 Every 3 Months',
+  '6months': '🔁 Every 6 Months',
+  yearly: '🔁 Yearly',
+};
 
 export function MaintenanceTab({ assetId, frequentRepair }: Props) {
   const { user } = useAuth();
@@ -209,6 +217,11 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
                 <span className="font-medium text-sm truncate">
                   {schedule.title}
                 </span>
+                {schedule.frequency && schedule.frequency !== 'none' && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 ml-1" title="Recurring">
+                    {FREQ_LABELS[schedule.frequency] || '🔁'}
+                  </span>
+                )}
               </div>
               {schedule.notes && (
                 <p className="text-xs text-gray-400 ml-5 truncate">

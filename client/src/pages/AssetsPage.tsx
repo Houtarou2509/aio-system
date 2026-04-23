@@ -1,15 +1,20 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAssets } from '../hooks/useAssets';
 import { assetsApi, Asset } from '../lib/api';
 import { RoleGate } from '../components/auth';
 import { AssetTable, AssetDetailModal, AssetFormModal, ImportAssetsModal } from '../components/assets';
+import QRScannerModal from '../components/assets/QRScannerModal';
+import PendingRequestsModal from '../components/assets/PendingRequestsModal';
 import { Button } from '../components/ui/button';
 
 const ASSET_TYPES = ['DESKTOP', 'LAPTOP', 'FURNITURE', 'EQUIPMENT', 'PERIPHERAL', 'OTHER'];
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
+const BULK_STATUS_OPTIONS = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED'];
 
 export default function AssetsPage() {
   const { assets, loading, meta, filters, setFilters, refetch } = useAssets();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [showDetail, setShowDetail] = useState(false);
@@ -23,7 +28,35 @@ export default function AssetsPage() {
   // Action loading states
   const [printLoading, setPrintLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [statusDropdown, setStatusDropdown] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [requestModalOpen, setRequestModalOpen] = useState(false);
+  const [requestAssetId, setRequestAssetId] = useState<string | null>(null);
+  const [pendingModalOpen, setPendingModalOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Auto-open scanner when navigated with ?action=scan
+  useEffect(() => {
+    if (searchParams.get('action') === 'scan') {
+      setScannerOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  // Close status dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) {
+        setStatusDropdown(false);
+      }
+    };
+    if (statusDropdown) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [statusDropdown]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -175,6 +208,68 @@ export default function AssetsPage() {
     }
   };
 
+  // Bulk status change
+  const handleBulkStatus = async (status: string) => {
+    setBulkLoading(true);
+    setStatusDropdown(false);
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await assetsApi.bulkStatus(ids, status);
+      const count = (res as any).data?.updated ?? ids.length;
+      showToast(`${count} asset(s) updated to ${status}`);
+      setSelectedIds(new Set());
+      refetch();
+    } catch {
+      showToast('Failed to update status. Please try again.');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  // Bulk delete (soft — retire)
+  const handleBulkDelete = async () => {
+    setBulkLoading(true);
+    setConfirmDelete(false);
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await assetsApi.bulkDelete(ids);
+      const count = (res as any).data?.deleted ?? ids.length;
+      showToast(`${count} asset(s) retired`);
+      setSelectedIds(new Set());
+      refetch();
+    } catch {
+      showToast('Failed to delete assets. Please try again.');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  // Request asset (Staff)
+  const handleRequestAsset = async (note?: string) => {
+    if (!requestAssetId) return;
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch('/api/assets/request', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ assetId: requestAssetId, requestNote: note || '' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Request submitted!');
+        setRequestModalOpen(false);
+        setRequestAssetId(null);
+      } else {
+        showToast(data.error?.message || 'Failed to submit request');
+      }
+    } catch {
+      showToast('Failed to submit request');
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen">
       {/* Top toolbar: title + filters + search + action */}
@@ -227,6 +322,10 @@ export default function AssetsPage() {
               onChange={e => setFilters({ ...filters, search: e.target.value || undefined, page: 1 })}
               className="rounded-md border border-input bg-background px-3 py-1.5 text-sm w-56"
             />
+            <Button variant="outline" size="sm" onClick={() => setScannerOpen(true)}>📷 Scan QR</Button>
+            <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
+              <Button variant="outline" size="sm" onClick={() => setPendingModalOpen(true)}>📥 Requests</Button>
+            </RoleGate>
             <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
               <Button variant="outline" size="sm" onClick={() => setIsImportModalOpen(true)}>↑ Import CSV</Button>
               <Button onClick={() => { setEditAsset(null); setShowForm(true); }} size="sm">+ Add Asset</Button>
@@ -242,6 +341,31 @@ export default function AssetsPage() {
             ☑ {selectedIds.size} asset{selectedIds.size !== 1 ? 's' : ''} selected
           </span>
           <div className="flex items-center gap-2">
+            {/* Change Status dropdown */}
+            <div className="relative" ref={statusDropdownRef}>
+              <button
+                onClick={() => setStatusDropdown(!statusDropdown)}
+                disabled={bulkLoading}
+                className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                Change Status ▾
+              </button>
+              {statusDropdown && (
+                <div className="absolute right-0 mt-1 w-44 rounded-md border border-border bg-card shadow-lg z-50 py-1">
+                  {BULK_STATUS_OPTIONS.map(s => (
+                    <button
+                      key={s}
+                      onClick={() => handleBulkStatus(s)}
+                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted transition-colors"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Print QR */}
             <button
               onClick={handlePrintQR}
               disabled={printLoading}
@@ -249,6 +373,8 @@ export default function AssetsPage() {
             >
               {printLoading ? 'Generating...' : 'Print QR'}
             </button>
+
+            {/* Export CSV (selected only) */}
             <button
               onClick={handleExportCSV}
               disabled={exportLoading}
@@ -256,12 +382,43 @@ export default function AssetsPage() {
             >
               {exportLoading ? 'Exporting...' : 'Export CSV'}
             </button>
+
+            {/* Delete Selected */}
+            <RoleGate roles={['ADMIN']}>
+              <button
+                onClick={() => setConfirmDelete(true)}
+                disabled={bulkLoading}
+                className="rounded-md bg-destructive px-3 py-1 text-xs text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
+              >
+                Delete Selected
+              </button>
+            </RoleGate>
+
             <button
               onClick={deselectAll}
               className="rounded-md border border-input px-3 py-1 text-xs hover:bg-accent"
             >
               Deselect All
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm delete modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-card rounded-lg border border-border shadow-lg p-6 w-96">
+            <h3 className="text-lg font-semibold mb-2">Confirm Delete</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              You are about to retire <strong>{selectedIds.size}</strong> asset{selectedIds.size !== 1 ? 's' : ''}. 
+              This will set their status to RETIRED. This action can be undone by changing status back.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+              <Button size="sm" onClick={handleBulkDelete} disabled={bulkLoading}>
+                {bulkLoading ? 'Deleting...' : 'Confirm Delete'}
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -304,7 +461,7 @@ export default function AssetsPage() {
 
       {/* Modals */}
       {showDetail && selectedAsset && (
-        <AssetDetailModal asset={selectedAsset} onClose={() => setShowDetail(false)} onEdit={handleEdit} />
+        <AssetDetailModal asset={selectedAsset} onClose={() => setShowDetail(false)} onEdit={handleEdit} onRequest={(id) => { setRequestAssetId(id); setRequestModalOpen(true); }} />
       )}
       {showForm && (
         <AssetFormModal asset={editAsset} onSubmit={editAsset ? handleUpdate : handleCreate} onClose={() => { setShowForm(false); setEditAsset(null); }} onImageUpload={assetsApi.uploadImage} />
@@ -314,6 +471,30 @@ export default function AssetsPage() {
         onClose={() => setIsImportModalOpen(false)}
         onImportComplete={handleImportComplete}
       />
+      <QRScannerModal open={scannerOpen} onClose={() => setScannerOpen(false)} />
+
+      {/* Request Asset modal */}
+      {requestModalOpen && requestAssetId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-card rounded-lg border border-border shadow-xl w-full max-w-sm mx-4 p-5">
+            <h3 className="text-sm font-semibold mb-3">Request Asset</h3>
+            <textarea
+              id="request-note"
+              placeholder="Why do you need this asset? (optional)"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm mb-3 min-h-[80px] resize-none"
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => { setRequestModalOpen(false); setRequestAssetId(null); }}>Cancel</Button>
+              <Button size="sm" onClick={() => {
+                const note = (document.getElementById('request-note') as HTMLTextAreaElement)?.value;
+                handleRequestAsset(note);
+              }}>Submit Request</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <PendingRequestsModal open={pendingModalOpen} onClose={() => setPendingModalOpen(false)} onAction={refetch} />
     </div>
   );
 }

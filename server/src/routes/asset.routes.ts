@@ -19,6 +19,8 @@ import {
   updateAssetSchema,
   listAssetsQuerySchema,
   historyQuerySchema,
+  bulkStatusSchema,
+  bulkDeleteSchema,
 } from './asset.schema';
 
 const router = Router();
@@ -217,6 +219,69 @@ router.post('/import', authorize(['ADMIN', 'STAFF_ADMIN']), importUpload.single(
     }, 200);
   } catch (err: any) {
     console.error('Import error:', err);
+    return error(res, err.message, 500);
+  }
+});
+
+// PATCH /api/assets/bulk-status — change status for multiple assets
+router.patch('/bulk-status', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const parsed = bulkStatusSchema.safeParse(req.body);
+    if (!parsed.success) return error(res, parsed.error.message, 400);
+
+    const { ids, status } = parsed.data;
+    const result = await prisma.asset.updateMany({
+      where: { id: { in: ids }, deletedAt: null },
+      data: { status: status as any },
+    });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        entityType: 'Asset',
+        entityId: 'bulk',
+        action: 'BULK_STATUS_CHANGE',
+        field: 'status',
+        newValue: `${status} (${result.count} assets)`,
+        performedById: req.user!.id,
+        ipAddress: getClientIp(req),
+      },
+    });
+
+    return success(res, { updated: result.count }, 200);
+  } catch (err: any) {
+    return error(res, err.message, 500);
+  }
+});
+
+// DELETE /api/assets/bulk-delete — soft delete (retire) multiple assets
+router.delete('/bulk-delete', authorize(['ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const parsed = bulkDeleteSchema.safeParse(req.body);
+    if (!parsed.success) return error(res, parsed.error.message, 400);
+
+    const { ids } = parsed.data;
+    const now = new Date();
+    const result = await prisma.asset.updateMany({
+      where: { id: { in: ids } },
+      data: { status: 'RETIRED', deletedAt: now },
+    });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        entityType: 'Asset',
+        entityId: 'bulk',
+        action: 'SOFT_DELETE',
+        field: 'deletedAt',
+        newValue: `Bulk soft-delete (${result.count} assets) at ${now.toISOString()}`,
+        performedById: req.user!.id,
+        ipAddress: getClientIp(req),
+      },
+    });
+
+    return success(res, { deleted: result.count }, 200);
+  } catch (err: any) {
     return error(res, err.message, 500);
   }
 });

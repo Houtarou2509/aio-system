@@ -8,6 +8,14 @@ const prisma = new PrismaClient();
 
 router.use(authenticate);
 
+// Frequency to months mapping
+const FREQUENCY_MONTHS: Record<string, number> = {
+  none: 0,
+  '3months': 3,
+  '6months': 6,
+  yearly: 12,
+};
+
 // GET /api/assets/:id/schedules
 router.get('/:id/schedules', async (req: Request, res: Response) => {
   try {
@@ -20,7 +28,6 @@ router.get('/:id/schedules', async (req: Request, res: Response) => {
       ],
     });
 
-    // Sort: pending/overdue first by scheduledDate ASC, done last by completedAt DESC
     const pending = schedules
       .filter(s => s.status === 'pending' || s.status === 'overdue')
       .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
@@ -38,7 +45,7 @@ router.get('/:id/schedules', async (req: Request, res: Response) => {
 router.post('/:id/schedules', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), async (req: Request, res: Response) => {
   try {
     const assetId = req.params.id as string;
-    const { title, scheduledDate, notes } = req.body;
+    const { title, scheduledDate, notes, frequency } = req.body;
 
     if (!title || !title.trim()) {
       return error(res, 'Title is required', 400);
@@ -58,7 +65,12 @@ router.post('/:id/schedules', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), asyn
       return error(res, 'Date must be today or in the future', 400);
     }
 
-    const asset = await prisma.asset.findUnique({ where: { id: assetId } });
+    const freq = frequency || 'none';
+    if (!FREQUENCY_MONTHS.hasOwnProperty(freq)) {
+      return error(res, 'Invalid frequency value', 400);
+    }
+
+    const asset = await prisma.asset.findUnique({ where: { id: assetId, deletedAt: null } });
     if (!asset) {
       return error(res, 'Asset not found', 404);
     }
@@ -69,6 +81,7 @@ router.post('/:id/schedules', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), asyn
         title: title.trim(),
         scheduledDate: parsedDate,
         notes: notes?.trim() || null,
+        frequency: freq,
         status: 'pending',
         createdById: req.user!.id,
       },
@@ -81,7 +94,7 @@ router.post('/:id/schedules', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), asyn
 });
 
 // PATCH /api/assets/:id/schedules/:scheduleId/done
-router.patch('/:id/schedules/:scheduleId/done', async (req: Request, res: Response) => {
+router.patch('/:id/schedules/:scheduleId/done', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), async (req: Request, res: Response) => {
   try {
     const assetId = req.params.id as string;
     const scheduleId = req.params.scheduleId as string;
@@ -93,13 +106,40 @@ router.patch('/:id/schedules/:scheduleId/done', async (req: Request, res: Respon
       return error(res, 'Schedule not found', 404);
     }
 
+    const now = new Date();
+
     const updated = await prisma.maintenanceSchedule.update({
       where: { id: scheduleId },
       data: {
         status: 'done',
-        completedAt: new Date(),
+        completedAt: now,
       },
     });
+
+    // Auto-create next recurring schedule if frequency is set
+    const freq = schedule.frequency || 'none';
+    const months = FREQUENCY_MONTHS[freq] || 0;
+    if (months > 0) {
+      const nextDate = new Date(schedule.scheduledDate);
+      nextDate.setMonth(nextDate.getMonth() + months);
+
+      // Ensure next date is in the future
+      if (nextDate <= now) {
+        nextDate.setMonth(now.getMonth() + months);
+      }
+
+      await prisma.maintenanceSchedule.create({
+        data: {
+          assetId,
+          title: schedule.title,
+          scheduledDate: nextDate,
+          notes: schedule.notes,
+          frequency: schedule.frequency,
+          status: 'pending',
+          createdById: schedule.createdById,
+        },
+      });
+    }
 
     return success(res, updated, 200);
   } catch (err: any) {

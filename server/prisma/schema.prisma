@@ -48,27 +48,31 @@ model Asset {
   assignedTo       String?
   warrantyExpiry   DateTime?
   warrantyNotes     String?
+  deletedAt        DateTime?
 
   assignments     Assignment[]
   maintenanceLogs MaintenanceLog[]
   maintenanceSchedules MaintenanceSchedule[]
   guestTokens     GuestToken[]
+  notifications   Notification[]
 
   @@map("assets")
 }
 
 model Assignment {
-  id          String         @id @default(uuid())
-  assetId     String
-  userId      String?
-  assignedTo  String?
-  assignedAt  DateTime       @default(now())
-  returnedAt  DateTime?
-  condition   String?
-  notes       String?
+  id            String           @id @default(uuid())
+  assetId       String
+  userId        String?
+  assignedTo    String?
+  assignedAt    DateTime         @default(now())
+  returnedAt    DateTime?
+  condition     String?
+  notes         String?
+  requestStatus RequestStatus    @default(APPROVED)
+  requestNote   String?
 
-  asset       Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  user        User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  asset         Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  user          User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("assignments")
 }
@@ -173,6 +177,30 @@ enum BackupStatus {
   FAILED
 }
 
+enum RequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+}
+
+enum NotificationType {
+  WARRANTY_EXPIRING
+  MAINTENANCE_OVERDUE
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  type      NotificationType
+  message   String
+  assetId   String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  asset     Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
 model MaintenanceSchedule {
   id            String   @id @default(uuid())
   assetId       String
@@ -181,6 +209,7 @@ model MaintenanceSchedule {
   notes         String?
   status        String   @default("pending")
   completedAt   DateTime?
+  frequency     String?  @default("none")
   createdById   String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

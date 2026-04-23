@@ -3,17 +3,20 @@ import { assetsApi, Asset, Assignment } from '../../lib/api';
 import { MaintenanceTab } from '../maintenance';
 import { AuditTimeline } from '../audit';
 import { GuestTokenManager } from '../guest';
+import FinancialsTab from '../depreciation/FinancialsTab';
 import { getWarrantyStatus, formatWarrantyDate } from '../../lib/warranty';
+import { RoleGate } from '../auth';
 
 interface Props {
   asset: Asset;
   onClose: () => void;
   onEdit: (asset: Asset) => void;
+  onRequest?: (assetId: string) => void;
 }
 
-type Tab = 'overview' | 'history' | 'maintenance' | 'audit';
+type Tab = 'overview' | 'financials' | 'history' | 'maintenance' | 'audit';
 
-export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
+export function AssetDetailModal({ asset, onClose, onEdit, onRequest }: Props) {
   const [tab, setTab] = useState<Tab>('overview');
   const [history, setHistory] = useState<Assignment[]>([]);
   const [frequentRepair, setFrequentRepair] = useState(false);
@@ -43,6 +46,11 @@ export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
             <p className="text-sm text-muted-foreground">{asset.type} · {asset.manufacturer || 'No manufacturer'}</p>
           </div>
           <div className="flex gap-2">
+            {onRequest && asset.status === 'AVAILABLE' && (
+              <RoleGate roles={['STAFF', 'STAFF_ADMIN']}>
+                <button onClick={() => onRequest(asset.id)} className="rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90">Request Asset</button>
+              </RoleGate>
+            )}
             <button onClick={() => onEdit(asset)} className="rounded-md border border-input px-3 py-1 text-xs hover:bg-accent">Edit</button>
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg">×</button>
           </div>
@@ -50,7 +58,7 @@ export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-border mb-4">
-          {(['overview', 'history', 'maintenance', 'audit'] as Tab[]).map(t => (
+          {(['overview', 'financials', 'history', 'maintenance', 'audit'] as Tab[]).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`px-3 py-1.5 text-sm capitalize ${tab === t ? 'border-b-2 border-primary font-medium text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>{t}</button>
           ))}
         </div>
@@ -106,6 +114,7 @@ export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
           </div>
         )}
 
+        {tab === 'financials' && <FinancialsTab asset={asset} />}
         {tab === 'history' && (
           <div className="space-y-2">
             {loading && <p className="text-sm text-muted-foreground">Loading...</p>}

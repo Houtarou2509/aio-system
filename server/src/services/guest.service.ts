@@ -9,7 +9,7 @@ function generateToken(): string {
 }
 
 export async function createGuestToken(assetId: string, expiresAt?: string, maxAccess?: number) {
-  const asset = await prisma.asset.findUnique({ where: { id: assetId } });
+  const asset = await prisma.asset.findUnique({ where: { id: assetId, deletedAt: null } });
   if (!asset) throw new Error('Asset not found');
 
   const token = generateToken();
@@ -35,7 +35,7 @@ export async function getAssetByGuestToken(token: string, ipAddress?: string) {
   });
 
   const asset = await prisma.asset.findUnique({
-    where: { id: guestToken.assetId },
+    where: { id: guestToken.assetId, deletedAt: null },
     select: {
       id: true,
       name: true,

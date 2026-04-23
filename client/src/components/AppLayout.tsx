@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import NotificationBell from '../components/notifications/NotificationBell';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '📊' },
@@ -38,8 +39,11 @@ export default function AppLayout() {
           ))}
         </nav>
         <div className="p-3 border-t border-border">
-          <div className="px-3 py-1 text-xs text-muted-foreground">
-            {user?.username} · {user?.role}
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <div className="px-3 py-1 text-xs text-muted-foreground">
+              {user?.username} · {user?.role}
+            </div>
           </div>
           <button
             onClick={logout}
@@ -54,9 +58,12 @@ export default function AppLayout() {
       {/* Mobile header */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between border-b border-border bg-card px-4 py-3">
         <h1 className="text-base font-bold">AIO</h1>
-        <button onClick={() => setMobileOpen(!mobileOpen)} className="text-xl">
-          {mobileOpen ? '✕' : '☰'}
-        </button>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <button onClick={() => setMobileOpen(!mobileOpen)} className="text-xl">
+            {mobileOpen ? '✕' : '☰'}
+          </button>
+        </div>
       </div>
 
       {/* Mobile nav overlay */}

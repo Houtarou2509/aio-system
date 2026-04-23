@@ -48,7 +48,7 @@ export async function generateLabelsPdf(
   ipAddress?: string
 ): Promise<Buffer> {
   const assets = await prisma.asset.findMany({
-    where: { id: { in: assetIds } },
+    where: { id: { in: assetIds }, deletedAt: null },
   });
 
   if (assets.length === 0) throw new Error('No assets found');

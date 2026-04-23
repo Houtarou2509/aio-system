@@ -40,6 +40,15 @@ export const listAssetsQuerySchema = z.object({
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
 
+export const bulkStatusSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1, 'At least one ID is required'),
+  status: z.enum(['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED']),
+});
+
+export const bulkDeleteSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1, 'At least one ID is required'),
+});
+
 export const historyQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),

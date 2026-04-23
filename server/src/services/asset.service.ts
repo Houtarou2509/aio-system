@@ -13,7 +13,7 @@ export async function listAssets(query: {
   type?: string; status?: string; location?: string; assignedTo?: string; search?: string;
   sortBy: string; sortOrder: string;
 }) {
-  const where: Prisma.AssetWhereInput = {};
+  const where: Prisma.AssetWhereInput = { deletedAt: null };
   if (query.type) where.type = query.type as any;
   if (query.status) where.status = query.status as any;
   if (query.location) where.location = { contains: query.location };
@@ -95,7 +95,7 @@ export async function createAsset(data: Prisma.AssetCreateInput, performedById: 
 // --- GET SINGLE ---
 export async function getAsset(id: string) {
   const asset = await prisma.asset.findUnique({
-    where: { id },
+    where: { id, deletedAt: null },
     include: {
       assignments: { include: { user: { select: { id: true, username: true, email: true } } }, orderBy: { assignedAt: 'desc' } },
       maintenanceLogs: { orderBy: { date: 'desc' } },
@@ -107,7 +107,7 @@ export async function getAsset(id: string) {
 
 // --- UPDATE ---
 export async function updateAsset(id: string, data: Prisma.AssetUpdateInput, performedById: string, ipAddress?: string) {
-  const existing = await prisma.asset.findUnique({ where: { id } });
+  const existing = await prisma.asset.findUnique({ where: { id, deletedAt: null } });
   if (!existing) throw new Error('Asset not found');
 
   const cleaned = cleanWarrantyFields(data);
@@ -176,15 +176,19 @@ export async function updateAsset(id: string, data: Prisma.AssetUpdateInput, per
   return asset;
 }
 
-// --- SOFT DELETE (retire) ---
+// --- SOFT DELETE ---
 export async function deleteAsset(id: string, performedById: string, ipAddress?: string) {
-  const existing = await prisma.asset.findUnique({ where: { id } });
+  const existing = await prisma.asset.findUnique({ where: { id, deletedAt: null } });
   if (!existing) throw new Error('Asset not found');
 
-  const asset = await prisma.asset.update({ where: { id }, data: { status: 'RETIRED' } });
+  const now = new Date();
+  const asset = await prisma.asset.update({
+    where: { id },
+    data: { deletedAt: now, status: 'RETIRED' },
+  });
 
   await prisma.auditLog.create({
-    data: { entityType: 'Asset', entityId: id, action: 'DELETE', performedById, ipAddress },
+    data: { entityType: 'Asset', entityId: id, action: 'SOFT_DELETE', performedById, ipAddress, field: 'deletedAt', newValue: now.toISOString() },
   });
 
   return asset;
@@ -192,7 +196,7 @@ export async function deleteAsset(id: string, performedById: string, ipAddress?:
 
 // --- CHECKOUT ---
 export async function checkoutAsset(assetId: string, userId: string, notes: string | undefined, performedById: string, ipAddress?: string) {
-  const asset = await prisma.asset.findUnique({ where: { id: assetId } });
+  const asset = await prisma.asset.findUnique({ where: { id: assetId, deletedAt: null } });
   if (!asset) throw new Error('Asset not found');
   if (asset.status !== 'AVAILABLE') throw new Error('Asset is not available for checkout');
 
@@ -210,7 +214,7 @@ export async function checkoutAsset(assetId: string, userId: string, notes: stri
 
 // --- RETURN ---
 export async function returnAsset(assetId: string, condition: string, notes: string | undefined, performedById: string, ipAddress?: string) {
-  const asset = await prisma.asset.findUnique({ where: { id: assetId } });
+  const asset = await prisma.asset.findUnique({ where: { id: assetId, deletedAt: null } });
   if (!asset) throw new Error('Asset not found');
   if (asset.status !== 'ASSIGNED') throw new Error('Asset is not currently assigned');
 
@@ -234,7 +238,7 @@ export async function returnAsset(assetId: string, condition: string, notes: str
 
 // --- IMAGE UPLOAD ---
 export async function uploadAssetImage(assetId: string, filename: string, performedById: string) {
-  const asset = await prisma.asset.findUnique({ where: { id: assetId } });
+  const asset = await prisma.asset.findUnique({ where: { id: assetId, deletedAt: null } });
   if (!asset) throw new Error('Asset not found');
 
   const imageUrl = `/uploads/${filename}`;
@@ -265,10 +269,10 @@ export async function getAssetHistory(assetId: string, page: number, limit: numb
 // --- STATS ---
 export async function getAssetStats() {
   const [byStatus, byType, byLocation, total] = await Promise.all([
-    prisma.asset.groupBy({ by: ['status'], _count: { status: true } }),
-    prisma.asset.groupBy({ by: ['type'], _count: { type: true } }),
-    prisma.asset.groupBy({ by: ['location'], _count: { location: true } }),
-    prisma.asset.count(),
+    prisma.asset.groupBy({ by: ['status'], where: { deletedAt: null }, _count: { status: true } }),
+    prisma.asset.groupBy({ by: ['type'], where: { deletedAt: null }, _count: { type: true } }),
+    prisma.asset.groupBy({ by: ['location'], where: { deletedAt: null }, _count: { location: true } }),
+    prisma.asset.count({ where: { deletedAt: null } }),
   ]);
 
   return {

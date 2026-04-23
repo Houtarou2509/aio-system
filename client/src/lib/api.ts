@@ -92,6 +92,8 @@ export const assetsApi = {
     return res.json();
   },
   delete: (id: string) => request<{ data: Asset }>(`/assets/${id}`, { method: 'DELETE' }),
+  bulkStatus: (ids: string[], status: string) => request<{ data: { updated: number } }>('/assets/bulk-status', { method: 'PATCH', body: JSON.stringify({ ids, status }) }),
+  bulkDelete: (ids: string[]) => request<{ data: { deleted: number } }>('/assets/bulk-delete', { method: 'DELETE', body: JSON.stringify({ ids }) }),
   uploadImage: async (id: string, file: File) => {
     const token = localStorage.getItem('accessToken');
     const form = new FormData();
