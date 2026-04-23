@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { BookOpen } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/notifications/NotificationBell';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '📊' },
   { to: '/assets', label: 'Assets', icon: '📦' },
-  { to: '/users', label: 'Users', icon: '👥', adminOnly: true },
+  { to: '/lookup', label: 'Inventory Lookup', icon: '📚', IconComponent: BookOpen, roles: ['ADMIN', 'STAFF_ADMIN'] },
+  { to: '/users', label: 'Users', icon: '👥', roles: ['ADMIN'] },
   { to: '/audit', label: 'Audit Trail', icon: '📋' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
@@ -14,6 +16,10 @@ const navItems = [
 export default function AppLayout() {
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const visibleItems = navItems.filter(item =>
+    !item.roles || item.roles.includes(user?.role || '')
+  );
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
@@ -31,9 +37,9 @@ export default function AppLayout() {
           <p className="text-xs text-muted-foreground">Asset Inventory</p>
         </div>
         <nav className="flex-1 p-3 space-y-1">
-          {navItems.filter(item => !item.adminOnly || user?.role === 'ADMIN').map(item => (
+          {visibleItems.map(item => (
             <NavLink key={item.to} to={item.to} end={item.to === '/'} className={linkClass}>
-              <span>{item.icon}</span>
+              {item.IconComponent ? <item.IconComponent className="h-4 w-4" /> : <span>{item.icon}</span>}
               <span>{item.label}</span>
             </NavLink>
           ))}
@@ -70,9 +76,9 @@ export default function AppLayout() {
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-30 bg-black/50" onClick={() => setMobileOpen(false)}>
           <div className="w-56 h-full bg-card border-r border-border p-3 space-y-1 pt-16" onClick={e => e.stopPropagation()}>
-            {navItems.filter(item => !item.adminOnly || user?.role === 'ADMIN').map(item => (
+            {visibleItems.map(item => (
               <NavLink key={item.to} to={item.to} end={item.to === '/'} className={linkClass} onClick={() => setMobileOpen(false)}>
-                <span>{item.icon}</span>
+                {item.IconComponent ? <item.IconComponent className="h-4 w-4" /> : <span>{item.icon}</span>}
                 <span>{item.label}</span>
               </NavLink>
             ))}

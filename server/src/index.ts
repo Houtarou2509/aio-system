@@ -22,6 +22,7 @@ import aiRoutes from './routes/ai.routes';
 import backupRoutes from './routes/backup.routes';
 import notificationRoutes from './routes/notification.routes';
 import requestRoutes from './routes/request.routes';
+import lookupRoutes from './routes/lookup.routes';
 import maintenanceSchedulesRouter from './routes/maintenanceSchedules';
 import maintenanceUpcomingRouter from './routes/maintenanceUpcoming';
 import { startCronJobs } from './jobs/cron';
@@ -85,6 +86,7 @@ app.use('/api/assets', maintenanceSchedulesRouter);
 app.use('/api/maintenance', maintenanceUpcomingRouter);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/assets', requestRoutes);
+app.use('/api/lookups', lookupRoutes);
 app.use('/api/users', userRoutes);
 
 // Redirect root to /aio-system/

@@ -10,6 +10,7 @@ import AuditPage from './pages/AuditPage';
 import GuestAssetPage from './pages/GuestAssetPage';
 import SettingsPage from './pages/SettingsPage';
 import UserManagementPage from './pages/UserManagementPage';
+import InventoryLookupPage from './pages/InventoryLookupPage';
 import './index.css';
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
             <Route path="labels" element={<Navigate to="/assets" replace />} />
             <Route path="users" element={<ProtectedRoute requiredRole="ADMIN"><UserManagementPage /></ProtectedRoute>} />
             <Route path="audit" element={<AuditPage />} />
+            <Route path="lookup" element={<ProtectedRoute requiredRole={["ADMIN","STAFF_ADMIN"] as any}><InventoryLookupPage /></ProtectedRoute>} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 

@@ -1,7 +1,11 @@
 import { useState, FormEvent, useEffect, useRef } from 'react';
 import { Asset } from '../../lib/api';
+import {
+  Select, SelectContent, SelectItem,
+  SelectTrigger, SelectValue
+} from '@/components/ui/select';
+import { useLookupOptions } from '@/hooks/useLookupOptions';
 
-const ASSET_TYPES = ['DESKTOP', 'LAPTOP', 'FURNITURE', 'EQUIPMENT', 'PERIPHERAL', 'OTHER'];
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
 
 interface Props {
@@ -15,15 +19,15 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const isEdit = !!asset;
   const [form, setForm] = useState({
     name: asset?.name || '',
-    type: asset?.type || 'DESKTOP',
-    manufacturer: asset?.manufacturer || '',
+    type: asset?.type ?? '',
+    manufacturer: asset?.manufacturer ?? '',
     serialNumber: asset?.serialNumber || '',
     purchasePrice: asset?.purchasePrice != null ? String(asset.purchasePrice) : '',
     purchaseDate: asset?.purchaseDate ? new Date(asset.purchaseDate).toISOString().split('T')[0] : '',
-    assignedTo: asset?.assignedTo || '',
+    assignedTo: asset?.assignedTo ?? '',
     propertyNumber: (asset as any)?.propertyNumber || '',
     status: asset?.status || 'AVAILABLE',
-    location: asset?.location || '',
+    location: asset?.location ?? '',
     remarks: (asset as any)?.remarks || '',
     warrantyExpiry: (asset as any)?.warrantyExpiry ? new Date((asset as any).warrantyExpiry).toISOString().split('T')[0] : '',
     warrantyNotes: (asset as any)?.warrantyNotes || '',
@@ -34,6 +38,12 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const [error, setError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Dynamic lookup lists via hook
+  const { options: typeOptions, isLoading: typeLoading } = useLookupOptions('asset-types');
+  const { options: manufacturerOptions, isLoading: manufacturerLoading } = useLookupOptions('manufacturers');
+  const { options: locationOptions, isLoading: locationLoading } = useLookupOptions('locations');
+  const { options: assignedToOptions, isLoading: assignedToLoading } = useLookupOptions('assigned-to');
 
   // Generate preview when image selected
   useEffect(() => {
@@ -60,8 +70,12 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       const d = await res.json();
       if (d.success && d.data.suggestions?.length > 0) {
         const best = d.data.suggestions[0];
-        if (best.type) setForm(f => ({ ...f, type: best.type }));
-        if (best.manufacturer) setForm(f => ({ ...f, manufacturer: best.manufacturer }));
+        if (best.type) {
+          setForm(f => ({ ...f, type: best.type }));
+        }
+        if (best.manufacturer) {
+          setForm(f => ({ ...f, manufacturer: best.manufacturer }));
+        }
       }
     } catch {} finally { setSuggesting(false); }
   };
@@ -72,39 +86,32 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     setError(null);
 
     try {
-      // Build data object — clean empty values
-      const data: any = { ...form };
-      if (data.purchasePrice !== '') {
-        data.purchasePrice = Number(data.purchasePrice);
-      } else {
-        delete data.purchasePrice;
+      const data: any = {};
+      data.name = form.name;
+      data.type = form.type || undefined;
+      data.manufacturer = form.manufacturer || undefined;
+      data.serialNumber = form.serialNumber || undefined;
+      data.status = form.status;
+      data.location = form.location || undefined;
+      data.assignedTo = form.assignedTo || undefined;
+      data.propertyNumber = form.propertyNumber || undefined;
+      data.remarks = form.remarks || undefined;
+      if (form.purchasePrice !== '') {
+        data.purchasePrice = Number(form.purchasePrice);
       }
-      // Convert empty date to undefined, valid date to ISO string
-      if (data.purchaseDate) {
-        data.purchaseDate = new Date(data.purchaseDate).toISOString();
-      } else {
-        delete data.purchaseDate;
+      if (form.purchaseDate) {
+        data.purchaseDate = new Date(form.purchaseDate).toISOString();
       }
-      // Remove empty optional strings
-      if (!data.assignedTo) delete data.assignedTo;
-      if (!data.propertyNumber) delete data.propertyNumber;
-      if (!data.remarks) delete data.remarks;
-      for (const k of ['manufacturer', 'serialNumber', 'location']) {
-        if (!data[k]) delete data[k];
-      }
-      // Warranty fields: empty string → null, valid date → ISO string
-      data.warrantyExpiry = data.warrantyExpiry ? new Date(data.warrantyExpiry).toISOString() : null;
-      data.warrantyNotes = data.warrantyNotes || null;
+      data.warrantyExpiry = form.warrantyExpiry ? new Date(form.warrantyExpiry).toISOString() : null;
+      data.warrantyNotes = form.warrantyNotes || null;
       if (data.warrantyNotes === '') data.warrantyNotes = null;
 
       if (imageFile) {
-        // Send multipart form data with image
         const fd = new FormData();
         fd.append('image', imageFile);
         fd.append('data', new Blob([JSON.stringify(data)], { type: 'application/json' }));
         await onSubmit(fd);
       } else {
-        // No image — send plain JSON
         await onSubmit(data);
       }
     } catch (err: any) {
@@ -117,11 +124,19 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
   const set = (key: string, value: string) => setForm(prev => ({ ...prev, [key]: value }));
 
+  // Merge current value into options if it's inactive/missing
+  function mergeWithFallback(options: { id: number; value: string }[], currentValue: string) {
+    if (!currentValue) return options;
+    const exists = options.some((o) => o.value === currentValue);
+    if (exists) return options;
+    return [{ id: -1, value: currentValue }, ...options];
+  }
+
   return (
     <div 
-  className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-  onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-lg border border-border bg-card shadow-lg" onClick={e => e.stopPropagation()}>
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/50"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-lg border border-border bg-white dark:bg-card shadow-lg" onClick={e => e.stopPropagation()}>
         {/* Fixed header */}
         <h2 className="text-lg font-bold text-card-foreground px-6 pt-6 pb-2 shrink-0">{isEdit ? 'Edit Asset' : 'Add Asset'}</h2>
 
@@ -133,7 +148,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 1. Image */}
               <div className="col-span-2">
-                <label className="text-xs font-medium text-muted-foreground">Image</label>
+                <label className="text-xs font-medium text-gray-700">Image</label>
                 <div className="flex items-center gap-3 mt-1">
                   {imagePreview && (
                     <img src={imagePreview} alt="Preview" className="h-16 w-16 rounded-md object-cover border border-input" />
@@ -156,7 +171,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               {/* 2. Name */}
               <div className="col-span-2 flex gap-2">
                 <div className="flex-1">
-                  <label className="text-xs font-medium text-muted-foreground">Name *</label>
+                  <label className="text-xs font-medium text-gray-700">Name *</label>
                   <input value={form.name} onChange={e => set('name', e.target.value)} required className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
                 </div>
                 <button type="button" onClick={handleSuggest} disabled={suggesting || !form.name.trim()} title="AI suggest type & manufacturer" className="mt-4 rounded-md border border-input px-2 py-1.5 text-sm hover:bg-accent disabled:opacity-50">{suggesting ? '⏳' : '✨'}</button>
@@ -164,27 +179,48 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 3. Type */}
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Type *</label>
-                <select value={form.type} onChange={e => set('type', e.target.value)} required className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm">
-                  {ASSET_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                <label className="text-xs font-medium text-gray-700">Type *</label>
+                <Select value={form.type} onValueChange={(val) => val != null && set('type', val)} disabled={typeLoading}>
+                  <SelectTrigger className="w-full bg-background">
+                    <SelectValue placeholder={typeLoading ? 'Loading...' : 'Select type'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mergeWithFallback(typeOptions, form.type).map((opt) => (
+                      <SelectItem key={opt.id} value={opt.value}>
+                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-muted-foreground">(inactive)</span>}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* 4. Manufacturer */}
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Manufacturer</label>
-                <input value={form.manufacturer} onChange={e => set('manufacturer', e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
+                <label className="text-xs font-medium text-gray-700">Manufacturer</label>
+                <Select value={form.manufacturer || '__none__'} onValueChange={(val) => val != null && set('manufacturer', val === '__none__' ? '' : val)} disabled={manufacturerLoading}>
+                  <SelectTrigger className="w-full bg-background">
+                    <SelectValue placeholder={manufacturerLoading ? 'Loading...' : 'Select manufacturer'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {mergeWithFallback(manufacturerOptions, form.manufacturer).map((opt) => (
+                      <SelectItem key={opt.id} value={opt.value}>
+                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-muted-foreground">(inactive)</span>}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* 5. Serial Number */}
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Serial Number</label>
+                <label className="text-xs font-medium text-gray-700">Serial Number</label>
                 <input value={form.serialNumber} onChange={e => set('serialNumber', e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
               </div>
 
               {/* 6. Price */}
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Price *</label>
+                <label className="text-xs font-medium text-gray-700">Price *</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">₱</span>
                   <input type="number" step="0.01" value={form.purchasePrice} onChange={e => set('purchasePrice', e.target.value)} required className="w-full rounded-md border border-input bg-background pl-8 pr-3 py-1.5 text-sm" />
@@ -193,31 +229,55 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 7. Purchase Date */}
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Purchase Date{isEdit ? '' : ' *'}</label>
+                <label className="text-xs font-medium text-gray-700">Purchase Date{isEdit ? '' : ' *'}</label>
                 <input type="date" value={form.purchaseDate} onChange={e => set('purchaseDate', e.target.value)} {...(isEdit ? {} : { required: true })} className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
               </div>
 
               {/* 8. Assigned To */}
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Assigned To</label>
-                <input value={form.assignedTo} onChange={e => set('assignedTo', e.target.value)} placeholder="Enter employee name" className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
+                <label className="text-xs font-medium text-gray-700">Assigned To</label>
+                <Select value={form.assignedTo || '__none__'} onValueChange={(val) => val != null && set('assignedTo', val === '__none__' ? '' : val)} disabled={assignedToLoading}>
+                  <SelectTrigger className="w-full bg-background">
+                    <SelectValue placeholder={assignedToLoading ? 'Loading...' : 'Select assignee'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {mergeWithFallback(assignedToOptions, form.assignedTo).map((opt) => (
+                      <SelectItem key={opt.id} value={opt.value}>
+                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-muted-foreground">(inactive)</span>}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* 9. Property # */}
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Property #</label>
+                <label className="text-xs font-medium text-gray-700">Property #</label>
                 <input value={form.propertyNumber} onChange={e => set('propertyNumber', e.target.value)} placeholder="e.g. PROP-00123" className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
               </div>
 
               {/* 10. Location */}
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Location</label>
-                <input value={form.location} onChange={e => set('location', e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
+                <label className="text-xs font-medium text-gray-700">Location</label>
+                <Select value={form.location || '__none__'} onValueChange={(val) => val != null && set('location', val === '__none__' ? '' : val)} disabled={locationLoading}>
+                  <SelectTrigger className="w-full bg-background">
+                    <SelectValue placeholder={locationLoading ? 'Loading...' : 'Select location'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {mergeWithFallback(locationOptions, form.location).map((opt) => (
+                      <SelectItem key={opt.id} value={opt.value}>
+                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-muted-foreground">(inactive)</span>}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* 11. Status */}
               <div>
-                <label className="text-xs font-medium text-muted-foreground">Status *</label>
+                <label className="text-xs font-medium text-gray-700">Status *</label>
                 <select value={form.status} onChange={e => set('status', e.target.value)} required className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm">
                   {ASSET_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
@@ -225,14 +285,14 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 12. Remarks */}
               <div className="col-span-2">
-                <label className="text-xs font-medium text-muted-foreground">Remarks</label>
+                <label className="text-xs font-medium text-gray-700">Remarks</label>
                 <textarea rows={3} value={form.remarks} onChange={e => set('remarks', e.target.value)} placeholder="Any additional notes..." className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm resize-none" />
               </div>
 
               {/* 13. Warranty Section */}
               <div className="col-span-2">
                 <div className="border-t border-border my-2" />
-                <label className="text-xs font-medium text-muted-foreground">Warranty (Optional)</label>
+                <label className="text-xs font-medium text-gray-700">Warranty (Optional)</label>
                 <div className="grid grid-cols-2 gap-3 mt-1">
                   <div>
                     <input type="date" value={form.warrantyExpiry} onChange={e => set('warrantyExpiry', e.target.value)} placeholder="Select expiry date" className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
@@ -247,7 +307,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
             </div>
           </div>
 
-          {/* Fixed footer — inside the form so submit works */}
+          {/* Fixed footer */}
           {error && (
             <div className="px-6 pt-2 shrink-0">
               <p className="text-sm text-red-600 bg-red-50 rounded-md px-3 py-2">{error}</p>

@@ -1,7 +1,6 @@
 // Shared types for AIO-System
 
 export type Role = 'ADMIN' | 'STAFF_ADMIN' | 'STAFF' | 'GUEST';
-export type AssetType = 'DESKTOP' | 'LAPTOP' | 'FURNITURE' | 'EQUIPMENT' | 'PERIPHERAL' | 'OTHER';
 export type AssetStatus = 'AVAILABLE' | 'ASSIGNED' | 'MAINTENANCE' | 'RETIRED' | 'LOST';
 export type BackupStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
 
@@ -30,7 +29,7 @@ export interface UserDTO {
 export interface AssetDTO {
   id: string;
   name: string;
-  type: AssetType;
+  type: string;
   manufacturer?: string;
   serialNumber?: string;
   purchasePrice?: number;

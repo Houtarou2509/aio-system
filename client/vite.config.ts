@@ -48,7 +48,7 @@ export default defineConfig({
       '/api': { target: 'http://localhost:3001', changeOrigin: true },
     },
   },
-  base: 'http://10.170.59.190:3000/aio-system/static/',
+  base: '/aio-system/static/',
   build: {
     outDir: '../server/public',
     emptyOutDir: true,

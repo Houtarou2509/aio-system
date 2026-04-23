@@ -14,9 +14,11 @@ export async function listAssets(query: {
   sortBy: string; sortOrder: string;
 }) {
   const where: Prisma.AssetWhereInput = { deletedAt: null };
-  if (query.type) where.type = query.type as any;
+  if (query.type) {
+    where.type = { contains: query.type, mode: 'insensitive' } as any;
+  }
   if (query.status) where.status = query.status as any;
-  if (query.location) where.location = { contains: query.location };
+  if (query.location) where.location = { contains: query.location, mode: 'insensitive' };
   if (query.assignedTo) where.assignedTo = { contains: query.assignedTo };
   if (query.search) {
     where.OR = [

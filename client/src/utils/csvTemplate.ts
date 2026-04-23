@@ -6,13 +6,13 @@ export function downloadAssetCsvTemplate() {
   ].join(',');
 
   const row1 = [
-    'Lenovo ThinkPad E14', 'LAPTOP', 'AVAILABLE', 'Lenovo', 'SN-001234',
+    'Lenovo ThinkPad E14', 'Laptop', 'AVAILABLE', 'Lenovo', 'SN-001234',
     '95000', '2024-01-15', '', 'PROP-001', 'Room 101', '',
     '2027-01-15', '3-year warranty',
   ].join(',');
 
   const row2 = [
-    'Acer All-in-One', 'DESKTOP', 'ASSIGNED', 'Acer', 'SN-005678',
+    'Acer All-in-One', 'Desktop', 'ASSIGNED', 'Acer', 'SN-005678',
     '49999', '2023-06-01', 'Juan dela Cruz', 'PROP-002', 'Room 202',
     'For accounting dept', '2025-06-01', '1-year carry-in',
   ].join(',');
@@ -57,7 +57,6 @@ export type RowValidationResult =
   | { valid: true }
   | { valid: false; reason: string };
 
-const VALID_TYPES = ['LAPTOP', 'DESKTOP', 'MONITOR', 'PRINTER', 'TABLET', 'PHONE', 'SERVER', 'OTHER'];
 const VALID_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED'];
 
 export function validateAssetRow(
@@ -67,8 +66,8 @@ export function validateAssetRow(
   if (!row.name || row.name.trim() === '') {
     return { valid: false, reason: 'Name is required' };
   }
-  if (!VALID_TYPES.includes(row.type?.toUpperCase())) {
-    return { valid: false, reason: `Invalid type: ${row.type}` };
+  if (!row.type || row.type.trim() === '') {
+    return { valid: false, reason: 'Type is required' };
   }
   if (row.status && !VALID_STATUSES.includes(row.status?.toUpperCase())) {
     return { valid: false, reason: `Invalid status: ${row.status}` };

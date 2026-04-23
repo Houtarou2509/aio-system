@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const createAssetSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  type: z.enum(['DESKTOP', 'LAPTOP', 'FURNITURE', 'EQUIPMENT', 'PERIPHERAL', 'OTHER']),
+  type: z.string().min(1, 'Type is required'),
   manufacturer: z.string().optional(),
   serialNumber: z.string().optional(),
   purchasePrice: z.coerce.number().nonnegative().optional(),
@@ -31,7 +31,7 @@ export const returnSchema = z.object({
 export const listAssetsQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
-  type: z.enum(['DESKTOP', 'LAPTOP', 'FURNITURE', 'EQUIPMENT', 'PERIPHERAL', 'OTHER']).optional(),
+  type: z.string().optional(),
   status: z.enum(['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST']).optional(),
   location: z.string().optional(),
   assignedTo: z.string().optional(),

@@ -32,7 +32,7 @@ model User {
 model Asset {
   id               String        @id @default(uuid())
   name             String
-  type             AssetType
+  type             String        @default("Other")
   manufacturer     String?
   serialNumber     String?       @unique
   purchasePrice    Decimal?
@@ -146,20 +146,23 @@ model BackupLog {
   @@map("backup_logs")
 }
 
+model LookupValue {
+  id        Int            @id @default(autoincrement())
+  category  LookupCategory
+  value     String
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([category, value])
+  @@map("lookup_values")
+}
+
 enum Role {
   ADMIN
   STAFF_ADMIN
   STAFF
   GUEST
-}
-
-enum AssetType {
-  DESKTOP
-  LAPTOP
-  FURNITURE
-  EQUIPMENT
-  PERIPHERAL
-  OTHER
 }
 
 enum AssetStatus {
@@ -168,6 +171,13 @@ enum AssetStatus {
   MAINTENANCE
   RETIRED
   LOST
+}
+
+enum LookupCategory {
+  ASSET_TYPE
+  MANUFACTURER
+  LOCATION
+  ASSIGNED_TO
 }
 
 enum BackupStatus {

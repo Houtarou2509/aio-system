@@ -105,7 +105,6 @@ router.post('/', authorize(['ADMIN', 'STAFF_ADMIN']), upload.single('image'), as
 });
 
 // POST /api/assets/import — CSV bulk import
-const VALID_TYPES = ['LAPTOP', 'DESKTOP', 'MONITOR', 'PRINTER', 'TABLET', 'PHONE', 'SERVER', 'OTHER'];
 const VALID_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED'];
 
 router.post('/import', authorize(['ADMIN', 'STAFF_ADMIN']), importUpload.single('file'), async (req: Request, res: Response) => {
@@ -136,9 +135,9 @@ router.post('/import', authorize(['ADMIN', 'STAFF_ADMIN']), importUpload.single(
         rowErrors.push('Name is required');
       }
 
-      // type: required, must be valid
-      if (!row.type || !VALID_TYPES.includes(row.type.trim().toUpperCase())) {
-        rowErrors.push(`Invalid type: ${row.type || '(empty)'}`);
+      // type: required, non-empty string
+      if (!row.type || row.type.trim() === '') {
+        rowErrors.push('Type is required');
       }
 
       // status: optional, default AVAILABLE if empty
@@ -179,7 +178,7 @@ router.post('/import', authorize(['ADMIN', 'STAFF_ADMIN']), importUpload.single(
       } else {
         validRows.push({
           name: row.name.trim(),
-          type: row.type.trim().toUpperCase(),
+          type: row.type.trim(),
           status,
           manufacturer: row.manufacturer?.trim() || null,
           serialNumber: row.serialNumber?.trim() || null,

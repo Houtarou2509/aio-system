@@ -7,14 +7,19 @@ import { AssetTable, AssetDetailModal, AssetFormModal, ImportAssetsModal } from 
 import QRScannerModal from '../components/assets/QRScannerModal';
 import PendingRequestsModal from '../components/assets/PendingRequestsModal';
 import { Button } from '../components/ui/button';
+import {
+  Select, SelectContent, SelectItem,
+  SelectTrigger, SelectValue
+} from '@/components/ui/select';
+import { useLookupOptions } from '@/hooks/useLookupOptions';
 
-const ASSET_TYPES = ['DESKTOP', 'LAPTOP', 'FURNITURE', 'EQUIPMENT', 'PERIPHERAL', 'OTHER'];
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
 const BULK_STATUS_OPTIONS = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED'];
 
 export default function AssetsPage() {
   const { assets, loading, meta, filters, setFilters, refetch } = useAssets();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { options: typeFilterOptions } = useLookupOptions('asset-types');
 
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [showDetail, setShowDetail] = useState(false);
@@ -280,14 +285,17 @@ export default function AssetsPage() {
 
           {/* Center: inline filters */}
           <div className="flex items-center gap-2 flex-wrap">
-            <select
-              value={filters.type || ''}
-              onChange={e => setFilters({ ...filters, type: e.target.value || undefined, page: 1 })}
-              className="rounded-md border border-input bg-background px-2 py-1.5 text-xs"
-            >
-              <option value="">Type: All</option>
-              {ASSET_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
+            <Select value={filters.type || ''} onValueChange={(val) => val != null && setFilters({ ...filters, type: val || undefined, page: 1 })}>
+              <SelectTrigger className="w-[130px] h-8 text-xs">
+                <SelectValue placeholder="Type: All" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Types</SelectItem>
+                {typeFilterOptions.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.value}>{opt.value}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             <select
               value={filters.status || ''}

@@ -75,41 +75,39 @@ export function AddUserModal({ onSubmit, onClose, serverErrors }: Props) {
   const fieldError = (field: string) => errors[field] || serverErrors?.[field];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-card rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-lg border border-border bg-white dark:bg-card shadow-lg" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="px-6 py-4 border-b">
-          <h2 className="text-lg font-semibold">Add User</h2>
-        </div>
+        <h2 className="text-lg font-bold text-gray-900 dark:text-card-foreground px-6 pt-6 pb-2 shrink-0">Add User</h2>
 
         {/* Body — scrollable */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-2 space-y-4">
           {/* Full Name */}
           <div>
-            <label className="block text-sm font-medium mb-1">Full Name <span className="text-red-500">*</span></label>
-            <input type="text" value={form.fullName} onChange={set('fullName')} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+            <label className="text-xs font-medium text-gray-700">Full Name <span className="text-red-500">*</span></label>
+            <input type="text" value={form.fullName} onChange={set('fullName')} className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
             {fieldError('fullName') && <p className="text-xs text-red-500 mt-1">{fieldError('fullName')}</p>}
           </div>
 
           {/* Username */}
           <div>
-            <label className="block text-sm font-medium mb-1">Username <span className="text-red-500">*</span></label>
-            <input type="text" value={form.username} onChange={set('username')} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+            <label className="text-xs font-medium text-gray-700">Username <span className="text-red-500">*</span></label>
+            <input type="text" value={form.username} onChange={set('username')} className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
             {fieldError('username') && <p className="text-xs text-red-500 mt-1">{fieldError('username')}</p>}
           </div>
 
           {/* Email */}
           <div>
-            <label className="block text-sm font-medium mb-1">Email <span className="text-red-500">*</span></label>
-            <input type="email" value={form.email} onChange={set('email')} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+            <label className="text-xs font-medium text-gray-700">Email <span className="text-red-500">*</span></label>
+            <input type="email" value={form.email} onChange={set('email')} className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
             {fieldError('email') && <p className="text-xs text-red-500 mt-1">{fieldError('email')}</p>}
           </div>
 
           {/* Password */}
           <div>
-            <label className="block text-sm font-medium mb-1">Password <span className="text-red-500">*</span></label>
+            <label className="text-xs font-medium text-gray-700">Password <span className="text-red-500">*</span></label>
             <div className="relative">
-              <input type={showPw ? 'text' : 'password'} value={form.password} onChange={set('password')} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm pr-10" />
+              <input type={showPw ? 'text' : 'password'} value={form.password} onChange={set('password')} className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm pr-10" />
               <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">
                 {showPw ? '🙈' : '👁️'}
               </button>
@@ -119,9 +117,9 @@ export function AddUserModal({ onSubmit, onClose, serverErrors }: Props) {
 
           {/* Confirm Password */}
           <div>
-            <label className="block text-sm font-medium mb-1">Confirm Password <span className="text-red-500">*</span></label>
+            <label className="text-xs font-medium text-gray-700">Confirm Password <span className="text-red-500">*</span></label>
             <div className="relative">
-              <input type={showCp ? 'text' : 'password'} value={form.confirmPassword} onChange={set('confirmPassword')} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm pr-10" />
+              <input type={showCp ? 'text' : 'password'} value={form.confirmPassword} onChange={set('confirmPassword')} className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm pr-10" />
               <button type="button" onClick={() => setShowCp(!showCp)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">
                 {showCp ? '🙈' : '👁️'}
               </button>
@@ -131,8 +129,8 @@ export function AddUserModal({ onSubmit, onClose, serverErrors }: Props) {
 
           {/* Role */}
           <div>
-            <label className="block text-sm font-medium mb-1">Role <span className="text-red-500">*</span></label>
-            <select value={form.role} onChange={set('role')} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+            <label className="text-xs font-medium text-gray-700">Role <span className="text-red-500">*</span></label>
+            <select value={form.role} onChange={set('role')} className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm">
               {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
             {fieldError('role') && <p className="text-xs text-red-500 mt-1">{fieldError('role')}</p>}
@@ -140,27 +138,13 @@ export function AddUserModal({ onSubmit, onClose, serverErrors }: Props) {
         </form>
 
         {/* Footer — fixed */}
-        <div className="px-6 py-4 border-t flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
-          <Button onClick={() => handleSubmit({ preventDefault: () => {} } as FormEvent)} disabled={loading}>
+        <div className="px-6 py-4 border-t border-border shrink-0 flex justify-end gap-2">
+          <button type="button" onClick={onClose} disabled={loading} className="rounded-md border border-input px-4 py-1.5 text-sm hover:bg-accent">Cancel</button>
+          <button type="submit" disabled={loading} className="rounded-md bg-primary px-4 py-1.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50" onClick={(e) => { e.preventDefault(); handleSubmit(e as any); }}>
             {loading ? 'Creating...' : 'Create User'}
-          </Button>
+          </button>
         </div>
       </div>
     </div>
   );
-}
-
-function Button({ children, variant, onClick, disabled, className = '' }: {
-  children: React.ReactNode;
-  variant?: 'outline' | 'default';
-  onClick?: () => void;
-  disabled?: boolean;
-  className?: string;
-}) {
-  const base = 'inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 transition-colors disabled:opacity-50 disabled:pointer-events-none';
-  const styles = variant === 'outline'
-    ? 'border border-input bg-background hover:bg-accent hover:text-accent-foreground'
-    : 'bg-primary text-primary-foreground hover:bg-primary/90';
-  return <button className={`${base} ${styles} ${className}`} onClick={onClick} disabled={disabled}>{children}</button>;
 }
