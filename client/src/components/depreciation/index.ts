@@ -1,0 +1,1 @@
+export { DepreciationBar } from './DepreciationBar';

@@ -1,0 +1,191 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(uuid())
+  username        String    @unique
+  email           String    @unique
+  passwordHash    String
+  role            Role      @default(STAFF)
+  twoFactorSecret String?
+  twoFactorEnabled Boolean  @default(false)
+  backupCodes     String   @default("[]")
+  fullName        String?
+  status          String    @default("active")
+  lastLogin       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  assignments   Assignment[]
+  auditLogs     AuditLog[]    @relation("PerformedBy")
+  labelTemplates LabelTemplate[]
+
+  @@map("users")
+}
+
+model Asset {
+  id               String        @id @default(uuid())
+  name             String
+  type             AssetType
+  manufacturer     String?
+  serialNumber     String?       @unique
+  purchasePrice    Decimal?
+  purchaseDate     DateTime?
+  status           AssetStatus   @default(AVAILABLE)
+  location         String?
+  imageUrl         String?
+  propertyNumber   String?
+  remarks          String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  assignedTo       String?
+  warrantyExpiry   DateTime?
+  warrantyNotes     String?
+
+  assignments     Assignment[]
+  maintenanceLogs MaintenanceLog[]
+  maintenanceSchedules MaintenanceSchedule[]
+  guestTokens     GuestToken[]
+
+  @@map("assets")
+}
+
+model Assignment {
+  id          String         @id @default(uuid())
+  assetId     String
+  userId      String?
+  assignedTo  String?
+  assignedAt  DateTime       @default(now())
+  returnedAt  DateTime?
+  condition   String?
+  notes       String?
+
+  asset       Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  user        User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("assignments")
+}
+
+model MaintenanceLog {
+  id            String    @id @default(uuid())
+  assetId       String
+  technicianName String
+  description    String
+  cost           Decimal   @default(0)
+  date           DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+
+  asset         Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@map("maintenance_logs")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  entityType   String
+  entityId     String
+  action       String
+  field        String?
+  oldValue     String?
+  newValue     String?
+  performedById String
+  performedAt  DateTime @default(now())
+  ipAddress    String?
+
+  performedBy  User     @relation("PerformedBy", fields: [performedById], references: [id])
+
+  @@map("audit_logs")
+}
+
+model GuestToken {
+  id          String   @id @default(uuid())
+  assetId     String
+  token       String   @unique
+  expiresAt   DateTime
+  maxAccess   Int      @default(1)
+  accessCount Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  asset       Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@map("guest_tokens")
+}
+
+model LabelTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  format    String
+  config    String   @default("{}")
+  createdById String
+  createdAt DateTime @default(now())
+
+  createdBy User     @relation(fields: [createdById], references: [id])
+
+  @@map("label_templates")
+}
+
+model BackupLog {
+  id            String     @id @default(uuid())
+  status        BackupStatus @default(PENDING)
+  destination   String
+  filePath      String?
+  encryptedSize Int?
+  createdAt     DateTime   @default(now())
+
+  @@map("backup_logs")
+}
+
+enum Role {
+  ADMIN
+  STAFF_ADMIN
+  STAFF
+  GUEST
+}
+
+enum AssetType {
+  DESKTOP
+  LAPTOP
+  FURNITURE
+  EQUIPMENT
+  PERIPHERAL
+  OTHER
+}
+
+enum AssetStatus {
+  AVAILABLE
+  ASSIGNED
+  MAINTENANCE
+  RETIRED
+  LOST
+}
+
+enum BackupStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+model MaintenanceSchedule {
+  id            String   @id @default(uuid())
+  assetId       String
+  title         String
+  scheduledDate DateTime
+  notes         String?
+  status        String   @default("pending")
+  completedAt   DateTime?
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  asset         Asset    @relation(fields: [assetId], references: [id])
+
+  @@map("maintenance_schedules")
+}

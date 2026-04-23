@@ -1,0 +1,36 @@
+{
+  "name": "aio-system",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "build": "npm run build --workspace=client && npm run build --workspace=server",
+    "start": "cd server && node dist/index.js",
+    "test": "npm run test --workspace=server",
+    "test:smoke": "vitest run --no-file-parallelism --config server/vitest.config.ts tests/smoke",
+    "test:functional": "vitest run --no-file-parallelism --config server/vitest.config.ts tests/functional",
+    "test:integration": "vitest run --no-file-parallelism --config server/vitest.config.ts tests/integration",
+    "test:ui": "playwright test tests/ui --config=playwright.config.ts",
+    "test:security": "vitest run --no-file-parallelism --config server/vitest.config.ts tests/security",
+    "test:all": "npm run test:smoke && npm run test:functional && npm run test:integration && npm run test:security",
+    "test:all:with-ui": "npm run test:all && npm run test:ui",
+    "db:migrate": "npm run prisma:migrate --workspace=server",
+    "db:seed": "npm run prisma:db:seed --workspace=server"
+  },
+  "workspaces": [
+    "server",
+    "client",
+    "shared"
+  ],
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "concurrently": "^9.1.2"
+  },
+  "dependencies": {
+    "csv-parse": "^6.2.1",
+    "vite-plugin-pwa": "^1.2.0",
+    "workbox-window": "^7.4.0"
+  }
+}
