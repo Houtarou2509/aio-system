@@ -48,36 +48,32 @@ export default function InventoryLookupPage() {
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-4">
         <h1 className="text-2xl font-bold">Inventory Lookup</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Manage dropdown values for assets. Values can be added, edited, or deactivated.
         </p>
       </div>
 
-      {/* Compact underline tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-0" role="tablist">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              role="tab"
-              aria-selected={activeTab === tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.key
-                  ? 'border-primary text-foreground'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-gray-300'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+      {/* Button-style tabs at top */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-5 py-2.5 text-sm font-semibold rounded-lg border-2 transition-all shadow-sm ${
+              activeTab === tab.key
+                ? 'bg-primary text-primary-foreground border-primary shadow-md'
+                : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Full-width table content */}
-      <div className="w-full mt-4">
+      <div className="w-full">
         <LookupTabWrapper category={activeTab} />
       </div>
     </div>
