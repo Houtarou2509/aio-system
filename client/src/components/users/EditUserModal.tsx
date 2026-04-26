@@ -1,4 +1,16 @@
 import { useState, FormEvent } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Eye, EyeOff } from 'lucide-react';
 
 const ROLES = [
   { value: 'ADMIN', label: 'Admin' },
@@ -68,12 +80,12 @@ export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }:
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = async (ev: FormEvent) => {
-    ev.preventDefault();
+  const handleSubmit = async (ev?: FormEvent) => {
+    ev?.preventDefault();
     if (!validate()) return;
     setLoading(true);
     try {
-      const payload: any = {
+      const payload: { fullName: string; username: string; email: string; role: string; password?: string } = {
         fullName: form.fullName.trim(),
         username: form.username.trim(),
         email: form.email.trim(),
@@ -91,44 +103,48 @@ export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }:
   const fieldError = (field: string) => errors[field] || serverErrors?.[field];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-card rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="px-6 py-4 border-b">
-          <h2 className="text-lg font-semibold">Edit User</h2>
-        </div>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit User</DialogTitle>
+        </DialogHeader>
 
-        {/* Body — scrollable */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* Full Name */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Full Name <span className="text-red-500">*</span></label>
-            <input type="text" value={form.fullName} onChange={set('fullName')} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-            {fieldError('fullName') && <p className="text-xs text-red-500 mt-1">{fieldError('fullName')}</p>}
+          <div className="space-y-1.5">
+            <Label htmlFor="fullName">Full Name <span className="text-red-500">*</span></Label>
+            <Input id="fullName" type="text" value={form.fullName} onChange={set('fullName')} className="bg-white" />
+            {fieldError('fullName') && <p className="text-xs text-red-500">{fieldError('fullName')}</p>}
           </div>
 
           {/* Username */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Username <span className="text-red-500">*</span></label>
-            <input type="text" value={form.username} onChange={set('username')} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-            <p className="text-xs text-amber-600 mt-1">Changing the username will require the user to log in again.</p>
-            {fieldError('username') && <p className="text-xs text-red-500 mt-1">{fieldError('username')}</p>}
+          <div className="space-y-1.5">
+            <Label htmlFor="username">Username <span className="text-red-500">*</span></Label>
+            <Input id="username" type="text" value={form.username} onChange={set('username')} className="bg-white" />
+            <p className="text-xs text-amber-600">Changing the username will require the user to log in again.</p>
+            {fieldError('username') && <p className="text-xs text-red-500">{fieldError('username')}</p>}
           </div>
 
           {/* Email */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Email <span className="text-red-500">*</span></label>
-            <input type="email" value={form.email} onChange={set('email')} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-            {fieldError('email') && <p className="text-xs text-red-500 mt-1">{fieldError('email')}</p>}
+          <div className="space-y-1.5">
+            <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
+            <Input id="email" type="email" value={form.email} onChange={set('email')} className="bg-white" />
+            {fieldError('email') && <p className="text-xs text-red-500">{fieldError('email')}</p>}
           </div>
 
           {/* Role */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Role <span className="text-red-500">*</span></label>
-            <select value={form.role} onChange={set('role')} disabled={isSelf} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+          <div className="space-y-1.5">
+            <Label htmlFor="role">Role <span className="text-red-500">*</span></Label>
+            <select
+              id="role"
+              value={form.role}
+              onChange={set('role')}
+              disabled={isSelf}
+              className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-2 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            >
               {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
-            {isSelf && <p className="text-xs text-amber-600 mt-1">You cannot change your own role.</p>}
+            {isSelf && <p className="text-xs text-amber-600">You cannot change your own role.</p>}
           </div>
 
           {/* Password Reset Section */}
@@ -143,37 +159,40 @@ export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }:
                   <span className="text-sm font-medium">Password Reset</span>
                   <button type="button" onClick={() => { setShowPwSection(false); setNewPassword(''); setConfirmPassword(''); }} className="text-xs text-gray-500 hover:text-gray-700">Cancel reset</button>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">New Password <span className="text-red-500">*</span></label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="newPassword">New Password <span className="text-red-500">*</span></Label>
                   <div className="relative">
-                    <input type={showPw ? 'text' : 'password'} value={newPassword} onChange={e => { setNewPassword(e.target.value); setErrors(prev => { const next = { ...prev }; delete next.newPassword; return next; }); }} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm pr-10" />
-                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">{showPw ? '🙈' : '👁️'}</button>
+                    <Input id="newPassword" type={showPw ? 'text' : 'password'} value={newPassword} onChange={e => { setNewPassword(e.target.value); setErrors(prev => { const next = { ...prev }; delete next.newPassword; return next; }); }} className="bg-white pr-10" />
+                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
-                  {fieldError('newPassword') && <p className="text-xs text-red-500 mt-1">{fieldError('newPassword')}</p>}
+                  {fieldError('newPassword') && <p className="text-xs text-red-500">{fieldError('newPassword')}</p>}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Confirm Password <span className="text-red-500">*</span></label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirmPassword">Confirm Password <span className="text-red-500">*</span></Label>
                   <div className="relative">
-                    <input type={showCp ? 'text' : 'password'} value={confirmPassword} onChange={e => { setConfirmPassword(e.target.value); setErrors(prev => { const next = { ...prev }; delete next.confirmPassword; return next; }); }} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm pr-10" />
-                    <button type="button" onClick={() => setShowCp(!showCp)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm">{showCp ? '🙈' : '👁️'}</button>
+                    <Input id="confirmPassword" type={showCp ? 'text' : 'password'} value={confirmPassword} onChange={e => { setConfirmPassword(e.target.value); setErrors(prev => { const next = { ...prev }; delete next.confirmPassword; return next; }); }} className="bg-white pr-10" />
+                    <button type="button" onClick={() => setShowCp(!showCp)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      {showCp ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
-                  {fieldError('confirmPassword') && <p className="text-xs text-red-500 mt-1">{fieldError('confirmPassword')}</p>}
+                  {fieldError('confirmPassword') && <p className="text-xs text-red-500">{fieldError('confirmPassword')}</p>}
                 </div>
               </div>
             )}
           </div>
         </form>
 
-        {/* Footer — fixed */}
-        <div className="px-6 py-4 border-t flex justify-end gap-2">
-          <button type="button" onClick={onClose} disabled={loading} className="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:pointer-events-none">
+        <DialogFooter showCloseButton={false}>
+          <DialogClose render={<Button variant="outline" disabled={loading} />}>
             Cancel
-          </button>
-          <button onClick={() => handleSubmit({ preventDefault: () => {} } as FormEvent)} disabled={loading} className="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:pointer-events-none">
+          </DialogClose>
+          <Button onClick={() => handleSubmit()} disabled={loading}>
             {loading ? 'Updating...' : 'Update User'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

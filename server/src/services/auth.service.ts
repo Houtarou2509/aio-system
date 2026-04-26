@@ -31,10 +31,16 @@ const refreshTokens = new Map<string, { userId: string; tokenHash: string; expir
 
 export async function login(email: string, password: string, twoFactorToken?: string) {
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) throw new Error('Invalid credentials');
+  if (!user) {
+    console.warn('[AUTH] Login failed: user not found for email:', email);
+    throw new Error('Invalid credentials');
+  }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) throw new Error('Invalid credentials');
+  if (!valid) {
+    console.warn('[AUTH] Login failed: password mismatch for email:', email, '| hash length:', user.passwordHash.length);
+    throw new Error('Invalid credentials');
+  }
 
   // Status check
   if (user.status === 'inactive') throw new Error('Your account has been deactivated. Contact your administrator.');

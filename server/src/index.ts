@@ -67,7 +67,7 @@ app.use('/aio-system/uploads', express.static(path.resolve(__dirname, '../upload
 
 // Serve built frontend in production
 if (isProduction) {
-  app.use('/aio-system/static', express.static(path.resolve(__dirname, '../public')));
+  app.use('/aio-system', express.static(path.resolve(__dirname, '../public')));
 }
 
 // Public guest route

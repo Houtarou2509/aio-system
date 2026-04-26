@@ -1,16 +1,16 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Settings2, LayoutDashboard, Package, Users, History, LogOut, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/notifications/NotificationBell';
 
 const navItems = [
-  { to: '/', label: 'Dashboard', icon: '📊' },
-  { to: '/assets', label: 'Assets', icon: '📦' },
-  { to: '/lookup', label: 'Inventory Lookup', icon: '📚', IconComponent: BookOpen, roles: ['ADMIN', 'STAFF_ADMIN'] },
-  { to: '/users', label: 'Users', icon: '👥', roles: ['ADMIN'] },
-  { to: '/audit', label: 'Audit Trail', icon: '📋' },
-  { to: '/settings', label: 'Settings', icon: '⚙️' },
+  { to: '/', label: 'Dashboard', IconComponent: LayoutDashboard },
+  { to: '/assets', label: 'Assets', IconComponent: Package },
+  { to: '/lookup', label: 'Inventory Lookup', IconComponent: BookOpen, roles: ['ADMIN', 'STAFF_ADMIN'] },
+  { to: '/users', label: 'Users', IconComponent: Users, roles: ['ADMIN'] },
+  { to: '/audit', label: 'Audit Trail', IconComponent: History },
+  { to: '/settings', label: 'Settings', IconComponent: Settings2 },
 ];
 
 export default function AppLayout() {
@@ -22,77 +22,93 @@ export default function AppLayout() {
   );
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
-    `flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-      isActive
-        ? 'bg-primary text-primary-foreground font-medium'
-        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-    }`;
+    isActive
+      ? 'relative flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-semibold bg-[#f8931f] text-white before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-1 before:h-5 before:rounded-r before:bg-white'
+      : 'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-white/10 hover:text-[#f8931f] transition-colors';
 
   return (
-    <div className="flex h-screen bg-background">
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-56 flex-col border-r border-border bg-card">
-        <div className="p-4 border-b border-border">
-          <h1 className="text-lg font-bold">AIO System</h1>
-          <p className="text-xs text-muted-foreground">Asset Inventory</p>
+    <div className="flex h-screen bg-slate-50">
+      {/* ── Desktop Sidebar ── */}
+      <aside className="hidden md:flex w-56 flex-col bg-[#012061]">
+        {/* Logo */}
+        <div className="px-4 py-4 border-b border-[#001a4d] flex items-center min-h-[56px]">
+          <h1 className="text-lg font-bold tracking-tight text-[#f8931f]">AIO System</h1>
         </div>
-        <nav className="flex-1 p-3 space-y-1">
+
+        {/* Navigation */}
+        <nav className="flex-1 px-3 py-4 space-y-1">
           {visibleItems.map(item => (
             <NavLink key={item.to} to={item.to} end={item.to === '/'} className={linkClass}>
-              {item.IconComponent ? <item.IconComponent className="h-4 w-4" /> : <span>{item.icon}</span>}
+              <item.IconComponent className="h-4 w-4" />
               <span>{item.label}</span>
             </NavLink>
           ))}
         </nav>
-        <div className="p-3 border-t border-border">
-          <div className="flex items-center gap-2">
+
+        {/* Profile & Logout */}
+        <div className="bg-black/20 px-3 py-3 border-t border-[#001a4d]">
+          <div className="flex items-center gap-2 mb-2">
             <NotificationBell />
-            <div className="px-3 py-1 text-xs text-muted-foreground">
-              {user?.username} · {user?.role}
+            <div>
+              <p className="text-sm font-semibold text-white leading-tight">{user?.username}</p>
+              <p className="text-[10px] tracking-widest font-medium text-[#f8931f] uppercase">{user?.role?.replace('_', '-')}</p>
             </div>
           </div>
           <button
             onClick={logout}
-            className="w-full mt-1 flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-[#7B1113] hover:text-white transition-colors"
           >
-            <span>🚪</span>
+            <LogOut className="h-4 w-4" />
             <span>Logout</span>
           </button>
         </div>
       </aside>
 
-      {/* Mobile header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between border-b border-border bg-card px-4 py-3">
-        <h1 className="text-base font-bold">AIO</h1>
+      {/* ── Mobile Header ── */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between bg-[#012061] px-4 py-4 min-h-[56px]">
+        <h1 className="text-lg font-bold tracking-tight text-[#f8931f]">AIO System</h1>
         <div className="flex items-center gap-2">
           <NotificationBell />
-          <button onClick={() => setMobileOpen(!mobileOpen)} className="text-xl">
-            {mobileOpen ? '✕' : '☰'}
+          <button onClick={() => setMobileOpen(!mobileOpen)} className="text-white/70 hover:text-white">
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
       </div>
 
-      {/* Mobile nav overlay */}
+      {/* ── Mobile Nav Overlay ── */}
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-30 bg-black/50" onClick={() => setMobileOpen(false)}>
-          <div className="w-56 h-full bg-card border-r border-border p-3 space-y-1 pt-16" onClick={e => e.stopPropagation()}>
-            {visibleItems.map(item => (
-              <NavLink key={item.to} to={item.to} end={item.to === '/'} className={linkClass} onClick={() => setMobileOpen(false)}>
-                {item.IconComponent ? <item.IconComponent className="h-4 w-4" /> : <span>{item.icon}</span>}
-                <span>{item.label}</span>
-              </NavLink>
-            ))}
-            <div className="pt-3 border-t border-border mt-3">
-              <button onClick={logout} className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-destructive hover:bg-destructive/10">
-                <span>🚪</span><span>Logout</span>
+          <div className="w-56 h-full bg-[#012061] border-r border-[#001a4d]" onClick={e => e.stopPropagation()}>
+            {/* Mobile Nav Links */}
+            <nav className="px-3 py-4 space-y-1 pt-20">
+              {visibleItems.map(item => (
+                <NavLink key={item.to} to={item.to} end={item.to === '/'} className={linkClass} onClick={() => setMobileOpen(false)}>
+                  <item.IconComponent className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
+            </nav>
+
+            {/* Mobile Profile & Logout */}
+            <div className="absolute bottom-0 left-0 right-0 bg-black/20 px-3 py-3 border-t border-[#001a4d]">
+              <div className="mb-2">
+                <p className="text-sm font-semibold text-white leading-tight">{user?.username}</p>
+                <p className="text-[10px] tracking-widest font-medium text-[#f8931f] uppercase">{user?.role?.replace('_', '-')}</p>
+              </div>
+              <button
+                onClick={() => { setMobileOpen(false); logout(); }}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-[#7B1113] hover:text-white transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Logout</span>
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Main content */}
-      <main className="flex-1 overflow-auto md:p-0 p-12 md:pt-0">
+      {/* ── Main Content ── */}
+      <main className="flex-1 overflow-auto">
         <Outlet />
       </main>
     </div>

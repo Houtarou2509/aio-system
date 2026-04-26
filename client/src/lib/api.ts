@@ -81,15 +81,17 @@ export const assetsApi = {
   createWithImage: async (formData: FormData) => {
     const token = localStorage.getItem('accessToken');
     const res = await fetch('/api/assets', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData });
-    if (!res.ok) throw new Error('Failed to create asset');
-    return res.json();
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error?.message || 'Failed to create asset');
+    return data;
   },
   update: (id: string, data: Partial<Asset>) => request<{ data: Asset }>(`/assets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   updateWithImage: async (id: string, formData: FormData) => {
     const token = localStorage.getItem('accessToken');
     const res = await fetch(`/api/assets/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: formData });
-    if (!res.ok) throw new Error('Failed to update asset');
-    return res.json();
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error?.message || 'Failed to update asset');
+    return data;
   },
   delete: (id: string) => request<{ data: Asset }>(`/assets/${id}`, { method: 'DELETE' }),
   bulkStatus: (ids: string[], status: string) => request<{ data: { updated: number } }>('/assets/bulk-status', { method: 'PATCH', body: JSON.stringify({ ids, status }) }),

@@ -5,8 +5,23 @@ import {
   SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { useLookupOptions } from '@/hooks/useLookupOptions';
+import { Sparkles, X, Upload, Pencil, Plus } from 'lucide-react';
 
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
+
+/** Resolve asset image URL — prepend base path if relative */
+function getImageUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) return url;
+  // In dev: Vite proxy handles /uploads → :3001
+  // In production: images served at /aio-system/uploads/xxx
+  if (url.startsWith('/uploads')) {
+    if (import.meta.env.DEV) return url;
+    const base = import.meta.env.BASE_URL?.replace(/\/+$/, '') || '/aio-system';
+    return `${base}${url}`;
+  }
+  return url;
+}
 
 interface Props {
   asset?: Asset | null;
@@ -33,7 +48,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     warrantyNotes: (asset as any)?.warrantyNotes || '',
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(asset?.imageUrl || null);
+  const [imagePreview, setImagePreview] = useState<string | null>(getImageUrl(asset?.imageUrl) || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
@@ -48,7 +63,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   // Generate preview when image selected
   useEffect(() => {
     if (!imageFile) {
-      if (isEdit && asset?.imageUrl) setImagePreview(asset.imageUrl);
+      if (isEdit && asset?.imageUrl) setImagePreview(getImageUrl(asset.imageUrl));
       else setImagePreview(null);
       return;
     }
@@ -70,12 +85,8 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       const d = await res.json();
       if (d.success && d.data.suggestions?.length > 0) {
         const best = d.data.suggestions[0];
-        if (best.type) {
-          setForm(f => ({ ...f, type: best.type }));
-        }
-        if (best.manufacturer) {
-          setForm(f => ({ ...f, manufacturer: best.manufacturer }));
-        }
+        if (best.type) setForm(f => ({ ...f, type: best.type }));
+        if (best.manufacturer) setForm(f => ({ ...f, manufacturer: best.manufacturer }));
       }
     } catch {} finally { setSuggesting(false); }
   };
@@ -86,6 +97,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     setError(null);
 
     try {
+      // Build the data object
       const data: any = {};
       data.name = form.name;
       data.type = form.type || undefined;
@@ -107,11 +119,16 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       if (data.warrantyNotes === '') data.warrantyNotes = null;
 
       if (imageFile) {
+        // Send as multipart/form-data with 'image' file + 'data' JSON string
+        // This matches the backend: multer single('image') + JSON.parse(req.body.data)
+        console.log('[AssetFormModal] Submitting data:', data);
         const fd = new FormData();
         fd.append('image', imageFile);
-        fd.append('data', new Blob([JSON.stringify(data)], { type: 'application/json' }));
+        fd.append('data', JSON.stringify(data));
         await onSubmit(fd);
       } else {
+        console.log('[AssetFormModal] Submitting data (no image):', data);
+        // No image — send as plain JSON
         await onSubmit(data);
       }
     } catch (err: any) {
@@ -132,62 +149,106 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     return [{ id: -1, value: currentValue }, ...options];
   }
 
+  const inputClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent transition";
+  const labelClass = "text-xs font-medium text-slate-700 mb-1 block";
+
   return (
-    <div 
+    <div
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/50"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-lg border border-border bg-white dark:bg-card shadow-lg" onClick={e => e.stopPropagation()}>
-        {/* Fixed header */}
-        <h2 className="text-lg font-bold text-card-foreground px-6 pt-6 pb-2 shrink-0">{isEdit ? 'Edit Asset' : 'Add Asset'}</h2>
+      <div className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
 
-        {/* Form wrapping scrollable body + fixed footer */}
+        {/* ── Header ── */}
+        <div className="bg-[#012061] px-6 py-4 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-[#f8931f] text-white">
+              {isEdit ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            </div>
+            <h2 className="text-lg font-bold text-white">{isEdit ? 'Edit Asset' : 'Add Asset'}</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-white/20 bg-white/10 p-1.5 text-white/60 hover:text-white hover:bg-white/20 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* ── Form ── */}
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
           {/* Scrollable fields */}
           <div className="flex-1 overflow-y-auto px-6">
-            <div className="grid grid-cols-2 gap-3 py-2">
+            <div className="grid grid-cols-2 gap-4 py-4">
 
               {/* 1. Image */}
               <div className="col-span-2">
-                <label className="text-xs font-medium text-gray-700">Image</label>
-                <div className="flex items-center gap-3 mt-1">
+                <label className={labelClass}>Image</label>
+                <div className="flex items-center gap-4 mt-1">
                   {imagePreview && (
-                    <img src={imagePreview} alt="Preview" className="h-16 w-16 rounded-md object-cover border border-input" />
+                    <div className="relative group">
+                      <img src={imagePreview || ''} alt="Preview" className="h-20 w-20 rounded-lg object-cover border-2 border-[#012061]" />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Upload className="w-4 h-4 text-white" />
+                      </button>
+                    </div>
                   )}
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      {imagePreview ? 'Change Image' : 'Upload Image'}
+                    </button>
                     <input
                       ref={fileInputRef}
                       type="file"
                       accept="image/*"
                       onChange={e => setImageFile(e.target.files?.[0] || null)}
-                      className="w-full text-sm"
+                      className="hidden"
                     />
                     {isEdit && asset?.imageUrl && !imageFile && (
-                      <span className="text-xs text-muted-foreground">Current image — select a file to replace</span>
+                      <span className="text-[10px] text-slate-400">Current image — click to replace</span>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* 2. Name */}
+              {/* 2. Name + AI Suggest */}
               <div className="col-span-2 flex gap-2">
                 <div className="flex-1">
-                  <label className="text-xs font-medium text-gray-700">Name *</label>
-                  <input value={form.name} onChange={e => set('name', e.target.value)} required className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
+                  <label className={labelClass}>Name *</label>
+                  <input value={form.name} onChange={e => set('name', e.target.value)} required className={inputClass} placeholder="Asset name" />
                 </div>
-                <button type="button" onClick={handleSuggest} disabled={suggesting || !form.name.trim()} title="AI suggest type & manufacturer" className="mt-4 rounded-md border border-input px-2 py-1.5 text-sm hover:bg-accent disabled:opacity-50">{suggesting ? '⏳' : '✨'}</button>
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={handleSuggest}
+                    disabled={suggesting || !form.name.trim()}
+                    title="AI suggest type & manufacturer"
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-[#f8931f] hover:bg-[#f8931f]/10 disabled:opacity-40 transition-colors"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {/* 3. Type */}
               <div>
-                <label className="text-xs font-medium text-gray-700">Type *</label>
+                <label className={labelClass}>Type *</label>
                 <Select value={form.type} onValueChange={(val) => val != null && set('type', val)} disabled={typeLoading}>
-                  <SelectTrigger className="w-full bg-background">
+                  <SelectTrigger className="w-full bg-white border-slate-200 focus:ring-2 focus:ring-[#f8931f]">
                     <SelectValue placeholder={typeLoading ? 'Loading...' : 'Select type'} />
                   </SelectTrigger>
                   <SelectContent>
                     {mergeWithFallback(typeOptions, form.type).map((opt) => (
                       <SelectItem key={opt.id} value={opt.value}>
-                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-muted-foreground">(inactive)</span>}
+                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -196,16 +257,16 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 4. Manufacturer */}
               <div>
-                <label className="text-xs font-medium text-gray-700">Manufacturer</label>
+                <label className={labelClass}>Manufacturer</label>
                 <Select value={form.manufacturer || '__none__'} onValueChange={(val) => val != null && set('manufacturer', val === '__none__' ? '' : val)} disabled={manufacturerLoading}>
-                  <SelectTrigger className="w-full bg-background">
+                  <SelectTrigger className="w-full bg-white border-slate-200 focus:ring-2 focus:ring-[#f8931f]">
                     <SelectValue placeholder={manufacturerLoading ? 'Loading...' : 'Select manufacturer'} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">None</SelectItem>
                     {mergeWithFallback(manufacturerOptions, form.manufacturer).map((opt) => (
                       <SelectItem key={opt.id} value={opt.value}>
-                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-muted-foreground">(inactive)</span>}
+                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -214,37 +275,37 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 5. Serial Number */}
               <div>
-                <label className="text-xs font-medium text-gray-700">Serial Number</label>
-                <input value={form.serialNumber} onChange={e => set('serialNumber', e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
+                <label className={labelClass}>Serial Number</label>
+                <input value={form.serialNumber} onChange={e => set('serialNumber', e.target.value)} className={inputClass} placeholder="e.g. SN-12345" />
               </div>
 
               {/* 6. Price */}
               <div>
-                <label className="text-xs font-medium text-gray-700">Price *</label>
+                <label className={labelClass}>Price *</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">₱</span>
-                  <input type="number" step="0.01" value={form.purchasePrice} onChange={e => set('purchasePrice', e.target.value)} required className="w-full rounded-md border border-input bg-background pl-8 pr-3 py-1.5 text-sm" />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">₱</span>
+                  <input type="number" step="0.01" value={form.purchasePrice} onChange={e => set('purchasePrice', e.target.value)} required className={`${inputClass} pl-8`} />
                 </div>
               </div>
 
               {/* 7. Purchase Date */}
               <div>
-                <label className="text-xs font-medium text-gray-700">Purchase Date{isEdit ? '' : ' *'}</label>
-                <input type="date" value={form.purchaseDate} onChange={e => set('purchaseDate', e.target.value)} {...(isEdit ? {} : { required: true })} className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
+                <label className={labelClass}>Purchase Date{isEdit ? '' : ' *'}</label>
+                <input type="date" value={form.purchaseDate} onChange={e => set('purchaseDate', e.target.value)} {...(isEdit ? {} : { required: true })} className={inputClass} />
               </div>
 
               {/* 8. Assigned To */}
               <div>
-                <label className="text-xs font-medium text-gray-700">Assigned To</label>
+                <label className={labelClass}>Assigned To</label>
                 <Select value={form.assignedTo || '__none__'} onValueChange={(val) => val != null && set('assignedTo', val === '__none__' ? '' : val)} disabled={assignedToLoading}>
-                  <SelectTrigger className="w-full bg-background">
+                  <SelectTrigger className="w-full bg-white border-slate-200 focus:ring-2 focus:ring-[#f8931f]">
                     <SelectValue placeholder={assignedToLoading ? 'Loading...' : 'Select assignee'} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">None</SelectItem>
                     {mergeWithFallback(assignedToOptions, form.assignedTo).map((opt) => (
                       <SelectItem key={opt.id} value={opt.value}>
-                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-muted-foreground">(inactive)</span>}
+                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -253,22 +314,22 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 9. Property # */}
               <div>
-                <label className="text-xs font-medium text-gray-700">Property #</label>
-                <input value={form.propertyNumber} onChange={e => set('propertyNumber', e.target.value)} placeholder="e.g. PROP-00123" className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
+                <label className={labelClass}>Property #</label>
+                <input value={form.propertyNumber} onChange={e => set('propertyNumber', e.target.value)} placeholder="e.g. PROP-00123" className={inputClass} />
               </div>
 
               {/* 10. Location */}
               <div>
-                <label className="text-xs font-medium text-gray-700">Location</label>
+                <label className={labelClass}>Location</label>
                 <Select value={form.location || '__none__'} onValueChange={(val) => val != null && set('location', val === '__none__' ? '' : val)} disabled={locationLoading}>
-                  <SelectTrigger className="w-full bg-background">
+                  <SelectTrigger className="w-full bg-white border-slate-200 focus:ring-2 focus:ring-[#f8931f]">
                     <SelectValue placeholder={locationLoading ? 'Loading...' : 'Select location'} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">None</SelectItem>
                     {mergeWithFallback(locationOptions, form.location).map((opt) => (
                       <SelectItem key={opt.id} value={opt.value}>
-                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-muted-foreground">(inactive)</span>}
+                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -277,46 +338,50 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 11. Status */}
               <div>
-                <label className="text-xs font-medium text-gray-700">Status *</label>
-                <select value={form.status} onChange={e => set('status', e.target.value)} required className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm">
+                <label className={labelClass}>Status *</label>
+                <select value={form.status} onChange={e => set('status', e.target.value)} required className={inputClass}>
                   {ASSET_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
 
               {/* 12. Remarks */}
               <div className="col-span-2">
-                <label className="text-xs font-medium text-gray-700">Remarks</label>
-                <textarea rows={3} value={form.remarks} onChange={e => set('remarks', e.target.value)} placeholder="Any additional notes..." className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm resize-none" />
+                <label className={labelClass}>Remarks</label>
+                <textarea rows={3} value={form.remarks} onChange={e => set('remarks', e.target.value)} placeholder="Any additional notes..." className={`${inputClass} resize-none`} />
               </div>
 
               {/* 13. Warranty Section */}
               <div className="col-span-2">
-                <div className="border-t border-border my-2" />
-                <label className="text-xs font-medium text-gray-700">Warranty (Optional)</label>
+                <div className="border-t border-slate-100 my-2" />
+                <label className={labelClass}>Warranty (Optional)</label>
                 <div className="grid grid-cols-2 gap-3 mt-1">
                   <div>
-                    <input type="date" value={form.warrantyExpiry} onChange={e => set('warrantyExpiry', e.target.value)} placeholder="Select expiry date" className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
-                    <span className="text-[10px] text-muted-foreground">Expiry date</span>
+                    <label className="text-[10px] text-slate-400 block mb-1">Expiry date</label>
+                    <input type="date" value={form.warrantyExpiry} onChange={e => set('warrantyExpiry', e.target.value)} className={inputClass} />
                   </div>
                   <div>
-                    <input type="text" value={form.warrantyNotes} onChange={e => set('warrantyNotes', e.target.value)} placeholder="e.g. 3-year on-site, ref# 12345" className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
-                    <span className="text-[10px] text-muted-foreground">Notes</span>
+                    <label className="text-[10px] text-slate-400 block mb-1">Notes</label>
+                    <input type="text" value={form.warrantyNotes} onChange={e => set('warrantyNotes', e.target.value)} placeholder="e.g. 3-year on-site" className={inputClass} />
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Fixed footer */}
+          {/* ── Error ── */}
           {error && (
             <div className="px-6 pt-2 shrink-0">
-              <p className="text-sm text-red-600 bg-red-50 rounded-md px-3 py-2">{error}</p>
+              <p className="text-sm text-[#7B1113] bg-[#7B1113]/10 border border-[#7B1113]/20 rounded-lg px-4 py-2">{error}</p>
             </div>
           )}
-          <div className="flex justify-end gap-2 px-6 py-4 border-t border-border shrink-0">
-            <button type="button" onClick={onClose} className="rounded-md border border-input px-4 py-1.5 text-sm hover:bg-accent">Cancel</button>
-            <button type="submit" disabled={loading || !form.name} className="rounded-md bg-primary px-4 py-1.5 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-              {loading ? (isEdit ? 'Updating...' : 'Saving...') : isEdit ? 'Update' : 'Add Asset'}
+
+          {/* ── Footer ── */}
+          <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-100 shrink-0">
+            <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-[#012061] hover:bg-slate-50 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={loading || !form.name} className="rounded-lg bg-[#f8931f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#e0841a] disabled:opacity-50 transition-colors inline-flex items-center gap-1.5">
+              {loading ? (isEdit ? 'Updating...' : 'Saving...') : (isEdit ? 'Update Asset' : 'Add Asset')}
             </button>
           </div>
         </form>

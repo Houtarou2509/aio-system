@@ -43,12 +43,13 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: 3000,
     proxy: {
       '/api': { target: 'http://localhost:3001', changeOrigin: true },
+      '/uploads': { target: 'http://localhost:3001/aio-system', changeOrigin: true },
     },
   },
-  base: '/aio-system/static/',
+  base: '/aio-system/',
   build: {
     outDir: '../server/public',
     emptyOutDir: true,
