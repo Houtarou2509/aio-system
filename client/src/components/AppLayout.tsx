@@ -46,9 +46,11 @@ export default function AppLayout() {
         </nav>
 
         {/* Profile & Logout */}
-        <div className="bg-black/20 px-3 py-3 border-t border-[#001a4d]">
+        <div className="relative px-3 py-3 border-t border-[#001a4d] bg-black/20">
           <div className="flex items-center gap-2 mb-2">
-            <NotificationBell />
+            <div className="relative z-50">
+              <NotificationBell />
+            </div>
             <div>
               <p className="text-sm font-semibold text-white leading-tight">{user?.username}</p>
               <p className="text-[10px] tracking-widest font-medium text-[#f8931f] uppercase">{user?.role?.replace('_', '-')}</p>
@@ -68,7 +70,9 @@ export default function AppLayout() {
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between bg-[#012061] px-4 py-4 min-h-[56px]">
         <h1 className="text-lg font-bold tracking-tight text-[#f8931f]">AIO System</h1>
         <div className="flex items-center gap-2">
-          <NotificationBell />
+          <div className="relative z-50">
+            <NotificationBell />
+          </div>
           <button onClick={() => setMobileOpen(!mobileOpen)} className="text-white/70 hover:text-white">
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>

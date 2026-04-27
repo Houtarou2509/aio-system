@@ -13,10 +13,10 @@ import {
 
 const router = Router();
 
-// Rate limit: 5 login attempts per IP per 15 minutes
+// Rate limit: 10 login attempts per 15 minutes
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 10,
   message: { success: false, data: null, error: { message: 'Too many login attempts, try again later' }, meta: null },
   standardHeaders: true,
   legacyHeaders: false,

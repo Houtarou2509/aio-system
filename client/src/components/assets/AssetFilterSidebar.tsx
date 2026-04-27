@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AssetFilters } from '../../lib/api';
 import { useSavedFilters } from '../../hooks/useSavedFilters';
+import { useLookupOptions } from '@/hooks/useLookupOptions';
 
 const ASSET_TYPES = ['DESKTOP', 'LAPTOP', 'FURNITURE', 'EQUIPMENT', 'PERIPHERAL', 'OTHER'];
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
@@ -13,6 +14,7 @@ interface Props {
 export function AssetFilterSidebar({ filters, onChange }: Props) {
   const { savedFilters, saveFilter, deleteFilter } = useSavedFilters();
   const [saveName, setSaveName] = useState('');
+  const { options: locationOptions } = useLookupOptions('locations');
 
   const update = (key: keyof AssetFilters, value: string) => {
     onChange({ ...filters, [key]: value || undefined, page: 1 });
@@ -54,7 +56,12 @@ export function AssetFilterSidebar({ filters, onChange }: Props) {
 
       <div className="space-y-2">
         <label className="text-xs font-medium text-muted-foreground">Location</label>
-        <input value={filters.location || ''} onChange={e => update('location', e.target.value)} placeholder="Filter by location" className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
+        <select value={filters.location || ''} onChange={e => update('location', e.target.value)} className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm">
+          <option value="">All</option>
+          {locationOptions.map((opt) => (
+            <option key={opt.id} value={opt.value}>{opt.value}</option>
+          ))}
+        </select>
       </div>
 
       <button onClick={() => onChange({ page: 1 })} className="text-xs text-primary hover:underline">Clear filters</button>

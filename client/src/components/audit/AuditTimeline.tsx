@@ -123,6 +123,12 @@ export function AuditTimeline({ entityId }: Props) {
                           {conf.label}
                         </span>
                         <span className="text-xs text-slate-500">{l.entityType}</span>
+                        {!isEntityView && l.assetName && (
+                          <span className="text-xs font-semibold" style={{ color: '#012061' }}>{l.assetName}</span>
+                        )}
+                        {!isEntityView && l.serialNumber && (
+                          <span className="text-[10px] font-mono text-slate-400">{l.serialNumber}</span>
+                        )}
                       </div>
                       <span className="text-[11px] text-slate-400">{new Date(l.performedAt).toLocaleString()}</span>
                     </div>

@@ -68,9 +68,6 @@ model Assignment {
   returnedAt    DateTime?
   condition     String?
   notes         String?
-  requestStatus RequestStatus    @default(APPROVED)
-  requestNote   String?
-
   asset         Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
   user          User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -185,12 +182,6 @@ enum BackupStatus {
   IN_PROGRESS
   COMPLETED
   FAILED
-}
-
-enum RequestStatus {
-  PENDING
-  APPROVED
-  DENIED
 }
 
 enum NotificationType {

@@ -5,7 +5,6 @@ import { AuditTimeline } from '../audit';
 import { GuestTokenManager } from '../guest';
 import FinancialsTab from '../depreciation/FinancialsTab';
 import { getWarrantyStatus, formatWarrantyDate } from '../../lib/warranty';
-import { RoleGate } from '../auth';
 import {
   Dialog,
   DialogContent,
@@ -46,7 +45,6 @@ interface Props {
   asset: Asset;
   onClose: () => void;
   onEdit: (asset: Asset) => void;
-  onRequest?: (assetId: string) => void;
 }
 
 /* ─── Status Badge Config ─── */
@@ -94,7 +92,7 @@ function InfoRow({ label, value, highlight }: { label: string; value: React.Reac
 /* ═════════════════════════════════════════════════════
    ASSET DETAIL MODAL
    ═════════════════════════════════════════════════════ */
-export function AssetDetailModal({ asset, onClose, onEdit, onRequest }: Props) {
+export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
   const [tab, setTab] = useState('overview');
   const [frequentRepair, setFrequentRepair] = useState(false);
   const [showLightbox, setShowLightbox] = useState(false);
@@ -141,16 +139,6 @@ export function AssetDetailModal({ asset, onClose, onEdit, onRequest }: Props) {
                 <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-full border ${statusConf.className}`}>
                   {statusConf.label}
                 </span>
-                {onRequest && asset.status === 'AVAILABLE' && (
-                  <RoleGate roles={['STAFF', 'STAFF_ADMIN']}>
-                    <button
-                      onClick={() => onRequest(asset.id)}
-                      className="rounded-lg bg-[#f8931f] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#e0841a] transition-colors"
-                    >
-                      Request
-                    </button>
-                  </RoleGate>
-                )}
                 <button
                   onClick={() => onEdit(asset)}
                   className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20 transition-colors inline-flex items-center gap-1"

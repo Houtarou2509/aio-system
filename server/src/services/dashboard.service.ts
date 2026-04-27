@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 const notDeleted = { deletedAt: null };
 
 export async function getDashboardStats() {
-  const [totalAssets, byStatus, byType, recentAudit, byLocation, valueAgg] = await Promise.all([
+  const [totalAssets, byStatus, byType, recentAudit, byLocation] = await Promise.all([
     prisma.asset.count({ where: notDeleted }),
     prisma.asset.groupBy({ by: ['status'], where: notDeleted, _count: { status: true } }),
     prisma.asset.groupBy({ by: ['type'], where: notDeleted, _count: { type: true } }),
@@ -15,7 +15,6 @@ export async function getDashboardStats() {
       include: { performedBy: { select: { username: true } } },
     }),
     prisma.asset.groupBy({ by: ['location'], where: notDeleted, _count: { location: true } }),
-    prisma.asset.aggregate({ where: notDeleted, _sum: { purchasePrice: true } }),
   ]);
 
   const statusMap = Object.fromEntries(byStatus.map(s => [s.status, s._count.status]));
@@ -38,7 +37,6 @@ export async function getDashboardStats() {
 
   return {
     totalAssets,
-    totalValue: valueAgg._sum.purchasePrice || 0,
     totalAssigned: statusMap['ASSIGNED'] || 0,
     underMaintenance: statusMap['MAINTENANCE'] || 0,
     available: statusMap['AVAILABLE'] || 0,

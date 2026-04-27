@@ -5,15 +5,14 @@ import { assetsApi, Asset } from '../lib/api';
 import { RoleGate } from '../components/auth';
 import { AssetTable, AssetDetailModal, AssetFormModal, ImportAssetsModal } from '../components/assets';
 import QRScannerModal from '../components/assets/QRScannerModal';
-import PendingRequestsModal from '../components/assets/PendingRequestsModal';
 import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { useLookupOptions } from '@/hooks/useLookupOptions';
 import {
-  Package, Search, ScanLine, ArrowDownToLine, Plus,
-  DollarSign, CheckCircle, Wrench, PackageOpen, X,
+  Package, Search, ScanLine, Plus,
+  CheckCircle, Wrench, PackageOpen, X,
 } from 'lucide-react';
 
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
@@ -23,7 +22,6 @@ const BULK_STATUS_OPTIONS = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED'];
 
 interface AssetKpiData {
   totalAssets: number;
-  totalValue: number;
   availableCount: number;
   maintenanceCount: number;
 }
@@ -59,6 +57,7 @@ export default function AssetsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { options: typeFilterOptions } = useLookupOptions('asset-types');
   const { options: manufacturerOptions } = useLookupOptions('manufacturers');
+  const { options: locationOptions } = useLookupOptions('locations');
 
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [showDetail, setShowDetail] = useState(false);
@@ -82,9 +81,6 @@ export default function AssetsPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [statusDropdown, setStatusDropdown] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [requestModalOpen, setRequestModalOpen] = useState(false);
-  const [requestAssetId, setRequestAssetId] = useState<string | null>(null);
-  const [pendingModalOpen, setPendingModalOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
@@ -99,7 +95,6 @@ export default function AssetsPage() {
         if (d.success) {
           setKpiData({
             totalAssets: d.data.totalAssets ?? 0,
-            totalValue: d.data.totalValue ?? 0,
             availableCount: d.data.available ?? 0,
             maintenanceCount: d.data.underMaintenance ?? 0,
           });
@@ -262,22 +257,6 @@ export default function AssetsPage() {
     finally { setBulkLoading(false); }
   };
 
-  // Request asset
-  const handleRequestAsset = async (note?: string) => {
-    if (!requestAssetId) return;
-    try {
-      const token = localStorage.getItem('accessToken');
-      const res = await fetch('/api/assets/request', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assetId: requestAssetId, requestNote: note || '' }),
-      });
-      const data = await res.json();
-      if (data.success) { showToast('Request submitted!'); setRequestModalOpen(false); setRequestAssetId(null); }
-      else showToast(data.error?.message || 'Failed to submit request');
-    } catch { showToast('Failed to submit request'); }
-  };
-
   // Client-side manufacturer filter
   const displayAssets = manufacturerFilter
     ? assets.filter(a => a.manufacturer === manufacturerFilter)
@@ -285,7 +264,6 @@ export default function AssetsPage() {
 
   const KPI_CARDS = [
     { key: 'totalAssets', label: 'TOTAL ASSETS', icon: Package, value: kpiData?.totalAssets ?? 0 },
-    { key: 'totalValue', label: 'TOTAL VALUE', icon: DollarSign, value: kpiData?.totalValue ?? 0, isCurrency: true },
     { key: 'availableCount', label: 'AVAILABLE', icon: CheckCircle, value: kpiData?.availableCount ?? 0 },
     { key: 'maintenanceCount', label: 'MAINTENANCE', icon: Wrench, value: kpiData?.maintenanceCount ?? 0 },
   ];
@@ -308,9 +286,6 @@ export default function AssetsPage() {
               <ScanLine className="h-3.5 w-3.5" /> Scan QR
             </button>
             <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
-              <button onClick={() => setPendingModalOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors">
-                <ArrowDownToLine className="h-3.5 w-3.5" /> Requests
-              </button>
               <button onClick={() => setIsImportModalOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors">
                 ↑ Import CSV
               </button>
@@ -324,16 +299,14 @@ export default function AssetsPage() {
 
       {/* ═══ KPI TILES ═══════════════════════════════════════ */}
       <section className="px-6 pt-4 shrink-0">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {KPI_CARDS.map(({ key, label, icon: Icon, value, isCurrency }) => (
+        <div className="grid grid-cols-3 gap-3">
+          {KPI_CARDS.map(({ key, label, icon: Icon, value }) => (
             <div key={key} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
                 <Icon className="h-5 w-5 text-[#f8931f]" />
               </div>
               <div className="min-w-0">
-                <p className="text-xl font-bold leading-tight text-[#f8931f]">
-                  {isCurrency ? `₱${value.toLocaleString()}` : value}
-                </p>
+                <p className="text-xl font-bold leading-tight text-[#f8931f]">{value}</p>
                 <p className="text-[10px] tracking-widest text-slate-500 uppercase">{label}</p>
               </div>
             </div>
@@ -349,7 +322,7 @@ export default function AssetsPage() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             <input
               type="text"
-              placeholder="Search by name, serial, property #..."
+              placeholder="Search name, property #, serial, assignee, date..."
               value={filters.search || ''}
               onChange={e => setFilters({ ...filters, search: e.target.value || undefined, page: 1 })}
               className="w-full rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none transition-colors"
@@ -392,13 +365,16 @@ export default function AssetsPage() {
           </select>
 
           {/* Location filter */}
-          <input
-            type="text"
-            placeholder="Location..."
+          <select
             value={filters.location || ''}
             onChange={e => setFilters({ ...filters, location: e.target.value || undefined, page: 1 })}
-            className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 h-8 w-28 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
-          />
+            className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+          >
+            <option value="">Loc: All</option>
+            {locationOptions.map((opt) => (
+              <option key={opt.id} value={opt.value}>{opt.value}</option>
+            ))}
+          </select>
 
           {/* Clear All */}
           {hasActiveFilters && (
@@ -507,7 +483,7 @@ export default function AssetsPage() {
 
       {/* ═══ MODALS ════════════════════════════════════════ */}
       {showDetail && selectedAsset && (
-        <AssetDetailModal asset={selectedAsset} onClose={() => setShowDetail(false)} onEdit={handleEdit} onRequest={(id) => { setRequestAssetId(id); setRequestModalOpen(true); }} />
+        <AssetDetailModal asset={selectedAsset} onClose={() => setShowDetail(false)} onEdit={handleEdit} />
       )}
       {showForm && (
         <AssetFormModal asset={editAsset} onSubmit={editAsset ? handleUpdate : handleCreate} onClose={() => { setShowForm(false); setEditAsset(null); }} onImageUpload={assetsApi.uploadImage} />
@@ -515,24 +491,7 @@ export default function AssetsPage() {
       <ImportAssetsModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImportComplete={handleImportComplete} />
       <QRScannerModal open={scannerOpen} onClose={() => setScannerOpen(false)} />
 
-      {requestModalOpen && requestAssetId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-xl w-full max-w-sm mx-4 p-5">
-            <h3 className="text-sm font-semibold mb-3 text-slate-900">Request Asset</h3>
-            <textarea id="request-note" placeholder="Why do you need this asset? (optional)"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 mb-3 min-h-[80px] resize-none focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none" />
-            <div className="flex justify-end gap-2">
-              <button className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50" onClick={() => { setRequestModalOpen(false); setRequestAssetId(null); }}>Cancel</button>
-              <button className="rounded-lg bg-[#f8931f] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#e0841a]" onClick={() => {
-                const note = (document.getElementById('request-note') as HTMLTextAreaElement)?.value;
-                handleRequestAsset(note);
-              }}>Submit Request</button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      <PendingRequestsModal open={pendingModalOpen} onClose={() => setPendingModalOpen(false)} onAction={refetch} />
 
       {/* ═══ IMAGE LIGHTBOX ═════════════════════════════════ */}
       {expandedImage && (

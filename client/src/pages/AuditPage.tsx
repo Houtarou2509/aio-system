@@ -106,6 +106,8 @@ export default function AuditPage() {
           <thead>
             <tr style={{ backgroundColor: '#e8ecf4' }}>
               <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Action</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Asset Name</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Serial #</th>
               <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Type</th>
               <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Details</th>
               <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">By</th>
@@ -116,14 +118,14 @@ export default function AuditPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-slate-400 text-sm">
+                <td colSpan={8} className="px-4 py-12 text-center text-slate-400 text-sm">
                   <Loader2 className="w-5 h-5 animate-spin inline mr-2" />
                   Loading...
                 </td>
               </tr>
             ) : logs.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-slate-400 text-sm">
+                <td colSpan={8} className="px-4 py-12 text-center text-slate-400 text-sm">
                   <Eye className="w-8 h-8 mx-auto mb-2 opacity-40" />
                   No audit logs found
                 </td>
@@ -146,6 +148,20 @@ export default function AuditPage() {
                       <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${conf.bg}`}>
                         <Icon className="w-2.5 h-2.5" />
                         {conf.label}
+                      </span>
+                    </td>
+
+                    {/* Asset Name */}
+                    <td className="px-4 py-3">
+                      <span className="text-sm font-semibold" style={{ color: '#012061' }}>
+                        {l.assetName || <span className="text-slate-400 italic">N/A (Deleted)</span>}
+                      </span>
+                    </td>
+
+                    {/* Serial Number */}
+                    <td className="px-4 py-3">
+                      <span className="text-xs font-mono text-slate-600">
+                        {l.serialNumber || <span className="text-slate-400 italic">—</span>}
                       </span>
                     </td>
 

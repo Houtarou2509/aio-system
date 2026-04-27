@@ -5,6 +5,9 @@ export default {
   theme: {
     extend: {
       colors: {
+        'brand-blue': '#012061',
+        'brand-orange': '#f8931f',
+        'brand-red': '#7B1113',
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',

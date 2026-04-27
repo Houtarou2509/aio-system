@@ -150,6 +150,8 @@ export interface AuditLogEntry {
   performedAt: string;
   ipAddress: string | null;
   performedBy?: { id: string; username: string };
+  assetName?: string | null;
+  serialNumber?: string | null;
 }
 
 export interface AuditFilters {

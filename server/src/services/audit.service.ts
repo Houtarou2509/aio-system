@@ -29,7 +29,100 @@ export async function queryAuditLogs(filters: {
     prisma.auditLog.count({ where }),
   ]);
 
-  return { items, total, page: filters.page, limit: filters.limit, totalPages: Math.ceil(total / filters.limit) };
+  // Enrich logs with asset name and serial number
+  const enriched = await enrichWithAssetInfo(items);
+
+  return { items: enriched, total, page: filters.page, limit: filters.limit, totalPages: Math.ceil(total / filters.limit) };
+}
+
+const notDeleted = { deletedAt: null };
+
+/**
+ * Enrich audit log items with assetName and serialNumber.
+ * - Asset entityId → direct lookup
+ * - Assignment/MaintenanceLog entityId → resolve via assetId FK
+ */
+async function enrichWithAssetInfo(logs: any[]): Promise<any[]> {
+  if (logs.length === 0) return logs;
+
+  // Collect entity IDs that need asset lookup
+  const directAssetIds = new Set<string>();   // entityType === 'Asset'
+  const indirectIds = new Set<string>();       // Assignment or MaintenanceLog
+
+  for (const log of logs) {
+    if (log.entityType === 'Asset') {
+      directAssetIds.add(log.entityId);
+    } else if (log.entityType === 'Assignment' || log.entityType === 'MaintenanceLog') {
+      indirectIds.add(log.entityId);
+    }
+  }
+
+  // Fetch assets directly
+  const assetMap = new Map<string, { name: string; serialNumber: string | null }>();
+  if (directAssetIds.size > 0) {
+    const assets = await prisma.asset.findMany({
+      where: { id: { in: [...directAssetIds] } },
+      select: { id: true, name: true, serialNumber: true },
+    });
+    for (const a of assets) assetMap.set(a.id, { name: a.name, serialNumber: a.serialNumber });
+  }
+
+  // Resolve Assignment → assetId
+  if (indirectIds.size > 0) {
+    const ids = [...indirectIds];
+    // Assignments
+    const assignments = await prisma.assignment.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, assetId: true },
+    });
+    const assignmentAssetIds = assignments.map(a => a.assetId);
+    // MaintenanceLogs
+    const maintLogs = await prisma.maintenanceLog.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, assetId: true },
+    });
+    const maintAssetIds = maintLogs.map(m => m.assetId);
+
+    const allAssetIds = [...new Set([...assignmentAssetIds, ...maintAssetIds])];
+    if (allAssetIds.length > 0) {
+      const assets = await prisma.asset.findMany({
+        where: { id: { in: allAssetIds } },
+        select: { id: true, name: true, serialNumber: true },
+      });
+      for (const a of assets) assetMap.set(a.id, { name: a.name, serialNumber: a.serialNumber });
+    }
+
+    // Map indirect entityId → asset info via assignment/maintenance FK
+    const indirectMap = new Map<string, string>();
+    for (const a of assignments) indirectMap.set(a.id, a.assetId);
+    for (const m of maintLogs) indirectMap.set(m.id, m.assetId);
+
+    for (const log of logs) {
+      if (log.entityType === 'Assignment' || log.entityType === 'MaintenanceLog') {
+        const assetId = indirectMap.get(log.entityId);
+        if (assetId) {
+          const info = assetMap.get(assetId);
+          if (info) {
+            (log as any).assetName = info.name;
+            (log as any).serialNumber = info.serialNumber;
+          }
+        }
+      }
+    }
+  }
+
+  // Attach info for direct Asset entries
+  for (const log of logs) {
+    if (log.entityType === 'Asset') {
+      const info = assetMap.get(log.entityId);
+      if (info) {
+        (log as any).assetName = info.name;
+        (log as any).serialNumber = info.serialNumber;
+      }
+    }
+  }
+
+  return logs;
 }
 
 export async function getEntityAuditTimeline(entityId: string) {
@@ -109,13 +202,17 @@ export async function exportAuditLogsCsv(filters: {
     include: { performedBy: { select: { username: true } } },
   });
 
-  const header = 'id,entityType,entityId,action,field,oldValue,newValue,performedBy,performedAt,ipAddress';
-  const rows = logs.map(l =>
+  const enriched = await enrichWithAssetInfo(logs);
+
+  const header = 'id,action,assetName,serialNumber,entityType,entityId,field,oldValue,newValue,performedBy,performedAt,ipAddress';
+  const rows = enriched.map(l =>
     [
       l.id,
+      l.action,
+      `"${((l as any).assetName || 'N/A (Deleted)').replace(/"/g, '""')}"`,
+      `"${((l as any).serialNumber || '').replace(/"/g, '""')}"`,
       l.entityType,
       l.entityId,
-      l.action,
       l.field || '',
       `"${(l.oldValue || '').replace(/"/g, '""')}"`,
       `"${(l.newValue || '').replace(/"/g, '""')}"`,

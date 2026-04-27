@@ -21,12 +21,29 @@ export async function listAssets(query: {
   if (query.location) where.location = { contains: query.location, mode: 'insensitive' };
   if (query.assignedTo) where.assignedTo = { contains: query.assignedTo };
   if (query.search) {
-    where.OR = [
-      { name: { contains: query.search } },
-      { manufacturer: { contains: query.search } },
-      { serialNumber: { contains: query.search } },
-      { location: { contains: query.search } },
+    // Check if search looks like a date (YYYY-MM-DD or YYYY)
+    const isDateSearch = /^\d{4}-\d{2}-\d{2}$/.test(query.search);
+    const isYearSearch = /^\d{4}$/.test(query.search);
+
+    const orConditions: Prisma.AssetWhereInput[] = [
+      { name: { contains: query.search, mode: 'insensitive' } },
+      { propertyNumber: { contains: query.search, mode: 'insensitive' } },
+      { assignedTo: { contains: query.search, mode: 'insensitive' } },
+      { serialNumber: { contains: query.search, mode: 'insensitive' } },
+      { manufacturer: { contains: query.search, mode: 'insensitive' } },
+      { location: { contains: query.search, mode: 'insensitive' } },
     ];
+
+    if (isDateSearch) {
+      orConditions.push({ purchaseDate: { equals: new Date(query.search) } });
+    } else if (isYearSearch) {
+      const year = parseInt(query.search);
+      const start = new Date(year, 0, 1);
+      const end = new Date(year + 1, 0, 1);
+      orConditions.push({ purchaseDate: { gte: start, lt: end } });
+    }
+
+    where.OR = orConditions;
   }
 
   const [items, total] = await Promise.all([
