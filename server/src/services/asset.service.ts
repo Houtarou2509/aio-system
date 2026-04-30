@@ -1,6 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import path from 'path';
 import fs from 'fs';
+import { classifySeverity, generateSummary } from '../utils/auditHelpers';
 
 const prisma = new PrismaClient();
 const UPLOAD_DIR = path.resolve(__dirname, '../../uploads');
@@ -100,12 +101,12 @@ function formatAuditValue(value: any): string {
 }
 
 // --- CREATE ---
-export async function createAsset(data: Prisma.AssetCreateInput, performedById: string, ipAddress?: string) {
+export async function createAsset(data: Prisma.AssetCreateInput, performedById: string, ipAddress?: string, userAgent?: string) {
   const cleaned = cleanWarrantyFields(data);
   const asset = await prisma.asset.create({ data: cleaned });
 
   await prisma.auditLog.create({
-    data: { entityType: 'Asset', entityId: asset.id, action: 'CREATE', performedById, ipAddress, field: '*', oldValue: null, newValue: JSON.stringify(data) },
+    data: { entityType: 'Asset', entityId: asset.id, action: 'CREATE', performedById, ipAddress, userAgent, field: '*', oldValue: null, newValue: JSON.stringify(data), severity: 'LOW', summary: generateSummary({ action: 'CREATE', entityType: 'Asset', assetName: (data as any).name }) },
   });
 
   return asset;
@@ -125,7 +126,7 @@ export async function getAsset(id: string) {
 }
 
 // --- UPDATE ---
-export async function updateAsset(id: string, data: Prisma.AssetUpdateInput, performedById: string, ipAddress?: string) {
+export async function updateAsset(id: string, data: Prisma.AssetUpdateInput, performedById: string, ipAddress?: string, userAgent?: string) {
   const existing = await prisma.asset.findUnique({ where: { id, deletedAt: null } });
   if (!existing) throw new Error('Asset not found');
 
@@ -141,8 +142,10 @@ export async function updateAsset(id: string, data: Prisma.AssetUpdateInput, per
     if (oldStr === newStr) continue;
     await prisma.auditLog.create({
       data: {
-        entityType: 'Asset', entityId: id, action: 'UPDATE', performedById, ipAddress,
+        entityType: 'Asset', entityId: id, action: 'UPDATE', performedById, ipAddress, userAgent,
         field: key, oldValue: oldVal == null ? null : formatAuditValue(oldVal), newValue: newVal == null ? null : formatAuditValue(newVal),
+        severity: classifySeverity('UPDATE', key),
+        summary: generateSummary({ action: 'UPDATE', entityType: 'Asset', field: key, oldValue: oldVal == null ? null : formatAuditValue(oldVal), newValue: newVal == null ? null : formatAuditValue(newVal), assetName: existing.name }),
       },
     });
   }
@@ -196,7 +199,7 @@ export async function updateAsset(id: string, data: Prisma.AssetUpdateInput, per
 }
 
 // --- SOFT DELETE ---
-export async function deleteAsset(id: string, performedById: string, ipAddress?: string) {
+export async function deleteAsset(id: string, performedById: string, ipAddress?: string, userAgent?: string) {
   const existing = await prisma.asset.findUnique({ where: { id, deletedAt: null } });
   if (!existing) throw new Error('Asset not found');
 
@@ -207,14 +210,14 @@ export async function deleteAsset(id: string, performedById: string, ipAddress?:
   });
 
   await prisma.auditLog.create({
-    data: { entityType: 'Asset', entityId: id, action: 'SOFT_DELETE', performedById, ipAddress, field: 'deletedAt', newValue: now.toISOString() },
+    data: { entityType: 'Asset', entityId: id, action: 'SOFT_DELETE', performedById, ipAddress, userAgent, field: 'deletedAt', newValue: now.toISOString(), severity: 'HIGH', summary: generateSummary({ action: 'DELETE', entityType: 'Asset', assetName: existing?.name }) },
   });
 
   return asset;
 }
 
 // --- CHECKOUT ---
-export async function checkoutAsset(assetId: string, userId: string, notes: string | undefined, performedById: string, ipAddress?: string) {
+export async function checkoutAsset(assetId: string, userId: string, notes: string | undefined, performedById: string, ipAddress?: string, userAgent?: string) {
   const asset = await prisma.asset.findUnique({ where: { id: assetId, deletedAt: null } });
   if (!asset) throw new Error('Asset not found');
   if (asset.status !== 'AVAILABLE') throw new Error('Asset is not available for checkout');
@@ -225,14 +228,14 @@ export async function checkoutAsset(assetId: string, userId: string, notes: stri
   ]);
 
   await prisma.auditLog.create({
-    data: { entityType: 'Asset', entityId: assetId, action: 'CHECKOUT', performedById, ipAddress, field: 'assignedTo', newValue: userId },
+    data: { entityType: 'Asset', entityId: assetId, action: 'CHECKOUT', performedById, ipAddress, userAgent, field: 'assignedTo', newValue: userId, severity: 'HIGH', summary: generateSummary({ action: 'CHECKOUT', entityType: 'Asset', assetName: asset?.name }) },
   });
 
   return assignment;
 }
 
 // --- RETURN ---
-export async function returnAsset(assetId: string, condition: string, notes: string | undefined, performedById: string, ipAddress?: string) {
+export async function returnAsset(assetId: string, condition: string, notes: string | undefined, performedById: string, ipAddress?: string, userAgent?: string) {
   const asset = await prisma.asset.findUnique({ where: { id: assetId, deletedAt: null } });
   if (!asset) throw new Error('Asset not found');
   if (asset.status !== 'ASSIGNED') throw new Error('Asset is not currently assigned');
@@ -249,14 +252,14 @@ export async function returnAsset(assetId: string, condition: string, notes: str
   ]);
 
   await prisma.auditLog.create({
-    data: { entityType: 'Asset', entityId: assetId, action: 'RETURN', performedById, ipAddress, field: 'status', newValue: 'AVAILABLE' },
+    data: { entityType: 'Asset', entityId: assetId, action: 'RETURN', performedById, ipAddress, userAgent, field: 'status', newValue: 'AVAILABLE', severity: 'MEDIUM', summary: generateSummary({ action: 'RETURN', entityType: 'Asset', assetName: asset?.name }) },
   });
 
   return { returned: true };
 }
 
 // --- IMAGE UPLOAD ---
-export async function uploadAssetImage(assetId: string, filename: string, performedById: string) {
+export async function uploadAssetImage(assetId: string, filename: string, performedById: string, userAgent?: string) {
   const asset = await prisma.asset.findUnique({ where: { id: assetId, deletedAt: null } });
   if (!asset) throw new Error('Asset not found');
 
@@ -264,7 +267,7 @@ export async function uploadAssetImage(assetId: string, filename: string, perfor
   await prisma.asset.update({ where: { id: assetId }, data: { imageUrl } });
 
   await prisma.auditLog.create({
-    data: { entityType: 'Asset', entityId: assetId, action: 'UPDATE', performedById, field: 'imageUrl', newValue: imageUrl },
+    data: { entityType: 'Asset', entityId: assetId, action: 'UPDATE', performedById, userAgent, field: 'imageUrl', newValue: imageUrl, severity: 'MEDIUM', summary: generateSummary({ action: 'UPDATE', entityType: 'Asset', field: 'imageUrl', assetName: asset?.name }), oldImageUrl: (asset as any)?.imageUrl || null },
   });
 
   return { imageUrl };

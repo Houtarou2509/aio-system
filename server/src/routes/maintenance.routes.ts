@@ -30,7 +30,7 @@ router.post('/:assetId/maintenance', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']
   try {
     const data: any = { ...req.body };
     if (data.date) data.date = new Date(data.date);
-    const log = await maintenanceService.createMaintenanceLog(String(req.params.assetId), data, req.user!.id, getClientIp(req));
+    const log = await maintenanceService.createMaintenanceLog(String(req.params.assetId), data, req.user!.id, getClientIp(req), String(req.headers['user-agent'] || ''));
     return success(res, log, 201);
   } catch (err: any) {
     return error(res, err.message, 400);
@@ -40,7 +40,7 @@ router.post('/:assetId/maintenance', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']
 // PUT /api/assets/:assetId/maintenance/:logId
 router.put('/:assetId/maintenance/:logId', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), validate(updateMaintenanceSchema), async (req: Request, res: Response) => {
   try {
-    const log = await maintenanceService.updateMaintenanceLog(String(req.params.logId), req.body, req.user!.id, getClientIp(req));
+    const log = await maintenanceService.updateMaintenanceLog(String(req.params.logId), req.body, req.user!.id, getClientIp(req), String(req.headers['user-agent'] || ''));
     return success(res, log, 200);
   } catch (err: any) {
     return error(res, err.message, err.message === 'Maintenance log not found' ? 404 : 400);
@@ -50,7 +50,7 @@ router.put('/:assetId/maintenance/:logId', authorize(['ADMIN', 'STAFF_ADMIN', 'S
 // DELETE /api/assets/:assetId/maintenance/:logId
 router.delete('/:assetId/maintenance/:logId', authorize(['ADMIN']), async (req: Request, res: Response) => {
   try {
-    await maintenanceService.deleteMaintenanceLog(String(req.params.logId), req.user!.id, getClientIp(req));
+    await maintenanceService.deleteMaintenanceLog(String(req.params.logId), req.user!.id, getClientIp(req), String(req.headers['user-agent'] || ''));
     return success(res, { deleted: true }, 200);
   } catch (err: any) {
     return error(res, err.message, err.message === 'Maintenance log not found' ? 404 : 400);

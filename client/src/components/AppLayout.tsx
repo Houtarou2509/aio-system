@@ -1,13 +1,23 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { BookOpen, Settings2, LayoutDashboard, Package, Users, History, LogOut, Menu, X } from 'lucide-react';
+import { BookOpen, Settings2, LayoutDashboard, Package, Users, History, LogOut, Menu, X, FileSignature, Database } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/notifications/NotificationBell';
 
-const navItems = [
-  { to: '/', label: 'Dashboard', IconComponent: LayoutDashboard },
+/* ─── Navigation Sections ─── */
+const inventoryNav = [
+  { to: '/', label: 'Dashboard', IconComponent: LayoutDashboard, end: true },
   { to: '/assets', label: 'Assets', IconComponent: Package },
   { to: '/lookup', label: 'Inventory Lookup', IconComponent: BookOpen, roles: ['ADMIN', 'STAFF_ADMIN'] },
+];
+
+const issuanceNav = [
+  { to: '/profiles', label: 'Profiles', IconComponent: Users, roles: ['ADMIN', 'STAFF_ADMIN'] },
+  { to: '/issuances', label: 'Issuances', IconComponent: FileSignature, roles: ['ADMIN', 'STAFF_ADMIN'] },
+  { to: '/accountability-lookup', label: 'Accountability Lookup', IconComponent: Database, roles: ['ADMIN', 'STAFF_ADMIN'] },
+];
+
+const systemNav = [
   { to: '/users', label: 'Users', IconComponent: Users, roles: ['ADMIN'] },
   { to: '/audit', label: 'Audit Trail', IconComponent: History },
   { to: '/settings', label: 'Settings', IconComponent: Settings2 },
@@ -17,9 +27,9 @@ export default function AppLayout() {
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const visibleItems = navItems.filter(item =>
-    !item.roles || item.roles.includes(user?.role || '')
-  );
+  const visibleInventory = inventoryNav.filter(item => !item.roles || item.roles.includes(user?.role || ''));
+  const visibleIssuance = issuanceNav.filter(item => !item.roles || item.roles.includes(user?.role || ''));
+  const visibleSystem = systemNav.filter(item => !item.roles || item.roles.includes(user?.role || ''));
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     isActive
@@ -35,10 +45,35 @@ export default function AppLayout() {
           <h1 className="text-lg font-bold tracking-tight text-[#f8931f]">AIO System</h1>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
-          {visibleItems.map(item => (
-            <NavLink key={item.to} to={item.to} end={item.to === '/'} className={linkClass}>
+        {/* Navigation — Inventory */}
+        <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
+          <div className="px-3 pt-2 pb-1">
+            <span className="text-[10px] tracking-widest font-semibold text-slate-500 uppercase">Inventory</span>
+          </div>
+          {visibleInventory.map(item => (
+            <NavLink key={item.to} to={item.to} end={item.end ?? (item.to === '/')} className={linkClass}>
+              <item.IconComponent className="h-4 w-4" />
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
+
+          {/* Issuance */}
+          <div className="px-3 pt-4 pb-1 border-t border-[#001a4d] mt-2">
+            <span className="text-[10px] tracking-widest font-semibold text-slate-500 uppercase">Accountability</span>
+          </div>
+          {visibleIssuance.map(item => (
+            <NavLink key={item.to} to={item.to} className={linkClass}>
+              <item.IconComponent className="h-4 w-4" />
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
+
+          {/* System */}
+          <div className="px-3 pt-4 pb-1 border-t border-[#001a4d] mt-2">
+            <span className="text-[10px] tracking-widest font-semibold text-slate-500 uppercase">System</span>
+          </div>
+          {visibleSystem.map(item => (
+            <NavLink key={item.to} to={item.to} className={linkClass}>
               <item.IconComponent className="h-4 w-4" />
               <span>{item.label}</span>
             </NavLink>
@@ -84,9 +119,32 @@ export default function AppLayout() {
         <div className="md:hidden fixed inset-0 z-30 bg-black/50" onClick={() => setMobileOpen(false)}>
           <div className="w-56 h-full bg-[#012061] border-r border-[#001a4d]" onClick={e => e.stopPropagation()}>
             {/* Mobile Nav Links */}
-            <nav className="px-3 py-4 space-y-1 pt-20">
-              {visibleItems.map(item => (
-                <NavLink key={item.to} to={item.to} end={item.to === '/'} className={linkClass} onClick={() => setMobileOpen(false)}>
+            <nav className="px-3 py-2 space-y-0.5 pt-20 overflow-y-auto">
+              <div className="px-3 pt-2 pb-1">
+                <span className="text-[10px] tracking-widest font-semibold text-slate-500 uppercase">Inventory</span>
+              </div>
+              {visibleInventory.map(item => (
+                <NavLink key={item.to} to={item.to} end={item.end ?? (item.to === '/')} className={linkClass} onClick={() => setMobileOpen(false)}>
+                  <item.IconComponent className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
+
+              <div className="px-3 pt-4 pb-1 border-t border-[#001a4d] mt-2">
+                <span className="text-[10px] tracking-widest font-semibold text-slate-500 uppercase">Accountability</span>
+              </div>
+              {visibleIssuance.map(item => (
+                <NavLink key={item.to} to={item.to} className={linkClass} onClick={() => setMobileOpen(false)}>
+                  <item.IconComponent className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
+
+              <div className="px-3 pt-4 pb-1 border-t border-[#001a4d] mt-2">
+                <span className="text-[10px] tracking-widest font-semibold text-slate-500 uppercase">System</span>
+              </div>
+              {visibleSystem.map(item => (
+                <NavLink key={item.to} to={item.to} className={linkClass} onClick={() => setMobileOpen(false)}>
                   <item.IconComponent className="h-4 w-4" />
                   <span>{item.label}</span>
                 </NavLink>

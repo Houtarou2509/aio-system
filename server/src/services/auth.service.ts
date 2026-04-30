@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import speakeasy from 'speakeasy';
 import crypto from 'crypto';
 
@@ -18,11 +18,13 @@ interface TokenPayload {
 }
 
 function signAccessToken(payload: TokenPayload): string {
-  return jwt.sign(payload as object, JWT_SECRET, { expiresIn: '15m' });
+  const opts: SignOptions = { expiresIn: JWT_EXPIRES_IN as any };
+  return jwt.sign(payload as object, JWT_SECRET, opts);
 }
 
 function signRefreshToken(payload: TokenPayload): string {
-  return jwt.sign({ ...payload, jti: crypto.randomUUID() }, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRES_IN });
+  const opts: SignOptions = { expiresIn: REFRESH_EXPIRES_IN as any };
+  return jwt.sign({ ...payload, jti: crypto.randomUUID() }, REFRESH_SECRET, opts);
 }
 
 // Stored refresh tokens (in production, use Redis or DB table)

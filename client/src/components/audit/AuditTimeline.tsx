@@ -11,6 +11,7 @@ import {
   Loader2,
   Download,
   Filter,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface Props {
@@ -122,6 +123,16 @@ export function AuditTimeline({ entityId }: Props) {
                         <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${conf.bg}`}>
                           {conf.label}
                         </span>
+                        {l.severity === 'HIGH' && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600">
+                            <AlertTriangle className="w-2.5 h-2.5" /> HIGH
+                          </span>
+                        )}
+                        {l.severity === 'MEDIUM' && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600">
+                            MED
+                          </span>
+                        )}
                         <span className="text-xs text-slate-500">{l.entityType}</span>
                         {!isEntityView && l.assetName && (
                           <span className="text-xs font-semibold" style={{ color: '#012061' }}>{l.assetName}</span>
@@ -133,12 +144,23 @@ export function AuditTimeline({ entityId }: Props) {
                       <span className="text-[11px] text-slate-400">{new Date(l.performedAt).toLocaleString()}</span>
                     </div>
 
+                    {l.summary && (
+                      <div className="mt-1 text-xs font-medium text-slate-700">{l.summary}</div>
+                    )}
                     {l.field && l.field !== '*' && (
                       <div className="mt-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 text-xs">
                         <span className="text-slate-500 font-medium">{l.field}: </span>
                         <span className="line-through text-red-500">{l.oldValue || '—'}</span>
                         <span className="text-slate-400 mx-1">→</span>
                         <span className="text-emerald-600">{l.newValue || '—'}</span>
+                      </div>
+                    )}
+                    {l.oldImageUrl && (
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <a href={l.oldImageUrl} target="_blank" rel="noopener noreferrer" className="group">
+                          <img src={l.oldImageUrl} alt="Previous" className="h-10 w-10 rounded object-cover border border-slate-200 group-hover:border-[#f8931f] transition-colors" />
+                        </a>
+                        <span className="text-[10px] text-slate-400">Previous image</span>
                       </div>
                     )}
 

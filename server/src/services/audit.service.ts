@@ -1,17 +1,40 @@
 import { PrismaClient, Prisma } from '@prisma/client';
+import { classifySeverity, generateSummary } from '../utils/auditHelpers';
+
+export { classifySeverity, generateSummary };
 
 const prisma = new PrismaClient();
 
+/* ─── Module mapping: entity types → logical module ─── */
+const ENTITY_MODULE_MAP: Record<string, 'INVENTORY' | 'ACCOUNTABILITY' | 'SYSTEM'> = {
+  Asset: 'INVENTORY',
+  MaintenanceLog: 'INVENTORY',
+  MaintenanceSchedule: 'INVENTORY',
+  Assignment: 'ACCOUNTABILITY',
+  Personnel: 'ACCOUNTABILITY',
+  User: 'SYSTEM',
+};
+
+const MODULE_ENTITY_TYPES: Record<string, string[]> = {
+  INVENTORY: ['Asset', 'MaintenanceLog', 'MaintenanceSchedule'],
+  ACCOUNTABILITY: ['Assignment', 'Personnel'],
+  SYSTEM: ['User'],
+};
+
 export async function queryAuditLogs(filters: {
   page: number; limit: number;
-  entityType?: string; entityId?: string; action?: string; performedBy?: string;
-  dateFrom?: string; dateTo?: string;
+  entityType?: string; entityId?: string; action?: string; severity?: string; performedBy?: string;
+  dateFrom?: string; dateTo?: string; module?: string;
 }) {
   const where: Prisma.AuditLogWhereInput = {};
   if (filters.entityType) where.entityType = filters.entityType;
   if (filters.entityId) where.entityId = filters.entityId;
   if (filters.action) where.action = filters.action;
+  if (filters.severity) where.severity = filters.severity as any;
   if (filters.performedBy) where.performedById = filters.performedBy;
+  if (filters.module && MODULE_ENTITY_TYPES[filters.module]) {
+    where.entityType = { in: MODULE_ENTITY_TYPES[filters.module] };
+  }
   if (filters.dateFrom || filters.dateTo) {
     where.performedAt = {};
     if (filters.dateFrom) (where.performedAt as any).gte = new Date(filters.dateFrom);
@@ -45,20 +68,25 @@ const notDeleted = { deletedAt: null };
 async function enrichWithAssetInfo(logs: any[]): Promise<any[]> {
   if (logs.length === 0) return logs;
 
-  // Collect entity IDs that need asset lookup
-  const directAssetIds = new Set<string>();   // entityType === 'Asset'
-  const indirectIds = new Set<string>();       // Assignment or MaintenanceLog
+  // Collect entity IDs
+  const directAssetIds = new Set<string>();
+  const indirectIds = new Set<string>();
+  const userIds = new Set<string>();
 
   for (const log of logs) {
     if (log.entityType === 'Asset') {
       directAssetIds.add(log.entityId);
     } else if (log.entityType === 'Assignment' || log.entityType === 'MaintenanceLog') {
       indirectIds.add(log.entityId);
+    } else if (log.entityType === 'User' || log.entityType === 'Personnel') {
+      userIds.add(log.entityId);
     }
   }
 
-  // Fetch assets directly
   const assetMap = new Map<string, { name: string; serialNumber: string | null }>();
+  const userMap = new Map<string, string>();
+
+  // Fetch assets directly
   if (directAssetIds.size > 0) {
     const assets = await prisma.asset.findMany({
       where: { id: { in: [...directAssetIds] } },
@@ -67,23 +95,33 @@ async function enrichWithAssetInfo(logs: any[]): Promise<any[]> {
     for (const a of assets) assetMap.set(a.id, { name: a.name, serialNumber: a.serialNumber });
   }
 
-  // Resolve Assignment → assetId
+  // Fetch users + personnel
+  if (userIds.size > 0) {
+    const users = await prisma.user.findMany({
+      where: { id: { in: [...userIds] } },
+      select: { id: true, username: true },
+    });
+    for (const u of users) userMap.set(u.id, u.username);
+
+    const personnel = await prisma.personnel.findMany({
+      where: { id: { in: [...userIds] } },
+      select: { id: true, fullName: true },
+    });
+    for (const p of personnel) userMap.set(p.id, p.fullName);
+  }
+
+  // Resolve Assignment/MaintenanceLog → assetId
   if (indirectIds.size > 0) {
     const ids = [...indirectIds];
-    // Assignments
     const assignments = await prisma.assignment.findMany({
       where: { id: { in: ids } },
       select: { id: true, assetId: true },
     });
-    const assignmentAssetIds = assignments.map(a => a.assetId);
-    // MaintenanceLogs
     const maintLogs = await prisma.maintenanceLog.findMany({
       where: { id: { in: ids } },
       select: { id: true, assetId: true },
     });
-    const maintAssetIds = maintLogs.map(m => m.assetId);
-
-    const allAssetIds = [...new Set([...assignmentAssetIds, ...maintAssetIds])];
+    const allAssetIds = [...new Set([...assignments.map(a => a.assetId), ...maintLogs.map(m => m.assetId)])];
     if (allAssetIds.length > 0) {
       const assets = await prisma.asset.findMany({
         where: { id: { in: allAssetIds } },
@@ -92,26 +130,23 @@ async function enrichWithAssetInfo(logs: any[]): Promise<any[]> {
       for (const a of assets) assetMap.set(a.id, { name: a.name, serialNumber: a.serialNumber });
     }
 
-    // Map indirect entityId → asset info via assignment/maintenance FK
     const indirectMap = new Map<string, string>();
     for (const a of assignments) indirectMap.set(a.id, a.assetId);
     for (const m of maintLogs) indirectMap.set(m.id, m.assetId);
 
     for (const log of logs) {
-      if (log.entityType === 'Assignment' || log.entityType === 'MaintenanceLog') {
-        const assetId = indirectMap.get(log.entityId);
-        if (assetId) {
-          const info = assetMap.get(assetId);
-          if (info) {
-            (log as any).assetName = info.name;
-            (log as any).serialNumber = info.serialNumber;
-          }
+      if ((log.entityType === 'Assignment' || log.entityType === 'MaintenanceLog') && indirectMap.has(log.entityId)) {
+        const assetId = indirectMap.get(log.entityId)!;
+        const info = assetMap.get(assetId);
+        if (info) {
+          (log as any).assetName = info.name;
+          (log as any).serialNumber = info.serialNumber;
         }
       }
     }
   }
 
-  // Attach info for direct Asset entries
+  // Attach info for direct Asset entries + regenerate null summaries
   for (const log of logs) {
     if (log.entityType === 'Asset') {
       const info = assetMap.get(log.entityId);
@@ -120,6 +155,31 @@ async function enrichWithAssetInfo(logs: any[]): Promise<any[]> {
         (log as any).serialNumber = info.serialNumber;
       }
     }
+
+    // Resolve name for User/Personnel entity type
+    if ((log.entityType === 'User' || log.entityType === 'Personnel') && userMap.has(log.entityId)) {
+      (log as any).assetName = userMap.get(log.entityId);
+    }
+
+    // Backfill summary if null (legacy logs)
+    if (!(log as any).summary) {
+      (log as any).summary = generateSummary({
+        action: log.action,
+        entityType: log.entityType,
+        field: log.field,
+        oldValue: log.oldValue,
+        newValue: log.newValue,
+        assetName: (log as any).assetName || undefined,
+      });
+    }
+
+    // Backfill severity if null (legacy logs)
+    if (!(log as any).severity) {
+      (log as any).severity = classifySeverity(log.action, log.field);
+    }
+
+    // Attach module label
+    (log as any).module = ENTITY_MODULE_MAP[log.entityType] || 'SYSTEM';
   }
 
   return logs;
@@ -174,6 +234,8 @@ export async function revertAuditEntry(auditLogId: string) {
       oldValue: log.newValue,
       newValue: log.oldValue,
       performedById: log.performedById,
+      severity: 'MEDIUM',
+      summary: generateSummary({ action: 'REVERT', entityType: log.entityType, field: log.field || undefined, oldValue: log.newValue, newValue: log.oldValue }),
     },
   });
 
@@ -181,14 +243,18 @@ export async function revertAuditEntry(auditLogId: string) {
 }
 
 export async function exportAuditLogsCsv(filters: {
-  entityType?: string; entityId?: string; action?: string; performedBy?: string;
-  dateFrom?: string; dateTo?: string;
+  entityType?: string; entityId?: string; action?: string; severity?: string; performedBy?: string;
+  dateFrom?: string; dateTo?: string; module?: string;
 }): Promise<string> {
   const where: Prisma.AuditLogWhereInput = {};
   if (filters.entityType) where.entityType = filters.entityType;
   if (filters.entityId) where.entityId = filters.entityId;
   if (filters.action) where.action = filters.action;
+  if (filters.severity) where.severity = filters.severity as any;
   if (filters.performedBy) where.performedById = filters.performedBy;
+  if (filters.module && MODULE_ENTITY_TYPES[filters.module]) {
+    where.entityType = { in: MODULE_ENTITY_TYPES[filters.module] };
+  }
   if (filters.dateFrom || filters.dateTo) {
     where.performedAt = {};
     if (filters.dateFrom) (where.performedAt as any).gte = new Date(filters.dateFrom);
@@ -204,11 +270,12 @@ export async function exportAuditLogsCsv(filters: {
 
   const enriched = await enrichWithAssetInfo(logs);
 
-  const header = 'id,action,assetName,serialNumber,entityType,entityId,field,oldValue,newValue,performedBy,performedAt,ipAddress';
+  const header = 'id,action,module,assetName,serialNumber,entityType,entityId,field,oldValue,newValue,performedBy,performedAt,ipAddress';
   const rows = enriched.map(l =>
     [
       l.id,
       l.action,
+      (l as any).module || 'SYSTEM',
       `"${((l as any).assetName || 'N/A (Deleted)').replace(/"/g, '""')}"`,
       `"${((l as any).serialNumber || '').replace(/"/g, '""')}"`,
       l.entityType,

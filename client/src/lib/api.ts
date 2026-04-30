@@ -1,7 +1,76 @@
 const API_BASE = '/api';
 
+// ── Auth helpers ──
+
+function getAccessToken() {
+  return localStorage.getItem('accessToken');
+}
+
+function getRefreshToken() {
+  return localStorage.getItem('refreshToken');
+}
+
+function storeTokens(at: string, rt: string) {
+  localStorage.setItem('accessToken', at);
+  localStorage.setItem('refreshToken', rt);
+}
+
+function clearTokens() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+}
+
+// ── Shared refresh promise (dedupe concurrent 401s) ──
+
+let refreshPromise: Promise<{ accessToken: string; refreshToken: string }> | null = null;
+
+async function refreshTokens(): Promise<{ accessToken: string; refreshToken: string }> {
+  const rt = getRefreshToken();
+  if (!rt) throw new Error('No refresh token available');
+
+  const res = await fetch(`${API_BASE}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken: rt }),
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error?.message || 'Session expired');
+
+  storeTokens(data.data.accessToken, data.data.refreshToken);
+  return { accessToken: data.data.accessToken, refreshToken: data.data.refreshToken };
+}
+
+function getSharedRefresh(): Promise<{ accessToken: string; refreshToken: string }> {
+  if (!refreshPromise) {
+    refreshPromise = refreshTokens().finally(() => { refreshPromise = null; });
+  }
+  return refreshPromise;
+}
+
+// ── Auth-event dispatch ──
+
+export const AUTH_EXPIRED_EVENT = 'auth:session-expired';
+
+function emitSessionExpired() {
+  clearTokens();
+  window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
+}
+
+// ── Custom error class ──
+
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+// ── Core request ──
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('accessToken');
+  const token = getAccessToken();
   const res = await fetch(`${API_BASE}${url}`, {
     ...options,
     headers: {
@@ -10,10 +79,59 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
       ...options?.headers,
     },
   });
+
+  // 401 → try refresh + retry once
+  if (res.status === 401) {
+    // Don't attempt refresh for login/refresh calls themselves
+    const isAuthEndpoint = url.startsWith('/auth/login') || url.startsWith('/auth/refresh');
+    if (!isAuthEndpoint) {
+      try {
+        const tokens = await getSharedRefresh();
+        const retryRes = await fetch(`${API_BASE}${url}`, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${tokens.accessToken}`,
+            ...options?.headers,
+          },
+        });
+        const retryData = await retryRes.json();
+        if (!retryData.success) {
+          throw new ApiError(retryData.error?.message || 'Request failed', retryRes.status);
+        }
+        return retryData;
+      } catch (refreshErr: any) {
+        // Refresh failed → session really expired
+        emitSessionExpired();
+        throw new ApiError('Session expired. Please log in again.', 401);
+      }
+    }
+    // Auth endpoint 401 → just throw
+    const authData = await res.json();
+    throw new ApiError(authData.error?.message || 'Authentication failed', 401);
+  }
+
   const data = await res.json();
-  if (!data.success) throw new Error(data.error?.message || 'Request failed');
+  if (!data.success) {
+    throw new ApiError(data.error?.message || 'Request failed', res.status);
+  }
   return data;
 }
+
+// ── Public helpers ──
+
+export async function apiFetch(url: string, options?: { method?: string; body?: Record<string, any> }): Promise<any> {
+  return request(url, {
+    method: options?.method || 'GET',
+    body: options?.body ? JSON.stringify(options.body) : undefined,
+  });
+}
+
+export function apiFetchWithRefresh() {
+  return refreshTokens();
+}
+
+// ── Types ──
 
 export interface PaginatedResponse<T> {
   data: T[];
@@ -82,7 +200,7 @@ export const assetsApi = {
     const token = localStorage.getItem('accessToken');
     const res = await fetch('/api/assets', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData });
     const data = await res.json();
-    if (!data.success) throw new Error(data.error?.message || 'Failed to create asset');
+    if (!data.success) throw new ApiError(data.error?.message || 'Failed to create asset', res.status);
     return data;
   },
   update: (id: string, data: Partial<Asset>) => request<{ data: Asset }>(`/assets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -90,7 +208,7 @@ export const assetsApi = {
     const token = localStorage.getItem('accessToken');
     const res = await fetch(`/api/assets/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: formData });
     const data = await res.json();
-    if (!data.success) throw new Error(data.error?.message || 'Failed to update asset');
+    if (!data.success) throw new ApiError(data.error?.message || 'Failed to update asset', res.status);
     return data;
   },
   delete: (id: string) => request<{ data: Asset }>(`/assets/${id}`, { method: 'DELETE' }),
@@ -106,7 +224,7 @@ export const assetsApi = {
       body: form,
     });
     const data = await res.json();
-    if (!data.success) throw new Error(data.error?.message || 'Upload failed');
+    if (!data.success) throw new ApiError(data.error?.message || 'Upload failed', res.status);
     return data;
   },
   history: (id: string, page = 1, limit = 20) =>
@@ -146,6 +264,10 @@ export interface AuditLogEntry {
   field: string | null;
   oldValue: string | null;
   newValue: string | null;
+  summary?: string | null;
+  severity?: 'LOW' | 'MEDIUM' | 'HIGH';
+  userAgent?: string | null;
+  oldImageUrl?: string | null;
   performedById: string;
   performedAt: string;
   ipAddress: string | null;
@@ -158,9 +280,11 @@ export interface AuditFilters {
   entityType?: string;
   entityId?: string;
   action?: string;
+  severity?: string;
   performedBy?: string;
   dateFrom?: string;
   dateTo?: string;
+  module?: string;
   page?: number;
   limit?: number;
 }

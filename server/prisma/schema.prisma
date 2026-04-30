@@ -63,6 +63,7 @@ model Assignment {
   id            String           @id @default(uuid())
   assetId       String
   userId        String?
+  personnelId   String?
   assignedTo    String?
   assignedAt    DateTime         @default(now())
   returnedAt    DateTime?
@@ -70,6 +71,7 @@ model Assignment {
   notes         String?
   asset         Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
   user          User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personnel     Personnel?       @relation("PersonnelAssignments", fields: [personnelId], references: [id], onDelete: SetNull)
 
   @@map("assignments")
 }
@@ -88,19 +90,29 @@ model MaintenanceLog {
   @@map("maintenance_logs")
 }
 
+enum AuditSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 model AuditLog {
-  id           String   @id @default(uuid())
+  id           String        @id @default(uuid())
   entityType   String
   entityId     String
   action       String
   field        String?
   oldValue     String?
   newValue     String?
+  summary      String?
+  severity     AuditSeverity  @default(LOW)
+  userAgent    String?
+  oldImageUrl  String?
   performedById String
-  performedAt  DateTime @default(now())
+  performedAt  DateTime      @default(now())
   ipAddress    String?
 
-  performedBy  User     @relation("PerformedBy", fields: [performedById], references: [id])
+  performedBy  User          @relation("PerformedBy", fields: [performedById], references: [id])
 
   @@map("audit_logs")
 }
@@ -200,6 +212,84 @@ model Notification {
   asset     Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
+}
+
+model Personnel {
+  id                String   @id @default(uuid())
+  fullName          String
+  designation       String?
+  project           String?
+  projectYear       String?
+  email             String?   @unique
+  phone             String?
+  hiredDate         DateTime?
+  employmentHistory String? @default("")
+  status            String   @default("active")  // active, inactive, resigned
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  institutionId     Int?
+  institution       InstitutionLookup? @relation("PersonnelInstitution", fields: [institutionId], references: [id])
+  projectId         Int?
+  projectLookup     ProjectLookup?     @relation("PersonnelProject", fields: [projectId], references: [id])
+  designationId     Int?
+  designationLookup DesignationLookup? @relation("PersonnelDesignation", fields: [designationId], references: [id])
+
+  assignments       Assignment[] @relation("PersonnelAssignments")
+  historyLogs       ProfileHistory[] @relation("PersonnelHistory")
+
+  @@map("personnel")
+}
+
+model InstitutionLookup {
+  id        Int         @id @default(autoincrement())
+  name      String      @unique
+  status    String      @default("active")  // active, inactive
+  createdAt DateTime    @default(now())
+  personnel Personnel[] @relation("PersonnelInstitution")
+  @@map("institution_lookup")
+}
+
+model ProjectLookup {
+  id        Int         @id @default(autoincrement())
+  name      String      @unique
+  status    String      @default("active")  // active, inactive, completed, archived
+  createdAt DateTime    @default(now())
+  personnel Personnel[] @relation("PersonnelProject")
+  @@map("project_lookup")
+}
+
+model DesignationLookup {
+  id        Int         @id @default(autoincrement())
+  name      String      @unique
+  status    String      @default("active")  // active, inactive
+  createdAt DateTime    @default(now())
+  personnel Personnel[] @relation("PersonnelDesignation")
+  @@map("designation_lookup")
+}
+
+model ProfileHistory {
+  id              Int       @id @default(autoincrement())
+  profileId       String
+  designation     String?
+  institutionName String?
+  projectName     String?
+  projectYear     String?
+  hiredDate       DateTime?
+  loggedAt        DateTime  @default(now())
+  profile         Personnel @relation("PersonnelHistory", fields: [profileId], references: [id], onDelete: Cascade)
+  @@map("profile_history")
+}
+
+model AgreementTemplate {
+  id        String   @id @default(uuid())
+  name      String   @default("Default")
+  content   String   @default("")
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("agreement_templates")
 }
 
 model MaintenanceSchedule {

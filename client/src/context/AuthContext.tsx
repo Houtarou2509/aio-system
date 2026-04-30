@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { AUTH_EXPIRED_EVENT } from '../lib/api';
 
 interface User {
   id: string;
@@ -157,6 +158,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!data.success) throw new Error(data.error?.message || '2FA verification failed');
   }, [state.accessToken]);
 
+  // Listen for forced session-expired events from the API interceptor
+  useEffect(() => {
+    const handler = () => {
+      clearTokens();
+      setState({
+        user: null,
+        accessToken: null,
+        refreshToken: null,
+        isAuthenticated: false,
+        isLoading: false,
+        requiresTwoFactor: false,
+        pendingTwoFactorUserId: null,
+      });
+    };
+    window.addEventListener(AUTH_EXPIRED_EVENT, handler);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handler);
+  }, []);
+
+  // Periodic token refresh (14 min interval for 1h tokens)
   useEffect(() => {
     if (!state.isAuthenticated) return;
     const interval = setInterval(refreshAuth, 14 * 60 * 1000);

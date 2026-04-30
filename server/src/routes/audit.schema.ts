@@ -6,9 +6,11 @@ export const auditQuerySchema = z.object({
   entityType: z.string().optional(),
   entityId: z.string().optional(),
   action: z.string().optional(),
+  severity: z.string().optional(),
   performedBy: z.string().optional(),
   dateFrom: z.string().datetime().optional(),
   dateTo: z.string().datetime().optional(),
+  module: z.enum(['INVENTORY', 'ACCOUNTABILITY', 'SYSTEM']).optional(),
 });
 
 export const auditCleanupSchema = z.object({
@@ -22,4 +24,5 @@ export const auditExportQuerySchema = z.object({
   performedBy: z.string().optional(),
   dateFrom: z.string().datetime().optional(),
   dateTo: z.string().datetime().optional(),
+  module: z.enum(['INVENTORY', 'ACCOUNTABILITY', 'SYSTEM']).optional(),
 });

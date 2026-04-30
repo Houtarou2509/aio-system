@@ -227,4 +227,99 @@ router.post(
   }
 );
 
+// ───────────────────────────────────────────────────────
+// GET /api/lookups/institutions
+// Returns all institutions — any authenticated user
+// ───────────────────────────────────────────────────────
+router.get(
+  '/institutions',
+  authenticate,
+  async (_req: Request, res: Response) => {
+    const institutions = await prisma.institutionLookup.findMany({
+      orderBy: { name: 'asc' },
+    });
+    return success(res, institutions, 200, { total: institutions.length });
+  }
+);
+
+// ───────────────────────────────────────────────────────
+// POST /api/lookups/institutions
+// Add a new institution — Admin/Staff-Admin
+// ───────────────────────────────────────────────────────
+const institutionSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100),
+});
+
+router.post(
+  '/institutions',
+  authenticate,
+  authorize(['ADMIN', 'STAFF_ADMIN']),
+  async (req: Request, res: Response) => {
+    const parsed = institutionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return error(res, parsed.error.errors[0].message, 422);
+    }
+
+    const existing = await prisma.institutionLookup.findFirst({
+      where: { name: { equals: parsed.data.name, mode: 'insensitive' } },
+    });
+    if (existing) {
+      return error(res, `"${parsed.data.name}" already exists`, 409);
+    }
+
+    const created = await prisma.institutionLookup.create({
+      data: { name: parsed.data.name },
+    });
+    return success(res, created, 201);
+  }
+);
+
+// ───────────────────────────────────────────────────────
+// GET /api/lookups/projects
+// Returns all projects — any authenticated user
+// ───────────────────────────────────────────────────────
+router.get(
+  '/projects',
+  authenticate,
+  async (_req: Request, res: Response) => {
+    const projects = await prisma.projectLookup.findMany({
+      orderBy: { name: 'asc' },
+    });
+    return success(res, projects, 200, { total: projects.length });
+  }
+);
+
+// ───────────────────────────────────────────────────────
+// POST /api/lookups/projects
+// Add a new project — Admin/Staff-Admin
+// ───────────────────────────────────────────────────────
+const projectSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100),
+  status: z.enum(['active', 'completed', 'archived']).optional(),
+});
+
+router.post(
+  '/projects',
+  authenticate,
+  authorize(['ADMIN', 'STAFF_ADMIN']),
+  async (req: Request, res: Response) => {
+    const parsed = projectSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return error(res, parsed.error.errors[0].message, 422);
+    }
+
+    const existing = await prisma.projectLookup.findFirst({
+      where: { name: { equals: parsed.data.name, mode: 'insensitive' } },
+    });
+    if (existing) {
+      return error(res, `"${parsed.data.name}" already exists`, 409);
+    }
+
+    const created = await prisma.projectLookup.create({
+      data: { name: parsed.data.name, status: parsed.data.status },
+    });
+    return success(res, created, 201);
+  }
+);
+
 export default router;

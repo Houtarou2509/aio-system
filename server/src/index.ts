@@ -21,7 +21,13 @@ import dashboardRoutes from './routes/dashboard.routes';
 import aiRoutes from './routes/ai.routes';
 import backupRoutes from './routes/backup.routes';
 import notificationRoutes from './routes/notification.routes';
+import personnelRoutes from './routes/personnel.routes';
+import issuanceRoutes from './routes/issuance.routes';
+import agreementRoutes from './routes/agreement.routes';
 import lookupRoutes from './routes/lookup.routes';
+import institutionRoutes from './routes/institution.routes';
+import projectRoutes from './routes/project.routes';
+import accountabilityLookupRoutes from './routes/accountabilityLookup.routes';
 import maintenanceSchedulesRouter from './routes/maintenanceSchedules';
 import maintenanceUpcomingRouter from './routes/maintenanceUpcoming';
 import { startCronJobs } from './jobs/cron';
@@ -85,7 +91,13 @@ app.use('/api/assets', maintenanceSchedulesRouter);
 app.use('/api/maintenance', maintenanceUpcomingRouter);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/lookups', lookupRoutes);
+app.use('/api/institutions', institutionRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/lookup/accountability', accountabilityLookupRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/personnel', personnelRoutes);
+app.use('/api/issuances', issuanceRoutes);
+app.use('/api/agreements', agreementRoutes);
 
 // Redirect root to /aio-system/
 app.get('/', (_req, res) => {

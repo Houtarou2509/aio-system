@@ -87,7 +87,7 @@ router.post('/', authorize(['ADMIN', 'STAFF_ADMIN']), upload.single('image'), as
     const parsed = createAssetSchema.safeParse(body);
     if (!parsed.success) return error(res, parsed.error.message, 400);
     
-    let asset = await assetService.createAsset(parsed.data, req.user!.id, getClientIp(req));
+    let asset = await assetService.createAsset(parsed.data, req.user!.id, getClientIp(req), String(req.headers['user-agent'] || ''));
     
     // If image was uploaded, attach it
     if (req.file) {
@@ -306,7 +306,7 @@ router.put('/:id', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), upload.single('
     const parsed = updateAssetSchema.safeParse(body);
     if (!parsed.success) return error(res, parsed.error.message, 400);
     
-    let asset = await assetService.updateAsset(String(req.params.id), parsed.data, req.user!.id, getClientIp(req));
+    let asset = await assetService.updateAsset(String(req.params.id), parsed.data, req.user!.id, getClientIp(req), String(req.headers['user-agent'] || ''));
     
     // If image was uploaded, replace it
     if (req.file) {
@@ -326,7 +326,7 @@ router.put('/:id', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), upload.single('
 // DELETE /api/assets/:id — soft delete (Admin only)
 router.delete('/:id', authorize(['ADMIN']), async (req: Request, res: Response) => {
   try {
-    const asset = await assetService.deleteAsset(String(req.params.id), req.user!.id, getClientIp(req));
+    const asset = await assetService.deleteAsset(String(req.params.id), req.user!.id, getClientIp(req), String(req.headers['user-agent'] || ''));
     return success(res, asset, 200);
   } catch (err: any) {
     return error(res, err.message, err.message === 'Asset not found' ? 404 : 400);
@@ -351,7 +351,7 @@ router.post('/:id/image', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), upload.s
     const { unlink } = await import('fs/promises');
     await unlink(req.file.path).catch(() => {});
 
-    const result = await assetService.uploadAssetImage(String(req.params.id), filename, req.user!.id);
+    const result = await assetService.uploadAssetImage(String(req.params.id), filename, req.user!.id, String(req.headers['user-agent'] || ''));
     return success(res, result, 200);
   } catch (err: any) {
     return error(res, err.message, 400);
