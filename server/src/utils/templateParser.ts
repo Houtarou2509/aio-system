@@ -37,6 +37,7 @@ function computeDerived(data: TemplateData): Record<string, string> {
   const designation = data.designation || data.position || '';
   return {
     date: data.date || new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+    fullName: data.personnelName || '',
     personnelName: data.personnelName || '',
     designation,
     position: designation,  // legacy alias
@@ -70,6 +71,7 @@ export function parseTemplate(template: string, data: TemplateData): string {
 export function getPlaceholderReference(): { key: string; description: string }[] {
   return [
     { key: '{{date}}', description: 'Formatted issuance date' },
+    { key: '{{fullName}}', description: 'Full name of the personnel (alias for {{personnelName}})' },
     { key: '{{personnelName}}', description: 'Full name of the personnel' },
     { key: '{{designation}}', description: 'Job title (raw, no prefix)' },
     { key: '{{designationComma}}', description: 'Comma + designation (e.g. ", Software Engineer")' },
