@@ -17,6 +17,7 @@ interface Issuance {
   asset: { id: string; name: string; serialNumber: string | null; propertyNumber: string | null; status: string } | null;
   personnel: { id: string; fullName: string; position: string | null; project: string | null; department: string | null } | null;
 }
+interface TemplateOption { id: string; name: string; content: string; headerLogo: string | null; isDefault: boolean; defaultPropertyOfficer?: string | null; defaultAuthorizedRep?: string | null }
 
 /* ─── New Issuance Wizard ─── */
 function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => void; onSave: () => void; onPreviewPdf: (params: Record<string, any>) => void }) {
@@ -31,6 +32,15 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
   const [agreement, setAgreement] = useState('');
   const [saving, setSaving] = useState(false);
   const timerRef = useRef<any>(null);
+
+  // Template selector
+  const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+
+  // Signatory names (auto-filled from template, editable per-issuance)
+  const [propertyOfficerName, setPropertyOfficerName] = useState('');
+  const [authorizedRepName, setAuthorizedRepName] = useState('');
 
   // Debounced asset search
   useEffect(() => {
@@ -56,13 +66,70 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
     return () => clearTimeout(timerRef.current);
   }, [personnelSearch]);
 
-  // Generate agreement when both selected
+  // Fetch templates when wizard opens
   useEffect(() => {
-    if (selectedAsset && selectedPersonnel) {
-      const text = `ISSUANCE AND ACCOUNTABILITY AGREEMENT\n\nDate: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}\n\nThis certifies that ${selectedPersonnel.fullName}${selectedPersonnel.position ? `, ${selectedPersonnel.position}` : ''}${selectedPersonnel.department ? ` of ${selectedPersonnel.department}` : ''}${selectedPersonnel.project ? ` (${selectedPersonnel.project})` : ''} has been issued the following asset for official use:\n\nAsset: ${selectedAsset.name}${selectedAsset.serialNumber ? `\nSerial Number: ${selectedAsset.serialNumber}` : ''}${selectedAsset.propertyNumber ? `\nProperty Number: ${selectedAsset.propertyNumber}` : ''}\n\nTerms and Conditions:\n1. The issued asset shall be used solely for official business purposes.\n2. The recipient shall exercise due diligence in the care and protection of the asset.\n3. The asset shall not be transferred to another individual without proper documentation.\n4. Any damage, loss, or theft must be reported immediately to the Property Officer.\n5. The asset shall be returned upon resignation, transfer, or upon request by management.\n6. The recipient assumes full accountability for the asset during the period of possession.\n\nBy signing below, the recipient acknowledges receipt and accepts the terms stated above.\n\n________________________________________\n${selectedPersonnel.fullName} (Recipient)\n\n________________________________________\nProperty Officer\n\n________________________________________\nAuthorized Representative`;
-      setAgreement(text);
+    async function loadTemplates() {
+      setTemplatesLoading(true);
+      try {
+        const res = await apiFetch('/agreements/templates');
+        const list: TemplateOption[] = res.data ?? res;
+        setTemplates(list);
+        // Auto-select default template
+        const def = list.find(t => t.isDefault) ?? list[0] ?? null;
+        if (def) {
+          setSelectedTemplateId(def.id);
+          setPropertyOfficerName(def.defaultPropertyOfficer || '');
+          setAuthorizedRepName(def.defaultAuthorizedRep || '');
+        }
+      } catch { /* non-critical */ }
+      finally { setTemplatesLoading(false); }
     }
-  }, [selectedAsset, selectedPersonnel]);
+    loadTemplates();
+  }, []);
+
+  // Generate agreement when asset + personnel selected, using the selected template
+  useEffect(() => {
+    if (!selectedAsset || !selectedPersonnel) return;
+
+    const template = templates.find(t => t.id === selectedTemplateId);
+    const templateContent = template?.content;
+
+    // If no template selected or no content, use a sensible fallback
+    if (!templateContent) {
+      const fallback = `ISSUANCE AND ACCOUNTABILITY AGREEMENT\n\nDate: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}\n\nThis certifies that ${selectedPersonnel.fullName}${selectedPersonnel.position ? `, ${selectedPersonnel.position}` : ''}${selectedPersonnel.department ? ` of ${selectedPersonnel.department}` : ''}${selectedPersonnel.project ? ` (${selectedPersonnel.project})` : ''} has been issued the following asset for official use:\n\nAsset: ${selectedAsset.name}${selectedAsset.serialNumber ? `\nSerial Number: ${selectedAsset.serialNumber}` : ''}${selectedAsset.propertyNumber ? `\nProperty Number: ${selectedAsset.propertyNumber}` : ''}\n\nTerms and Conditions:\n1. The issued asset shall be used solely for official business purposes.\n2. The recipient shall exercise due diligence in the care and protection of the asset.\n3. The asset shall not be transferred to another individual without proper documentation.\n4. Any damage, loss, or theft must be reported immediately to the Property Officer.\n5. The asset shall be returned upon resignation, transfer, or upon request by management.\n6. The recipient assumes full accountability for the asset during the period of possession.\n\n________________________________________\n${selectedPersonnel.fullName} (Recipient)\n\n________________________________________\nProperty Officer\n\n________________________________________\nAuthorized Representative`;
+      setAgreement(fallback);
+      return;
+    }
+
+    // Replace placeholders with actual data
+    const position = selectedPersonnel.position || '';
+    const department = selectedPersonnel.department || '';
+    const project = selectedPersonnel.project || '';
+
+    const placeholderMap: Record<string, string> = {
+      '{{date}}': new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+      '{{fullName}}': selectedPersonnel.fullName,
+      '{{personnelName}}': selectedPersonnel.fullName,
+      '{{designation}}': position,
+      '{{position}}': position,
+      '{{designationComma}}': position ? `, ${position}` : '',
+      '{{positionComma}}': position ? `, ${position}` : '',
+      '{{department}}': department,
+      '{{departmentText}}': department ? ` of ${department}` : '',
+      '{{project}}': project,
+      '{{projectText}}': project ? ` (${project})` : '',
+      '{{assetName}}': selectedAsset.name,
+      '{{serialNumber}}': selectedAsset.serialNumber || 'N/A',
+      '{{propertyNumber}}': selectedAsset.propertyNumber || 'N/A',
+      '{{condition}}': condition,
+    };
+
+    const filled = templateContent.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => {
+      return placeholderMap[`{{${key}}}`] !== undefined ? placeholderMap[`{{${key}}}`] : `{{${key}}}`;
+    });
+
+    setAgreement(filled);
+  }, [selectedAsset, selectedPersonnel, selectedTemplateId, condition, templates]);
 
   const handleIssue = async () => {
     if (!selectedAsset || !selectedPersonnel) return;
@@ -200,11 +267,67 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
                   </div>
 
                   <div>
+                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Agreement Template</label>
+                    <div className="relative mt-1">
+                      <select
+                        value={selectedTemplateId}
+                        onChange={e => {
+                          setSelectedTemplateId(e.target.value);
+                          const tpl = templates.find(t => t.id === e.target.value);
+                          setPropertyOfficerName(tpl?.defaultPropertyOfficer || '');
+                          setAuthorizedRepName(tpl?.defaultAuthorizedRep || '');
+                        }}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent appearance-none bg-white"
+                      >
+                        {templatesLoading ? (
+                          <option value="">Loading templates...</option>
+                        ) : templates.length === 0 ? (
+                          <option value="">No templates available</option>
+                        ) : (
+                          templates.map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}{t.isDefault ? ' (Default)' : ''}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      {templatesLoading && (
+                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 animate-spin" />
+                      )}
+                    </div>
+                    {selectedTemplateId && (
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Template content applied below — you can edit before issuing
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
                     <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Condition at Issuance</label>
                     <select value={condition} onChange={e => setCondition(e.target.value)}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mt-1 focus:ring-2 focus:ring-[#f8931f] focus:border-transparent">
                       <option>New</option><option>Good</option><option>Fair</option><option>Poor</option>
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Signatories</label>
+                    <div className="space-y-2 mt-1">
+                      <input
+                        type="text"
+                        value={propertyOfficerName}
+                        onChange={e => setPropertyOfficerName(e.target.value)}
+                        placeholder="Property Officer name"
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent"
+                      />
+                      <input
+                        type="text"
+                        value={authorizedRepName}
+                        onChange={e => setAuthorizedRepName(e.target.value)}
+                        placeholder="Authorized Representative name"
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -233,6 +356,9 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
                       serialNumber: selectedAsset.serialNumber || undefined,
                       propertyNumber: selectedAsset.propertyNumber || undefined,
                       condition,
+                      templateId: selectedTemplateId || undefined,
+                      propertyOfficerName: propertyOfficerName || undefined,
+                      authorizedRepName: authorizedRepName || undefined,
                     });
                   }}
                   className="flex-1 py-2.5 rounded-lg text-sm font-semibold border-2 border-[#012061] text-[#012061] hover:bg-[#012061] hover:text-white transition-colors flex items-center justify-center gap-2"

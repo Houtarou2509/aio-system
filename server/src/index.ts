@@ -69,6 +69,7 @@ app.use(express.json({ limit: '10mb' }));
 
 // Serve uploaded images
 app.use('/aio-system/uploads', express.static(path.resolve(__dirname, '../uploads')));
+app.use('/aio-system/uploads/logos', express.static(path.resolve(__dirname, '../public/uploads/logos')));
 
 // Serve built frontend in production
 if (isProduction) {

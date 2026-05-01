@@ -282,12 +282,17 @@ model ProfileHistory {
 }
 
 model AgreementTemplate {
-  id        String   @id @default(uuid())
-  name      String   @default("Default")
-  content   String   @default("")
-  isDefault Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                     String   @id @default(uuid())
+  name                   String   @default("Default")
+  title                  String   @default("ISSUANCE & ACCOUNTABILITY AGREEMENT")
+  content                String   @default("")
+  headerLogo             String?  // file path for the project logo (e.g. /uploads/logos/logo-abc123.png)
+  defaultLogo            String?  // path to a system-wide default logo fallback
+  isDefault              Boolean  @default(false)
+  defaultPropertyOfficer String?  // default name for Property Officer signatory
+  defaultAuthorizedRep   String?  // default name for Authorized Representative signatory
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   @@map("agreement_templates")
 }

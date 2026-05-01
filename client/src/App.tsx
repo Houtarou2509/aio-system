@@ -12,6 +12,7 @@ import SettingsPage from './pages/SettingsPage';
 import UserManagementPage from './pages/UserManagementPage';
 import InventoryLookupPage from './pages/InventoryLookupPage';
 import AccountabilityLookupPage from './pages/AccountabilityLookupPage';
+import AccountabilityTemplatesPage from './pages/AccountabilityTemplatesPage';
 import ProfilesPage from './pages/ProfilesPage';
 import IssuancesPage from './pages/IssuancesPage';
 import './index.css';
@@ -34,6 +35,10 @@ function App() {
             <Route path="audit" element={<AuditPage />} />
             <Route path="lookup" element={<ProtectedRoute requiredRole={["ADMIN","STAFF_ADMIN"] as any}><InventoryLookupPage /></ProtectedRoute>} />
             <Route path="accountability-lookup" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><AccountabilityLookupPage /></ProtectedRoute>} />
+            <Route path="accountability/templates" element={<ProtectedRoute requiredRole="ADMIN"><AccountabilityTemplatesPage /></ProtectedRoute>} />
+            {/* Redirect old template paths */}
+            <Route path="templates" element={<Navigate to="/accountability/templates" replace />} />
+            <Route path="settings/templates" element={<Navigate to="/accountability/templates" replace />} />
             <Route path="profiles" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><ProfilesPage /></ProtectedRoute>} />
             <Route path="issuances" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><IssuancesPage /></ProtectedRoute>} />
             <Route path="settings" element={<SettingsPage />} />

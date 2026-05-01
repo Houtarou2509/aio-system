@@ -68,34 +68,36 @@ export default function PDFPreviewModal({ open, onClose, blobUrl, loading, downl
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={handleClose}>
       <div
-        className="bg-white rounded-xl shadow-2xl w-full max-w-5xl mx-4 flex flex-col"
+        className="bg-white rounded-xl shadow-2xl w-full max-w-5xl mx-4 flex flex-col relative"
         style={{ height: '90vh' }}
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b shrink-0 rounded-t-xl" style={{ background: '#012061' }}>
-          <h2 className="text-sm font-bold text-white">Agreement Preview</h2>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handlePrint}
-              disabled={!blobUrl}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-40"
-              title="Print"
-            >
-              <Printer className="w-3.5 h-3.5" /> Print
-            </button>
-            <button
-              onClick={handleDownload}
-              disabled={!blobUrl}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-40"
-              title="Download"
-            >
-              <Download className="w-3.5 h-3.5" /> Download
-            </button>
-            <button onClick={handleClose} className="text-white/70 hover:text-white ml-1">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+        {/* Close button — floating top-right */}
+        <button
+          onClick={handleClose}
+          className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/80 hover:bg-white shadow flex items-center justify-center transition-colors"
+        >
+          <X className="w-4 h-4 text-slate-500" />
+        </button>
+
+        {/* Action buttons — floating top-left */}
+        <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
+          <button
+            onClick={handlePrint}
+            disabled={!blobUrl}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white/80 hover:bg-white shadow px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors disabled:opacity-40"
+            title="Print"
+          >
+            <Printer className="w-3.5 h-3.5" /> Print
+          </button>
+          <button
+            onClick={handleDownload}
+            disabled={!blobUrl}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white/80 hover:bg-white shadow px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors disabled:opacity-40"
+            title="Download"
+          >
+            <Download className="w-3.5 h-3.5" /> Download
+          </button>
         </div>
 
         {/* Content */}
