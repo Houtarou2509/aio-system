@@ -1,15 +1,22 @@
 import { Router, Request, Response } from 'express';
 import path from 'path';
+import fs from 'fs';
 import multer from 'multer';
 import * as agreementService from '../services/agreement.service';
 import { getPlaceholderReference } from '../utils/templateParser';
 import { authenticate, requireRole } from '../middleware/auth';
 import { success, error } from '../utils/response';
+import { validate } from '../middleware/validate';
+import { createAgreementTemplateSchema, updateAgreementTemplateSchema } from './agreement.schema';
 
 const router = Router();
 
-// Logo upload storage — store in server/public/uploads/logos
-const logoDir = path.resolve(__dirname, '../../public/uploads/logos');
+// Logo upload storage — store OUTSIDE server/public so vite build doesn't wipe them
+const logoDir = path.resolve(__dirname, '../../uploads/logos');
+// Ensure the upload directory exists (multer diskStorage will fail with ENOENT if missing)
+if (!fs.existsSync(logoDir)) {
+  fs.mkdirSync(logoDir, { recursive: true });
+}
 const logoUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, logoDir),
@@ -26,7 +33,7 @@ const logoUpload = multer({
     if (allowed.test(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Only PNG and JPG files are allowed'));
+      cb(null, false);  // silently reject — avoids unhandled MulterError → 500
     }
   },
 });
@@ -72,6 +79,7 @@ router.post(
   authenticate,
   requireRole(['ADMIN']),
   logoUpload.single('headerLogo'),
+  validate(createAgreementTemplateSchema),
   async (req: Request, res: Response) => {
     try {
       const file = req.file;
@@ -100,6 +108,7 @@ router.patch(
   authenticate,
   requireRole(['ADMIN']),
   logoUpload.single('headerLogo'),
+  validate(updateAgreementTemplateSchema),
   async (req: Request, res: Response) => {
     try {
       const file = req.file;

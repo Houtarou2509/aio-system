@@ -1,9 +1,10 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { classifySeverity, generateSummary } from '../utils/auditHelpers';
 
 export { classifySeverity, generateSummary };
 
-const prisma = new PrismaClient();
+
 
 /* ─── Module mapping: entity types → logical module ─── */
 const ENTITY_MODULE_MAP: Record<string, 'INVENTORY' | 'ACCOUNTABILITY' | 'SYSTEM'> = {
@@ -22,10 +23,12 @@ const MODULE_ENTITY_TYPES: Record<string, string[]> = {
 };
 
 export async function queryAuditLogs(filters: {
-  page: number; limit: number;
+  page?: number; limit?: number;
   entityType?: string; entityId?: string; action?: string; severity?: string; performedBy?: string;
   dateFrom?: string; dateTo?: string; module?: string;
 }) {
+  const page = filters.page || 1;
+  const limit = filters.limit || 20;
   const where: Prisma.AuditLogWhereInput = {};
   if (filters.entityType) where.entityType = filters.entityType;
   if (filters.entityId) where.entityId = filters.entityId;
@@ -44,8 +47,8 @@ export async function queryAuditLogs(filters: {
   const [items, total] = await Promise.all([
     prisma.auditLog.findMany({
       where,
-      skip: (filters.page - 1) * filters.limit,
-      take: filters.limit,
+      skip: (page - 1) * limit,
+      take: limit,
       orderBy: { performedAt: 'desc' },
       include: { performedBy: { select: { id: true, username: true } } },
     }),
@@ -55,7 +58,7 @@ export async function queryAuditLogs(filters: {
   // Enrich logs with asset name and serial number
   const enriched = await enrichWithAssetInfo(items);
 
-  return { items: enriched, total, page: filters.page, limit: filters.limit, totalPages: Math.ceil(total / filters.limit) };
+  return { items: enriched, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 const notDeleted = { deletedAt: null };
@@ -245,7 +248,7 @@ export async function revertAuditEntry(auditLogId: string) {
 export async function exportAuditLogsCsv(filters: {
   entityType?: string; entityId?: string; action?: string; severity?: string; performedBy?: string;
   dateFrom?: string; dateTo?: string; module?: string;
-}): Promise<string> {
+}): Promise<{ csv: string; recordCount: number }> {
   const where: Prisma.AuditLogWhereInput = {};
   if (filters.entityType) where.entityType = filters.entityType;
   if (filters.entityId) where.entityId = filters.entityId;
@@ -261,12 +264,15 @@ export async function exportAuditLogsCsv(filters: {
     if (filters.dateTo) (where.performedAt as any).lte = new Date(filters.dateTo);
   }
 
-  const logs = await prisma.auditLog.findMany({
-    where,
-    orderBy: { performedAt: 'desc' },
-    take: 10000,
-    include: { performedBy: { select: { username: true } } },
-  });
+  const [logs, total] = await Promise.all([
+    prisma.auditLog.findMany({
+      where,
+      orderBy: { performedAt: 'desc' },
+      take: 10000,
+      include: { performedBy: { select: { username: true } } },
+    }),
+    prisma.auditLog.count({ where }),
+  ]);
 
   const enriched = await enrichWithAssetInfo(logs);
 
@@ -289,7 +295,7 @@ export async function exportAuditLogsCsv(filters: {
     ].join(',')
   );
 
-  return [header, ...rows].join('\n');
+  return { csv: [header, ...rows].join('\n'), recordCount: total };
 }
 
 export async function cleanupAuditLogs(olderThanDays: number) {

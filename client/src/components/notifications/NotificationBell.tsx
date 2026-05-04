@@ -145,11 +145,11 @@ export default function NotificationBell() {
         </div>
 
         {/* ─── Content ─── */}
-        <div className="max-h-[340px] overflow-y-auto bg-white">
+        <div className="max-h-[340px] overflow-y-auto bg-white dark:bg-slate-800">
           {notifications.length === 0 ? (
             /* ─── Empty State ─── */
             <div className="flex flex-col items-center justify-center py-10 px-4">
-              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-slate-100 mb-3">
+              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 mb-3">
                 <Inbox className="w-6 h-6 text-slate-300" />
               </div>
               <p className="text-sm font-medium text-slate-400">All caught up</p>
@@ -157,7 +157,7 @@ export default function NotificationBell() {
             </div>
           ) : (
             /* ─── Notification List ─── */
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100 dark:divide-slate-700">
               {notifications.map(n => {
                 const conf = TYPE_CONFIG[n.type] || TYPE_CONFIG.MAINTENANCE_OVERDUE;
                 const Icon = conf.icon;
@@ -165,7 +165,7 @@ export default function NotificationBell() {
                 return (
                   <div
                     key={n.id}
-                    className={`flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors border-l-[3px] ${conf.border}`}
+                    className={`flex items-start gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors border-l-[3px] ${conf.border}`}
                   >
                     {/* Type Icon */}
                     <div className={`flex items-center justify-center w-8 h-8 rounded-lg shrink-0 mt-0.5 ${conf.bg}`}>
@@ -184,7 +184,7 @@ export default function NotificationBell() {
                       <p className="text-sm font-semibold text-brand-blue leading-tight truncate">
                         {n.asset.name}
                       </p>
-                      <p className="text-xs text-slate-500 mt-0.5 break-words line-clamp-2">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 break-words line-clamp-2">
                         {n.message}
                       </p>
                     </div>
@@ -192,7 +192,7 @@ export default function NotificationBell() {
                     {/* Dismiss */}
                     <button
                       onClick={() => handleMarkRead(n.id)}
-                      className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 hover:bg-brand-orange/20 text-slate-400 hover:text-brand-orange transition-colors shrink-0 mt-1"
+                      className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-brand-orange/20 text-slate-400 hover:text-brand-orange transition-colors shrink-0 mt-1"
                       title="Dismiss"
                     >
                       <Check className="w-3 h-3" />
@@ -206,7 +206,7 @@ export default function NotificationBell() {
 
         {/* ─── Footer ─── */}
         {notifications.length > 0 && (
-          <div className="px-4 py-2 bg-slate-50 border-t border-slate-100">
+          <div className="px-4 py-2 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-700">
             <button
               onClick={() => {
                 notifications.forEach(n => handleMarkRead(n.id));

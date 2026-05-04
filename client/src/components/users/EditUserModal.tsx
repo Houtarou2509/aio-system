@@ -1,16 +1,5 @@
 import { useState, FormEvent } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogClose,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Eye, EyeOff } from 'lucide-react';
+import { X, UserCog, Eye, EyeOff } from 'lucide-react';
 
 const ROLES = [
   { value: 'ADMIN', label: 'Admin' },
@@ -102,97 +91,128 @@ export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }:
 
   const fieldError = (field: string) => errors[field] || serverErrors?.[field];
 
+  const inputClass = "w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent transition";
+  const labelClass = "text-xs font-medium text-slate-700 dark:text-slate-300 mb-1 block";
+
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Edit User</DialogTitle>
-        </DialogHeader>
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/50"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-xl bg-white dark:bg-slate-800 shadow-xl" onClick={e => e.stopPropagation()}>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Full Name */}
-          <div className="space-y-1.5">
-            <Label htmlFor="fullName">Full Name <span className="text-red-500">*</span></Label>
-            <Input id="fullName" type="text" value={form.fullName} onChange={set('fullName')} className="bg-white" />
-            {fieldError('fullName') && <p className="text-xs text-red-500">{fieldError('fullName')}</p>}
+        {/* ── Header ── */}
+        <div className="bg-[#012061] px-6 py-4 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-[#f8931f] text-white">
+              <UserCog className="w-4 h-4" />
+            </div>
+            <h2 className="text-lg font-bold text-white">Edit User</h2>
           </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-white/20 bg-white dark:bg-slate-800/10 p-1.5 text-slate-700 dark:text-white/60 hover:text-white hover:bg-white/20 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
-          {/* Username */}
-          <div className="space-y-1.5">
-            <Label htmlFor="username">Username <span className="text-red-500">*</span></Label>
-            <Input id="username" type="text" value={form.username} onChange={set('username')} className="bg-white" />
-            <p className="text-xs text-amber-600">Changing the username will require the user to log in again.</p>
-            {fieldError('username') && <p className="text-xs text-red-500">{fieldError('username')}</p>}
-          </div>
+        {/* ── Form ── */}
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+          {/* Scrollable fields */}
+          <div className="flex-1 overflow-y-auto px-6">
+            <div className="grid grid-cols-1 gap-4 py-4">
 
-          {/* Email */}
-          <div className="space-y-1.5">
-            <Label htmlFor="email">Email <span className="text-red-500">*</span></Label>
-            <Input id="email" type="email" value={form.email} onChange={set('email')} className="bg-white" />
-            {fieldError('email') && <p className="text-xs text-red-500">{fieldError('email')}</p>}
-          </div>
+              {/* Full Name */}
+              <div>
+                <label className={labelClass}>Full Name <span className="text-red-500">*</span></label>
+                <input type="text" value={form.fullName} onChange={set('fullName')} className={inputClass} placeholder="Enter full name" />
+                {fieldError('fullName') && <p className="text-xs text-red-500 mt-1">{fieldError('fullName')}</p>}
+              </div>
 
-          {/* Role */}
-          <div className="space-y-1.5">
-            <Label htmlFor="role">Role <span className="text-red-500">*</span></Label>
-            <select
-              id="role"
-              value={form.role}
-              onChange={set('role')}
-              disabled={isSelf}
-              className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-2 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-            </select>
-            {isSelf && <p className="text-xs text-amber-600">You cannot change your own role.</p>}
-          </div>
-
-          {/* Password Reset Section */}
-          <div className="border-t pt-4">
-            {!showPwSection ? (
-              <button type="button" onClick={() => setShowPwSection(true)} className="text-sm text-primary hover:underline">
-                Reset Password
-              </button>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Password Reset</span>
-                  <button type="button" onClick={() => { setShowPwSection(false); setNewPassword(''); setConfirmPassword(''); }} className="text-xs text-gray-500 hover:text-gray-700">Cancel reset</button>
+              {/* Username & Email — side by side */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Username <span className="text-red-500">*</span></label>
+                  <input type="text" value={form.username} onChange={set('username')} className={inputClass} placeholder="Username" />
+                  <p className="text-[10px] text-amber-600 mt-1">Changing username will require re-login.</p>
+                  {fieldError('username') && <p className="text-xs text-red-500 mt-0.5">{fieldError('username')}</p>}
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="newPassword">New Password <span className="text-red-500">*</span></Label>
-                  <div className="relative">
-                    <Input id="newPassword" type={showPw ? 'text' : 'password'} value={newPassword} onChange={e => { setNewPassword(e.target.value); setErrors(prev => { const next = { ...prev }; delete next.newPassword; return next; }); }} className="bg-white pr-10" />
-                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                      {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  {fieldError('newPassword') && <p className="text-xs text-red-500">{fieldError('newPassword')}</p>}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="confirmPassword">Confirm Password <span className="text-red-500">*</span></Label>
-                  <div className="relative">
-                    <Input id="confirmPassword" type={showCp ? 'text' : 'password'} value={confirmPassword} onChange={e => { setConfirmPassword(e.target.value); setErrors(prev => { const next = { ...prev }; delete next.confirmPassword; return next; }); }} className="bg-white pr-10" />
-                    <button type="button" onClick={() => setShowCp(!showCp)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                      {showCp ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  {fieldError('confirmPassword') && <p className="text-xs text-red-500">{fieldError('confirmPassword')}</p>}
+                <div>
+                  <label className={labelClass}>Email <span className="text-red-500">*</span></label>
+                  <input type="email" value={form.email} onChange={set('email')} className={inputClass} placeholder="user@example.com" />
+                  {fieldError('email') && <p className="text-xs text-red-500 mt-1">{fieldError('email')}</p>}
                 </div>
               </div>
-            )}
+
+              {/* Role */}
+              <div>
+                <label className={labelClass}>Role <span className="text-red-500">*</span></label>
+                <select
+                  value={form.role}
+                  onChange={set('role')}
+                  disabled={isSelf}
+                  className={`${inputClass} ${isSelf ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+                {isSelf && <p className="text-[10px] text-amber-600 mt-1">You cannot change your own role.</p>}
+                {fieldError('role') && <p className="text-xs text-red-500 mt-1">{fieldError('role')}</p>}
+              </div>
+
+              {/* Password Reset Section */}
+              <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
+                {!showPwSection ? (
+                  <button type="button" onClick={() => setShowPwSection(true)} className="text-sm font-medium text-[#f8931f] hover:underline inline-flex items-center gap-1">
+                    Reset Password
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Password Reset</span>
+                      <button type="button" onClick={() => { setShowPwSection(false); setNewPassword(''); setConfirmPassword(''); }} className="text-xs text-slate-400 hover:text-slate-600 transition-colors">
+                        Cancel reset
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelClass}>New Password <span className="text-red-500">*</span></label>
+                        <div className="relative">
+                          <input type={showPw ? 'text' : 'password'} value={newPassword} onChange={e => { setNewPassword(e.target.value); setErrors(prev => { const next = { ...prev }; delete next.newPassword; return next; }); }} className={`${inputClass} pr-10`} placeholder="Min. 8 characters" />
+                          <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                            {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        {fieldError('newPassword') && <p className="text-xs text-red-500 mt-1">{fieldError('newPassword')}</p>}
+                      </div>
+                      <div>
+                        <label className={labelClass}>Confirm Password <span className="text-red-500">*</span></label>
+                        <div className="relative">
+                          <input type={showCp ? 'text' : 'password'} value={confirmPassword} onChange={e => { setConfirmPassword(e.target.value); setErrors(prev => { const next = { ...prev }; delete next.confirmPassword; return next; }); }} className={`${inputClass} pr-10`} placeholder="Re-enter password" />
+                          <button type="button" onClick={() => setShowCp(!showCp)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                            {showCp ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        {fieldError('confirmPassword') && <p className="text-xs text-red-500 mt-1">{fieldError('confirmPassword')}</p>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          </div>
+
+          {/* ── Footer ── */}
+          <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-100 dark:border-slate-700 shrink-0">
+            <button type="button" onClick={onClose} disabled={loading} className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-[#012061] dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={loading} className="rounded-lg bg-[#f8931f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#e0841a] disabled:opacity-50 transition-colors inline-flex items-center gap-1.5">
+              {loading ? 'Updating...' : 'Update User'}
+            </button>
           </div>
         </form>
-
-        <DialogFooter showCloseButton={false}>
-          <DialogClose render={<Button variant="outline" disabled={loading} />}>
-            Cancel
-          </DialogClose>
-          <Button onClick={() => handleSubmit()} disabled={loading}>
-            {loading ? 'Updating...' : 'Update User'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }

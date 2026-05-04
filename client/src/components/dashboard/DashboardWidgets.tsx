@@ -66,7 +66,7 @@ const TYPE_COLORS = [
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <div
-      className={`rounded-lg border border-slate-100 bg-white overflow-hidden ${className}`}
+      className={`rounded-lg border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden ${className}`}
       style={{ borderTop: '2px solid #4f46e5' }}
     >
       {children}
@@ -76,7 +76,7 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
 
 function CardTitle({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
   return (
-    <h3 className="flex items-center gap-2 px-4 pt-3 pb-2 text-sm font-semibold text-slate-900">
+    <h3 className="flex items-center gap-2 px-4 pt-3 pb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
       <Icon className="h-4 w-4 text-indigo-600" />
       {children}
     </h3>
@@ -101,33 +101,33 @@ export function DashboardWidgets() {
     fetch('/api/dashboard/stats', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => { if (d.success) setData(d.data); })
-      .catch(() => {})
+      .catch((e) => console.error('[DashboardWidgets] Failed to load stats:', e))
       .finally(() => setLoading(false));
 
     fetch('/api/maintenance/upcoming', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => { if (d.success) setUpcomingMaintenance(d.data); })
-      .catch(() => {})
+      .catch((e) => console.error('[DashboardWidgets] Failed to load upcoming maintenance:', e))
       .finally(() => setMaintenanceLoading(false));
 
     fetch('/api/dashboard/warranties-expiring', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => { if (d.success) setWarrantiesExpiring(d.data); })
-      .catch(() => {})
+      .catch((e) => console.error('[DashboardWidgets] Failed to load warranties expiring:', e))
       .finally(() => setWarrantiesLoading(false));
 
     fetch('/api/dashboard/location-stats', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => { if (d.success) setLocationStats(d.data); })
-      .catch(() => {});
+      .catch((e) => console.error('[DashboardWidgets] Failed to load location stats:', e));
 
     fetch('/api/dashboard/age-stats', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => { if (d.success) setAgeStats(d.data); })
-      .catch(() => {});
+      .catch((e) => console.error('[DashboardWidgets] Failed to load age stats:', e));
   }, []);
 
-  if (loading || !data) return <p className="text-sm text-slate-500">Loading dashboard…</p>;
+  if (loading || !data) return <p className="text-sm text-slate-500 dark:text-slate-400">Loading dashboard…</p>;
 
   /* ── Chart data (palette applied) ──────────────────────── */
 
@@ -209,17 +209,17 @@ export function DashboardWidgets() {
             {/* Maintenance items */}
             <div className="flex items-center gap-1.5 py-1">
               <Wrench className="h-3 w-3 shrink-0 text-indigo-600" />
-              <span className="text-[10px] tracking-widest text-slate-500 uppercase">Maintenance</span>
+              <span className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Maintenance</span>
             </div>
             {maintenanceLoading && <p className="text-xs text-slate-400 pl-5">Loading…</p>}
             {!maintenanceLoading && upcomingMaintenance.length === 0 && (
               <p className="text-xs text-slate-400 italic pl-5">No upcoming</p>
             )}
             {!maintenanceLoading && upcomingMaintenance.slice(0, 3).map(s => (
-              <div key={s.id} className="flex items-center justify-between py-1.5 pl-5 border-b border-slate-50 last:border-b-0">
-                <span className="text-xs font-medium text-slate-700 truncate">{s.asset.name}</span>
+              <div key={s.id} className="flex items-center justify-between py-1.5 pl-5 border-b border-slate-50 dark:border-slate-700 last:border-b-0">
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{s.asset.name}</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ml-2 ${
-                  s.status === 'overdue' ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'
+                  s.status === 'overdue' ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-200' : 'bg-indigo-50 text-indigo-600'
                 }`}>
                   {s.status.toUpperCase()}
                 </span>
@@ -227,22 +227,22 @@ export function DashboardWidgets() {
             ))}
 
             {/* Divider */}
-            <div className="border-t border-slate-100 my-1" />
+            <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
 
             {/* Warranty items */}
             <div className="flex items-center gap-1.5 py-1">
               <ShieldAlert className="h-3 w-3 shrink-0 text-indigo-600" />
-              <span className="text-[10px] tracking-widest text-slate-500 uppercase">Warranties</span>
+              <span className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Warranties</span>
             </div>
             {warrantiesLoading && <p className="text-xs text-slate-400 pl-5">Loading…</p>}
             {!warrantiesLoading && warrantiesExpiring.length === 0 && (
               <p className="text-xs text-slate-400 italic pl-5">No expiring warranties</p>
             )}
             {!warrantiesLoading && warrantiesExpiring.slice(0, 3).map(a => (
-              <div key={a.id} className="flex items-center justify-between py-1.5 pl-5 border-b border-slate-50 last:border-b-0">
-                <span className="text-xs font-medium text-slate-700 truncate">{a.name}</span>
+              <div key={a.id} className="flex items-center justify-between py-1.5 pl-5 border-b border-slate-50 dark:border-slate-700 last:border-b-0">
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{a.name}</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ml-2 ${
-                  a.warrantyStatus === 'expired' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
+                  a.warrantyStatus === 'expired' ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-200' : 'bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-200'
                 }`}>
                   {a.daysUntilExpiry < 0
                     ? `${Math.abs(a.daysUntilExpiry)}d overdue`
@@ -338,7 +338,7 @@ export function DashboardWidgets() {
               return (
                 <div
                   key={i}
-                  className="flex items-center gap-3 py-2.5 border-b border-slate-50 last:border-b-0"
+                  className="flex items-center gap-3 py-2.5 border-b border-slate-50 dark:border-slate-700 last:border-b-0"
                 >
                   {/* Circular initials */}
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-[10px] font-semibold text-indigo-600">
@@ -346,7 +346,7 @@ export function DashboardWidgets() {
                   </div>
                   {/* Text */}
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-slate-900 truncate">
+                    <p className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">
                       {truncateFeed(cleanActivityText(item))}
                     </p>
                     <p className="text-[10px] text-slate-400 mt-0.5">
@@ -354,7 +354,7 @@ export function DashboardWidgets() {
                     </p>
                   </div>
                   {/* Badge */}
-                  <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                  <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
                     {extractActionType(cleanActivityText(item))}
                   </span>
                 </div>
@@ -382,7 +382,7 @@ export function DashboardWidgets() {
               return (
                 <div
                   key={s.id}
-                  className="flex items-center gap-3 py-2.5 border-b border-slate-50 last:border-b-0"
+                  className="flex items-center gap-3 py-2.5 border-b border-slate-50 dark:border-slate-700 last:border-b-0"
                 >
                   {/* Circular icon */}
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-50">
@@ -390,7 +390,7 @@ export function DashboardWidgets() {
                   </div>
                   {/* Text */}
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-slate-900 truncate">
+                    <p className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">
                       {s.asset.name}
                     </p>
                     <p className="text-[10px] text-slate-400 mt-0.5">
@@ -400,7 +400,7 @@ export function DashboardWidgets() {
                   {/* Status badge */}
                   <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full ${
                     s.status === 'overdue'
-                      ? 'bg-red-50 text-red-600'
+                      ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-200'
                       : s.status === 'completed'
                         ? 'bg-teal-50 text-teal-600'
                         : 'bg-indigo-50 text-indigo-600'

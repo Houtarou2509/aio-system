@@ -71,7 +71,7 @@ export default function InventoryLookupPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50">
+    <div className="flex flex-col h-screen bg-light-bg dark:bg-slate-900">
 
       {/* ═══ STICKY NAVY HEADER ═════════════════════════════ */}
       <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
@@ -80,7 +80,7 @@ export default function InventoryLookupPage() {
             <Package className="h-6 w-6 text-[#f8931f]" />
             <h1 className="text-lg font-bold text-white tracking-tight">Inventory Lookups</h1>
           </div>
-          <p className="hidden sm:block text-xs text-white/60 bg-white/10 rounded-lg px-3 py-2">
+          <p className="hidden sm:block text-xs text-slate-700 dark:text-white/60 bg-white dark:bg-slate-800/10 rounded-lg px-3 py-2">
             Manage dropdown values for assets
           </p>
         </div>
@@ -96,7 +96,7 @@ export default function InventoryLookupPage() {
               className={`flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors text-left ${
                 activeTab === key
                   ? 'border-[#f8931f] bg-[#f8931f]/5'
-                  : 'border-slate-200 bg-white hover:border-slate-300'
+                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
               }`}
             >
               <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
@@ -106,11 +106,11 @@ export default function InventoryLookupPage() {
               </div>
               <div className="min-w-0">
                 <p className={`text-xl font-bold leading-tight ${
-                  activeTab === key ? 'text-[#f8931f]' : 'text-slate-900'
+                  activeTab === key ? 'text-[#f8931f]' : 'text-slate-900 dark:text-slate-100'
                 }`}>
                   {counts[key] ?? 0}
                 </p>
-                <p className="text-[10px] tracking-widest text-slate-500 uppercase">{label}</p>
+                <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">{label}</p>
               </div>
             </button>
           ))}
@@ -127,7 +127,7 @@ export default function InventoryLookupPage() {
               className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
                 activeTab === key
                   ? 'bg-[#f8931f] text-white shadow-sm'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
               }`}
             >
               {label}

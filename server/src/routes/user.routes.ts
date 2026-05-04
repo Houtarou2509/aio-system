@@ -1,11 +1,13 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import bcrypt from 'bcryptjs';
 import { authenticate, requireRole } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+import { createUserSchema, updateUserSchema, updateUserStatusSchema } from './user.schema';
 import { success, error } from '../utils/response';
 
 const router = Router();
-const prisma = new PrismaClient();
+
 
 // All routes require authentication + Admin role
 router.use(authenticate);
@@ -22,27 +24,34 @@ const SAFE_SELECT = {
   createdAt: true,
 };
 
-// GET /api/users
-router.get('/', async (_req: Request, res: Response) => {
+// GET /api/users — paginated list
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const users = await prisma.user.findMany({
-      select: SAFE_SELECT,
-      orderBy: { createdAt: 'desc' },
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        select: SAFE_SELECT,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.user.count(),
+    ]);
+
+    return success(res, users, 200, {
+      page, limit, total, totalPages: Math.ceil(total / limit),
     });
-    return success(res, users, 200);
   } catch (err: any) {
     return error(res, err.message, 500);
   }
 });
 
 // POST /api/users
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', validate(createUserSchema), async (req: Request, res: Response) => {
   try {
     const { fullName, username, email, password, role } = req.body;
-
-    if (!username || !email || !password || !role) {
-      return error(res, 'username, email, password, and role are required', 400);
-    }
 
     // Check unique constraints
     const existing = await prisma.user.findFirst({
@@ -67,7 +76,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // PUT /api/users/:id
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', validate(updateUserSchema), async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     const { fullName, username, email, role, password } = req.body;
@@ -113,14 +122,10 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // PATCH /api/users/:id/status
-router.patch('/:id/status', async (req: Request, res: Response) => {
+router.patch('/:id/status', validate(updateUserStatusSchema), async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
     const { status } = req.body;
-
-    if (!['active', 'inactive'].includes(status)) {
-      return error(res, 'Status must be "active" or "inactive"', 400);
-    }
 
     // Cannot deactivate own account
     if (status === 'inactive' && req.user!.id === id) {

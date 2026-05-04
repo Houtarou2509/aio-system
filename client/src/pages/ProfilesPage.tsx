@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiFetch, ApiError, AUTH_EXPIRED_EVENT } from '../lib/api';
+import { apiFetch, apiFetchBlob, ApiError, AUTH_EXPIRED_EVENT } from '../lib/api';
 import {
   Users, PlusCircle, Search, Loader2, Eye, X, UserCircle, Briefcase, Building2, Calendar, Mail, Phone, Package, FileText, AlertTriangle, CheckCircle2, Info, ChevronDown,
 } from 'lucide-react';
+import BulkIssuanceWizard from '../components/issuances/BulkIssuanceWizard';
+import PDFPreviewModal from '../components/issuances/PDFPreviewModal';
 
 /* ─── Types ─── */
 interface Personnel {
@@ -18,6 +20,10 @@ interface Personnel {
   status: string;
   createdAt: string;
   activeAssignments: number;
+  personnelType: string;
+  contractDurationMonths: number | null;
+  contractStartDate: string | null;
+  contractEndDate: string | null;
   institutionId: number | null;
   projectId: number | null;
   designationId: number | null;
@@ -49,6 +55,7 @@ interface ProfileHistoryEntry {
 interface PersonnelDetail extends Personnel {
   assignments: AssignmentWithAsset[];
   historyLogs: ProfileHistoryEntry[];
+  signedAgreementPath: string | null;
 }
 
 /* ─── Toast ─── */
@@ -127,38 +134,92 @@ function SearchableDropdown({ label, items, value, onChange, placeholder }: {
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState('');
+  const [highlightIndex, setHighlightIndex] = useState(-1);
   const [refEl, setRefEl] = useState<HTMLDivElement | null>(null);
   const selectedItem = items.find(i => String(i.id) === value);
+
+  const filtered = filter
+    ? items.filter(i => i.name.toLowerCase().includes(filter.toLowerCase()))
+    : items;
+
+  // All selectable options: None + filtered items
+  const allOptions: (LookupItem | null)[] = [null, ...filtered];
+
+  const openMenu = () => {
+    setIsOpen(true);
+    setFilter('');
+    // Highlight currently selected item if any
+    const selIdx = selectedItem ? filtered.findIndex(i => String(i.id) === value) : -1;
+    setHighlightIndex(selIdx >= 0 ? selIdx + 1 : 0); // +1 because "None" is index 0
+  };
+
+  const closeMenu = () => {
+    setIsOpen(false);
+    setFilter('');
+    setHighlightIndex(-1);
+  };
+
+  const selectItem = (item: LookupItem | null) => {
+    onChange(item ? String(item.id) : '');
+    closeMenu();
+  };
 
   // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (refEl && !refEl.contains(e.target as Node)) {
-        setIsOpen(false);
-        setFilter('');
+        closeMenu();
       }
     };
     if (isOpen) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [isOpen, refEl]);
 
-  const filtered = filter
-    ? items.filter(i => i.name.toLowerCase().includes(filter.toLowerCase()))
-    : items;
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!isOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openMenu();
+        return;
+      }
+      return;
+    }
+    // Menu is open
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightIndex(prev => Math.min(prev + 1, allOptions.length - 1));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightIndex(prev => Math.max(prev - 1, 0));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (highlightIndex >= 0 && highlightIndex < allOptions.length) {
+          selectItem(allOptions[highlightIndex]);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        closeMenu();
+        break;
+    }
+  };
 
   return (
-    <div className="relative" ref={setRefEl}>
+    <div className="relative" ref={setRefEl} onKeyDown={handleKeyDown}>
       <label className="block text-[10px] font-medium text-slate-500 mb-1">{label}</label>
       {/* Trigger button — always visible */}
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => { if (isOpen) closeMenu(); else openMenu(); }}
         className="w-full flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm text-left hover:border-slate-300 transition-colors"
       >
         <span className={selectedItem ? 'text-slate-700' : 'text-slate-400'}>
           {selectedItem ? selectedItem.name : placeholder}
         </span>
-        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {/* Dropdown menu — absolutely positioned overlay */}
       {isOpen && (
@@ -166,26 +227,28 @@ function SearchableDropdown({ label, items, value, onChange, placeholder }: {
           <input
             autoFocus
             value={filter}
-            onChange={e => setFilter(e.target.value)}
+            onChange={e => { setFilter(e.target.value); setHighlightIndex(0); }}
             placeholder={`Search ${label.toLowerCase()}...`}
             className="w-full border-0 px-3 py-2 text-sm outline-none rounded-t-lg"
+            onKeyDown={handleKeyDown}
           />
           <div className="max-h-36 overflow-y-auto border-t">
+            {/* None option */}
             <button
               type="button"
-              onClick={() => { onChange(''); setIsOpen(false); setFilter(''); }}
-              className="w-full text-left px-3 py-2 text-sm text-slate-400 hover:bg-slate-50"
+              onClick={() => selectItem(null)}
+              className={`w-full text-left px-3 py-2 text-sm text-slate-400 hover:bg-slate-50 ${highlightIndex === 0 ? 'bg-slate-100' : ''}`}
             >
               None
             </button>
-            {filtered.map(item => (
+            {filtered.map((item, idx) => (
               <button
                 key={item.id}
                 type="button"
-                onClick={() => { onChange(String(item.id)); setIsOpen(false); setFilter(''); }}
+                onClick={() => selectItem(item)}
                 className={`w-full text-left px-3 py-2 text-sm hover:bg-[#f8931f]/10 transition-colors ${
                   String(item.id) === value ? 'bg-[#f8931f]/10 text-[#f8931f] font-medium' : 'text-slate-700'
-                }`}
+                } ${highlightIndex === idx + 1 ? 'bg-slate-100' : ''}`}
               >
                 {item.name}
               </button>
@@ -270,16 +333,20 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
     try {
       const body: Record<string, any> = {
         fullName: form.fullName,
-        designation: form.designation || null,
-        designationId: form.designationId ? parseInt(form.designationId, 10) : null,
-        email: form.email || null,
-        phone: form.phone || null,
-        institutionId: form.institutionId ? parseInt(form.institutionId, 10) : null,
-        projectId: form.projectId ? parseInt(form.projectId, 10) : null,
-        projectYear: form.projectYear || null,
-        hiredDate: form.hiredDate || null,
-        employmentHistory: form.employmentHistory || null,
+        designation: form.designation || undefined,
+        designationId: form.designationId && form.designationId !== '' ? parseInt(form.designationId, 10) : null,
+        email: form.email || undefined,
+        phone: form.phone || undefined,
+        institutionId: form.institutionId && form.institutionId !== '' ? parseInt(form.institutionId, 10) : null,
+        projectId: form.projectId && form.projectId !== '' ? parseInt(form.projectId, 10) : null,
+        projectYear: form.projectYear || undefined,
+        hiredDate: form.hiredDate || undefined,
       };
+      // employmentHistory is create-only
+      if (!editing) {
+        body.projectYear = form.projectYear || undefined;
+        body.employmentHistory = form.employmentHistory || undefined;
+      }
       if (editing) {
         await apiFetch(`/personnel/${editing.id}`, { method: 'PATCH', body });
       } else {
@@ -300,7 +367,7 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header — pinned top */}
         <div className="flex items-center justify-between px-5 py-4 border-b rounded-t-xl shrink-0" style={{ background: '#012061' }}>
@@ -394,6 +461,54 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
   );
 }
 
+function UploadSignedAgreement({ personnelId }: { personnelId: string }) {
+  const [uploading, setUploading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      alert('Please upload a PDF file only.');
+      return;
+    }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`/api/personnel/${personnelId}/signed-agreement`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error?.message || 'Upload failed');
+      setDone(true);
+    } catch (err: any) {
+      alert(err.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (done) {
+    return (
+      <div className="flex items-center gap-2 text-emerald-600 text-xs font-medium">
+        <CheckCircle2 className="w-3.5 h-3.5" /> Uploaded successfully! Close and reopen to view.
+      </div>
+    );
+  }
+
+  return (
+    <label className="inline-flex items-center gap-1.5 rounded-lg border border-[#f8931f] px-3 py-1.5 text-xs font-semibold text-[#f8931f] cursor-pointer hover:bg-[#f8931f]/10 transition-colors">
+      {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
+      {uploading ? 'Uploading...' : 'Upload Signed PDF'}
+      <input type="file" accept=".pdf" onChange={handleFileChange} className="hidden" disabled={uploading} />
+    </label>
+  );
+}
+
 /* ─── Detail Modal ─── */
 function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail; onClose: () => void }) {
   const navigate = useNavigate();
@@ -401,7 +516,7 @@ function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail
   const pastLoans = personnel.assignments.filter(a => a.returnedAt);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-10 overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-10 overflow-y-auto" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mb-10" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="px-6 py-4 border-b rounded-t-xl" style={{ background: '#012061' }}>
@@ -439,6 +554,45 @@ function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail
             <p className="text-xs text-slate-600 whitespace-pre-line leading-relaxed bg-slate-50 rounded-lg p-3">{personnel.employmentHistory}</p>
           </div>
         )}
+
+        {/* Signed Agreement */}
+        <div className="px-6 py-3 border-t">
+          <h3 className="text-xs font-semibold text-[#012061] mb-2 flex items-center gap-1.5">
+            <FileText className="w-3.5 h-3.5 text-[#f8931f]" />
+            Signed Agreement
+          </h3>
+          {personnel.signedAgreementPath ? (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={async () => {
+                  const token = localStorage.getItem('accessToken');
+                  const res = await fetch(`/api/personnel/${personnel.id}/signed-agreement`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                  });
+                  if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    alert((data as any).error?.message || 'Failed to load signed agreement');
+                    return;
+                  }
+                  const blob = await res.blob();
+                  const url = URL.createObjectURL(blob);
+                  window.open(url, '_blank');
+                  setTimeout(() => URL.revokeObjectURL(url), 60000);
+                }}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#f8931f] hover:underline"
+              >
+                <FileText className="w-3.5 h-3.5" /> View Signed Agreement PDF
+              </button>
+            </div>
+          ) : personnel.assignments.filter(a => !a.returnedAt).length > 0 ? (
+            <div>
+              <p className="text-xs text-slate-400 italic mb-2">No signed agreement uploaded yet.</p>
+              <UploadSignedAgreement personnelId={personnel.id} />
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 italic">No active possessions — no agreement needed.</p>
+          )}
+        </div>
 
         {/* Active Possessions */}
         <div className="px-6 py-3 border-t">
@@ -562,6 +716,15 @@ export default function ProfilesPage() {
   const [detail, setDetail] = useState<PersonnelDetail | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [showBulkWizard, setShowBulkWizard] = useState(false);
+  const [bulkWizardPersonnelId, setBulkWizardPersonnelId] = useState<string | undefined>(undefined);
+  const [pdfPreview, setPdfPreview] = useState<{
+    blobUrl: string | null;
+    loading: boolean;
+    filename: string;
+    personnelId?: string;
+    personnelName?: string;
+  }>({ blobUrl: null, loading: false, filename: 'agreement.pdf' });
 
   const showToast = useCallback((type: ToastType, message: string) => {
     const id = ++toastId;
@@ -617,6 +780,29 @@ export default function ProfilesPage() {
     }
   };
 
+  const handleBulkPreviewPdf = useCallback(async (params: Record<string, any>) => {
+    setPdfPreview({
+      blobUrl: null,
+      loading: true,
+      filename: 'agreement.pdf',
+      personnelId: params.personnelId as string | undefined,
+      personnelName: params.personnelName as string | undefined,
+    });
+    try {
+      const blob = await apiFetchBlob('/agreements/pdf', { method: 'POST', body: params });
+      const url = URL.createObjectURL(blob);
+      setPdfPreview(prev => ({
+        ...prev,
+        blobUrl: url,
+        loading: false,
+        filename: `agreement-${Date.now()}.pdf`,
+      }));
+    } catch (e: any) {
+      alert(e instanceof ApiError ? e.message : 'Failed to generate PDF');
+      setPdfPreview(prev => ({ ...prev, blobUrl: null, loading: false }));
+    }
+  }, []);
+
   const openDetail = async (p: Personnel) => {
     try {
       const res = await apiFetch(`/personnel/${p.id}`);
@@ -638,10 +824,12 @@ export default function ProfilesPage() {
             <Users className="h-6 w-6 text-[#f8931f]" />
             <h1 className="text-lg font-bold text-white tracking-tight">Profiles</h1>
           </div>
-          <button onClick={() => { setEditing(null); setShowForm(true); }}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e07e0a] transition-colors">
-            <PlusCircle className="w-3.5 h-3.5" /> Add Profile
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setEditing(null); setShowForm(true); }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e07e0a] transition-colors">
+              <PlusCircle className="w-3.5 h-3.5" /> Add Profile
+            </button>
+          </div>
         </div>
       </header>
 
@@ -661,6 +849,7 @@ export default function ProfilesPage() {
           <thead>
             <tr style={{ backgroundColor: '#e8ecf4' }}>
               <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Name</th>
+              <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Type</th>
               <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Designation</th>
               <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Project</th>
               <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Year</th>
@@ -671,13 +860,30 @@ export default function ProfilesPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-400 text-sm"><Loader2 className="w-5 h-5 animate-spin inline mr-2" />Loading...</td></tr>
+              <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400 text-sm"><Loader2 className="w-5 h-5 animate-spin inline mr-2" />Loading...</td></tr>
             ) : personnel.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-400 text-sm"><Users className="w-8 h-8 mx-auto mb-2 opacity-40" />No profiles yet</td></tr>
+              <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400 text-sm"><Users className="w-8 h-8 mx-auto mb-2 opacity-40" />No profiles yet</td></tr>
             ) : personnel.map(p => (
               <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                 <td className="px-3 py-3">
                   <button onClick={() => openDetail(p)} className="text-sm font-semibold hover:underline" style={{ color: '#012061' }}>{p.fullName}</button>
+                </td>
+                <td className="px-3 py-3">
+                  {p.personnelType === 'contractor' ? (
+                    <span className="inline-flex flex-col gap-0.5">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">Contractor</span>
+                      {p.contractDurationMonths && (
+                        <span className="text-[10px] text-amber-600">
+                          {p.contractDurationMonths} mo{p.contractDurationMonths > 1 ? 's' : ''}
+                          {p.contractStartDate && p.contractEndDate && (
+                            <> · {new Date(p.contractStartDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {new Date(p.contractEndDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</>
+                          )}
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">Employee</span>
+                  )}
                 </td>
                 <td className="px-3 py-3 text-sm text-slate-600">{p.designationLookup?.name || p.designation || '—'}</td>
                 <td className="px-3 py-3 text-sm text-slate-600">{p.projectLookup?.name || '—'}</td>
@@ -699,6 +905,10 @@ export default function ProfilesPage() {
                 </td>
                 <td className="px-3 py-3 text-right">
                   <div className="flex items-center justify-end gap-1">
+                    <button onClick={() => { setBulkWizardPersonnelId(p.id); setShowBulkWizard(true); }}
+                      className="p-1 rounded hover:bg-[#f8931f]/10 text-slate-400 hover:text-[#f8931f]" title="Issue Assets">
+                      <Package className="w-3.5 h-3.5" />
+                    </button>
                     <button onClick={() => openDetail(p)} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-[#012061]" title="View"><Eye className="w-3.5 h-3.5" /></button>
                     <button onClick={() => { setEditing(p); setShowForm(true); }} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-[#f8931f]" title="Edit">✏️</button>
                     <button onClick={() => handleDelete(p.id)} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-[#7B1113]" title="Deactivate">🗑️</button>
@@ -720,6 +930,28 @@ export default function ProfilesPage() {
       {/* Modals */}
       <PersonnelFormModal open={showForm} onClose={() => setShowForm(false)} onSave={fetchPersonnel} editing={editing} showToast={showToast} />
       {detail && <ProfileDetailModal personnel={detail} onClose={() => setDetail(null)} />}
+      {showBulkWizard && (
+        <BulkIssuanceWizard
+          onClose={() => { setShowBulkWizard(false); setBulkWizardPersonnelId(undefined); }}
+          onSave={fetchPersonnel}
+          onPreviewPdf={handleBulkPreviewPdf}
+          preselectedPersonnelId={bulkWizardPersonnelId}
+        />
+      )}
+      {pdfPreview.blobUrl && (
+        <PDFPreviewModal
+          open={!!pdfPreview.blobUrl}
+          blobUrl={pdfPreview.blobUrl}
+          loading={pdfPreview.loading}
+          downloadFilename={pdfPreview.filename}
+          personnelId={pdfPreview.personnelId}
+          personnelName={pdfPreview.personnelName}
+          onClose={() => {
+            if (pdfPreview.blobUrl) URL.revokeObjectURL(pdfPreview.blobUrl);
+            setPdfPreview({ blobUrl: null, loading: false, filename: 'agreement.pdf' });
+          }}
+        />
+      )}
       <SessionExpiredModal open={sessionExpired} onClose={() => setSessionExpired(false)} />
 
       {/* Toast Container */}

@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { AddUserModal } from '../components/users/AddUserModal';
 import { EditUserModal } from '../components/users/EditUserModal';
-import { Users, Shield, Clock, Search, Edit3, UserX, UserCheck, UserPlus, Activity } from 'lucide-react';
+import { Users, Shield, Clock, Search, Edit3, UserX, UserCheck, UserPlus, Activity, Download } from 'lucide-react';
 
 interface User {
   id: string;
@@ -167,6 +167,42 @@ export default function UserManagementPage() {
     }
   };
 
+  // ── Export ──
+  const [exportLoading, setExportLoading] = useState(false);
+
+  const handleExportCSV = () => {
+    setExportLoading(true);
+    try {
+      const headers = ['ID', 'Username', 'Full Name', 'Email', 'Role', 'Status', 'Last Login', 'Created At'];
+      const esc = (val: string | number | null | undefined) => {
+        if (val == null) return '';
+        const s = String(val);
+        if (s.includes(',') || s.includes('"') || s.includes('\n')) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+      const rows = users.map(u => [
+        esc(u.id),
+        esc(u.username),
+        esc(u.fullName),
+        esc(u.email),
+        esc(u.role),
+        esc(u.status),
+        esc(u.lastLogin ? new Date(u.lastLogin).toISOString().split('T')[0] : ''),
+        esc(u.createdAt ? new Date(u.createdAt).toISOString().split('T')[0] : ''),
+      ].join(','));
+      const csv = [headers.join(','), ...rows].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `users-export-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err: any) {
+      // silently fail
+    }
+    setExportLoading(false);
+  };
+
   // ── KPIs ──
   const kpis = {
     totalUsers: users.length,
@@ -193,7 +229,7 @@ export default function UserManagementPage() {
     return (
       <span
         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-          isNavy ? 'text-white' : 'bg-slate-100 text-slate-600'
+          isNavy ? 'text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
         }`}
         style={isNavy ? { backgroundColor: '#012061' } : undefined}
       >
@@ -204,12 +240,12 @@ export default function UserManagementPage() {
 
   const statusBadge = (status: string) =>
     status === 'active' ? (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#012061]/5 text-[#012061]">
-        <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-emerald-500" />
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#012061]/5 dark:bg-slate-700/40 text-[#012061] dark:text-slate-100">
+        <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-emerald-50 dark:bg-emerald-9500" />
         Active
       </span>
     ) : (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
         <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-slate-400" />
         Inactive
       </span>
@@ -218,7 +254,7 @@ export default function UserManagementPage() {
   const formatDate = (iso: string | null) => {
     if (!iso) return <span className="italic text-slate-400">Never</span>;
     return (
-      <span className="text-sm text-slate-500">
+      <span className="text-sm text-slate-500 dark:text-slate-400">
         {new Date(iso).toLocaleString('en-US', {
           month: 'short',
           day: 'numeric',
@@ -255,7 +291,7 @@ export default function UserManagementPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-light-bg dark:bg-slate-900">
       {/* Toast */}
       {toast && (
         <div
@@ -273,7 +309,7 @@ export default function UserManagementPage() {
             <Users className="h-6 w-6 text-[#f8931f]" />
             <h1 className="text-lg font-bold text-white tracking-tight">User Management</h1>
           </div>
-          <span className="hidden sm:flex items-center gap-2 text-xs text-white/60 bg-white/10 rounded-lg px-3 py-2 tabular-nums">
+          <span className="hidden sm:flex items-center gap-2 text-xs text-slate-700 dark:text-white/60 bg-white dark:bg-slate-800/10 rounded-lg px-3 py-2 tabular-nums">
             <Activity className="w-3.5 h-3.5" />
             {now.toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
             {' · '}
@@ -284,37 +320,37 @@ export default function UserManagementPage() {
 
       {/* ── KPI Bar ── */}
       <div className="grid grid-cols-3 gap-4 px-6 pt-4 pb-2">
-        <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-lg border border-slate-100">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#012061]/5">
+        <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#012061]/5 dark:bg-slate-700/40">
             <Users className="h-5 w-5 text-[#f8931f]" />
           </div>
           <div className="min-w-0">
             <p className="text-2xl font-bold leading-tight text-[#f8931f]">{kpis.totalUsers}</p>
-            <p className="text-[10px] tracking-widest text-slate-500 uppercase">Total Users</p>
+            <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Total Users</p>
           </div>
         </div>
-        <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-lg border border-slate-100">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#012061]/5">
+        <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#012061]/5 dark:bg-slate-700/40">
             <Shield className="h-5 w-5 text-[#f8931f]" />
           </div>
           <div className="min-w-0">
             <p className="text-2xl font-bold leading-tight text-[#f8931f]">{kpis.activeAdmins}</p>
-            <p className="text-[10px] tracking-widest text-slate-500 uppercase">Active Admins</p>
+            <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Active Admins</p>
           </div>
         </div>
-        <div className="flex items-center gap-3 px-4 py-3 bg-white rounded-lg border border-slate-100">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#012061]/5">
+        <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#012061]/5 dark:bg-slate-700/40">
             <Clock className="h-5 w-5 text-[#f8931f]" />
           </div>
           <div className="min-w-0">
             <p className="text-2xl font-bold leading-tight text-[#f8931f]">{kpis.recentlyLoggedIn}</p>
-            <p className="text-[10px] tracking-widest text-slate-500 uppercase">Active Users</p>
+            <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Active Users</p>
           </div>
         </div>
       </div>
 
       {/* ── Action Toolbar ── */}
-      <div className="flex items-center justify-between gap-4 px-6 py-3 border-b border-slate-200">
+      <div className="flex items-center justify-between gap-4 px-6 py-3 border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center gap-3 flex-1">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -323,13 +359,13 @@ export default function UserManagementPage() {
               placeholder="Search by name, username, or email..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent transition"
+              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent transition"
             />
           </div>
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent"
+            className="px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent"
           >
             <option value="All">All Roles</option>
             <option value="ADMIN">Admin</option>
@@ -340,34 +376,42 @@ export default function UserManagementPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent"
+            className="px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent"
           >
             <option value="All">All Statuses</option>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
         </div>
-        <button
-          onClick={() => {
-            setServerErrors({});
-            setShowAddModal(true);
-          }}
-          className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-sm hover:shadow-md transition-all"
-          style={{ backgroundColor: '#f8931f' }}
-        >
-          <UserPlus className="w-4 h-4" />
-          Add User
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={handleExportCSV} disabled={exportLoading || users.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold border border-[#012061]/20 text-[#012061] dark:text-slate-100 shadow-sm hover:shadow-md transition-all disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            {exportLoading ? 'Exporting…' : 'Export CSV'}
+          </button>
+          <button
+            onClick={() => {
+              setServerErrors({});
+              setShowAddModal(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-sm hover:shadow-md transition-all"
+            style={{ backgroundColor: '#f8931f' }}
+          >
+            <UserPlus className="w-4 h-4" />
+            Add User
+          </button>
+        </div>
       </div>
 
       {/* ── Table ── */}
       <div className="px-6">
         {users.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#012061]/5 mb-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#012061]/5 dark:bg-slate-700/40 mb-3">
               <Users className="h-6 w-6 text-[#f8931f]" />
             </div>
-            <p className="text-sm font-medium text-[#012061]">No Users Found</p>
+            <p className="text-sm font-medium text-[#012061] dark:text-slate-100">No Users Found</p>
             <p className="text-xs text-slate-400 mt-1">Add your first user to get started</p>
           </div>
         ) : (
@@ -392,14 +436,14 @@ export default function UserManagementPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {filtered.map((u) => {
                   const isSelf = currentUser?.id === u.id;
                   const busy = actionLoading === u.id;
                   return (
                     <tr
                       key={u.id}
-                      className="group hover:bg-slate-50 transition-colors"
+                      className="group hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                       style={{
                         borderLeftWidth: '2px',
                         borderLeftStyle: 'solid',
@@ -422,7 +466,7 @@ export default function UserManagementPage() {
                             {getInitials(u.fullName || u.username)}
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-[#012061]">
+                            <p className="text-sm font-semibold text-[#012061] dark:text-slate-100">
                               {u.fullName || u.username}
                             </p>
                             <p className="text-xs text-slate-400">{u.email}</p>
@@ -454,7 +498,7 @@ export default function UserManagementPage() {
                           </button>
                           {u.status === 'active' ? (
                             <button
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md border border-red-200 text-red-500 hover:bg-red-50 dark:bg-red-950 dark:hover:bg-red-950 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                               disabled={isSelf || busy}
                               onClick={() => handleStatusToggle(u)}
                               title={isSelf ? 'Cannot deactivate your own account' : undefined}
@@ -464,7 +508,7 @@ export default function UserManagementPage() {
                             </button>
                           ) : (
                             <button
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md border border-emerald-200 text-emerald-600 hover:bg-emerald-50 transition-colors"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md border border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:bg-emerald-950 dark:hover:bg-emerald-950 transition-colors"
                               disabled={busy}
                               onClick={() => handleStatusToggle(u)}
                             >

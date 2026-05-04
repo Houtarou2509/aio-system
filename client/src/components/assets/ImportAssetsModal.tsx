@@ -92,39 +92,39 @@ export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={handleClose}>
-      <div className="bg-white rounded-lg border border-gray-200 shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onMouseDown={e => { if (e.target === e.currentTarget) handleClose(); }}>
+      <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Import Assets from CSV</h2>
+          <h2 className="text-lg font-semibold text-gray-900  dark:text-gray-100">Import Assets from CSV</h2>
           <button onClick={handleClose} className="text-gray-400 hover:text-gray-700 text-xl">×</button>
         </div>
 
         {/* Step indicators */}
         <div className="px-6 py-2 border-b border-gray-200 flex gap-4 text-sm">
-          <span className={step === 'upload' ? 'font-medium text-gray-900' : 'text-gray-500'}>1. Upload</span>
-          <span className={step === 'preview' ? 'font-medium text-gray-900' : 'text-gray-500'}>2. Preview</span>
-          <span className={step === 'result' ? 'font-medium text-gray-900' : 'text-gray-500'}>3. Result</span>
+          <span className={step === 'upload' ? 'font-medium text-gray-900  dark:text-gray-100' : 'text-gray-500  dark:text-gray-400'}>1. Upload</span>
+          <span className={step === 'preview' ? 'font-medium text-gray-900  dark:text-gray-100' : 'text-gray-500  dark:text-gray-400'}>2. Preview</span>
+          <span className={step === 'result' ? 'font-medium text-gray-900  dark:text-gray-100' : 'text-gray-500  dark:text-gray-400'}>3. Result</span>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 bg-white">
+        <div className="flex-1 overflow-y-auto px-6 py-4 bg-white dark:bg-slate-800">
           {/* Step 1: Upload */}
           {step === 'upload' && (
             <div className="space-y-4">
-              <p className="text-sm text-gray-500">Upload a CSV file with asset data. The file must include a header row with column names.</p>
+              <p className="text-sm text-gray-500  dark:text-gray-400">Upload a CSV file with asset data. The file must include a header row with column names.</p>
               <button onClick={downloadAssetCsvTemplate} className="text-sm text-blue-600 hover:underline">
                 ↓ Download CSV Template
               </button>
               <div
-                className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors cursor-pointer bg-white"
+                className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors cursor-pointer bg-white dark:bg-slate-800"
                 onClick={() => document.getElementById('csv-file-input')?.click()}
                 onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
                 onDrop={e => { e.preventDefault(); e.stopPropagation(); const f = e.dataTransfer.files[0]; if (f) handleFileSelect(f); }}
               >
                 <div className="text-3xl mb-2">📁</div>
-                <p className="text-sm font-medium text-gray-900">Click or drag CSV file here</p>
-                <p className="text-xs text-gray-500 mt-1">Maximum 5MB</p>
+                <p className="text-sm font-medium text-gray-900  dark:text-gray-100">Click or drag CSV file here</p>
+                <p className="text-xs text-gray-500  dark:text-gray-400 mt-1">Maximum 5MB</p>
                 <input
                   id="csv-file-input"
                   type="file"
@@ -141,7 +141,7 @@ export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) 
           {step === 'preview' && (
             <div className="space-y-4">
               {rows.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-8">Found 0 rows in the file. The CSV must have a header row and at least one data row.</p>
+                <p className="text-sm text-gray-500  dark:text-gray-400 text-center py-8">Found 0 rows in the file. The CSV must have a header row and at least one data row.</p>
               ) : (
                 <>
                   <div className="flex items-center justify-between">
@@ -153,22 +153,22 @@ export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) 
                   </div>
                   <div className="border border-gray-200 rounded-lg overflow-auto max-h-[50vh]">
                     <table className="w-full text-sm">
-                      <thead className="bg-gray-50 sticky top-0">
+                      <thead className="bg-gray-50  dark:bg-gray-900 sticky top-0">
                         <tr>
-                          <th className="px-3 py-2 text-left font-medium text-gray-700">#</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-700">Name</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-700">Type</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-700">Status</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-700">Result</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-700  dark:text-gray-300">#</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-700  dark:text-gray-300">Name</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-700  dark:text-gray-300">Type</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-700  dark:text-gray-300">Status</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-700  dark:text-gray-300">Result</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
                         {rows.map(r => (
-                          <tr key={r.rowNumber} className={!r.validation.valid ? 'bg-red-50' : ''}>
-                            <td className="px-3 py-1.5 text-gray-500">{r.rowNumber}</td>
-                            <td className="px-3 py-1.5 text-gray-700">{r.data.name || '—'}</td>
-                            <td className="px-3 py-1.5 text-gray-700">{r.data.type || '—'}</td>
-                            <td className="px-3 py-1.5 text-gray-700">{r.data.status || '—'}</td>
+                          <tr key={r.rowNumber} className={!r.validation.valid ? 'bg-red-50 dark:bg-red-950' : ''}>
+                            <td className="px-3 py-1.5 text-gray-500  dark:text-gray-400">{r.rowNumber}</td>
+                            <td className="px-3 py-1.5 text-gray-700  dark:text-gray-300">{r.data.name || '—'}</td>
+                            <td className="px-3 py-1.5 text-gray-700  dark:text-gray-300">{r.data.type || '—'}</td>
+                            <td className="px-3 py-1.5 text-gray-700  dark:text-gray-300">{r.data.status || '—'}</td>
                             <td className="px-3 py-1.5">
                               {r.validation.valid
                                 ? <span className="text-green-600">✓ Ready</span>
@@ -188,14 +188,14 @@ export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) 
           {step === 'result' && result && (
             <div className="space-y-4 text-center py-4">
               <div className="text-4xl">✅</div>
-              <h3 className="text-lg font-semibold text-gray-900">Import Complete</h3>
+              <h3 className="text-lg font-semibold text-gray-900  dark:text-gray-100">Import Complete</h3>
               <div className="flex justify-center gap-8 text-sm">
                 <div><span className="text-2xl font-bold text-green-600">{result.imported}</span><br/>imported</div>
                 <div><span className="text-2xl font-bold text-red-600">{result.skipped}</span><br/>skipped</div>
               </div>
               {result.errors.length > 0 && (
-                <div className="text-left border border-gray-200 rounded-lg p-3 max-h-32 overflow-auto bg-white">
-                  <p className="text-xs font-medium text-gray-500 mb-1">Skipped rows:</p>
+                <div className="text-left border border-gray-200 rounded-lg p-3 max-h-32 overflow-auto bg-white dark:bg-slate-800">
+                  <p className="text-xs font-medium text-gray-500  dark:text-gray-400 mb-1">Skipped rows:</p>
                   {result.errors.map((e, i) => (
                     <p key={i} className="text-xs text-red-600">Row {e.row}: {e.reason}</p>
                   ))}
@@ -206,13 +206,13 @@ export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) 
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2 bg-white">
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2 bg-white dark:bg-slate-800">
           {step === 'upload' && (
-            <button onClick={handleClose} className="rounded-md border border-gray-300 bg-white px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+            <button onClick={handleClose} className="rounded-md border border-gray-300 bg-white dark:bg-slate-800 px-4 py-1.5 text-sm text-gray-700  dark:text-gray-300 hover:bg-gray-50">Cancel</button>
           )}
           {step === 'preview' && (
             <>
-              <button onClick={reset} className="rounded-md border border-gray-300 bg-white px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50">Back</button>
+              <button onClick={reset} className="rounded-md border border-gray-300 bg-white dark:bg-slate-800 px-4 py-1.5 text-sm text-gray-700  dark:text-gray-300 hover:bg-gray-50">Back</button>
               <button
                 onClick={handleImport}
                 disabled={importing || validRows.length === 0}

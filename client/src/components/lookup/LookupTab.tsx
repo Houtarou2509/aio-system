@@ -92,7 +92,7 @@ export default function LookupTab({
     <div className="w-full">
 
       {/* ═══ HORIZONTAL FILTER BAR ══════════════════════════ */}
-      <div className="flex flex-row items-center gap-4 flex-wrap bg-white rounded-lg border border-slate-200 px-4 py-2.5 mb-4">
+      <div className="flex flex-row items-center gap-4 flex-wrap bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2.5 mb-4">
         {/* Search — expands to fill */}
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
@@ -101,7 +101,7 @@ export default function LookupTab({
             placeholder="Search values..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none transition-colors"
+            className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 pl-9 pr-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none transition-colors"
           />
         </div>
 
@@ -111,7 +111,7 @@ export default function LookupTab({
           className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
             showInactive
               ? 'bg-[#012061] text-white'
-              : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
           }`}
         >
           {showInactive ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
@@ -132,26 +132,26 @@ export default function LookupTab({
 
       {/* ═══ TABLE ═══════════════════════════════════════════ */}
       {isLoading ? (
-        <p className="text-sm text-slate-500 py-8 text-center">Loading…</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">Loading…</p>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#f8931f]/10 mb-3">
             <Plus className="h-8 w-8 text-[#f8931f]" />
           </div>
-          <p className="text-sm text-slate-500 mb-1">No values found</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">No values found</p>
           <p className="text-xs text-slate-400">
             {search ? 'Try adjusting your search or filters.' : 'Add one to get started.'}
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
           <table className="w-full text-sm">
             {/* ── Header: Navy tint ────────────────────────── */}
             <thead>
-              <tr className="bg-[#012061]/5">
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-slate-500 uppercase">Value</th>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-slate-500 uppercase w-32">Status</th>
-                <th className="px-4 py-2.5 text-right text-[10px] font-semibold tracking-widest text-slate-500 uppercase w-48">Actions</th>
+              <tr className="bg-[#012061]/5 dark:bg-slate-700/40">
+                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase">Value</th>
+                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase w-32">Status</th>
+                <th className="px-4 py-2.5 text-right text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase w-48">Actions</th>
               </tr>
             </thead>
 
@@ -160,21 +160,21 @@ export default function LookupTab({
               {filtered.map((item) => (
                 <tr
                   key={item.id}
-                  className={`group border-b border-slate-100 cursor-default transition-colors ${
-                    !item.isActive ? 'opacity-60' : 'hover:bg-slate-50 hover:border-l-2 hover:border-l-[#f8931f]'
+                  className={`group border-b border-slate-100 dark:border-slate-700 cursor-default transition-colors ${
+                    !item.isActive ? 'opacity-60' : 'hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-l-2 hover:border-l-[#f8931f]'
                   }`}
                 >
                   {/* Value — Bold Navy */}
-                  <td className="px-4 py-2.5 font-semibold text-[#012061]">{item.value}</td>
+                  <td className="px-4 py-2.5 font-semibold text-[#012061] dark:text-slate-100">{item.value}</td>
 
                   {/* Status badge */}
                   <td className="px-4 py-2.5">
                     {item.isActive ? (
-                      <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border border-emerald-200">
                         ACTIVE
                       </span>
                     ) : (
-                      <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-slate-100 text-slate-500 border border-slate-200">
+                      <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                         INACTIVE
                       </span>
                     )}
@@ -185,7 +185,7 @@ export default function LookupTab({
                     <div className="inline-flex items-center gap-1.5">
                       <button
                         onClick={() => openEdit(item.id, item.value)}
-                        className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-[#012061] hover:bg-[#012061]/5 transition-colors"
+                        className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-[#012061] dark:text-slate-100 hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 dark:bg-slate-700/40 transition-colors"
                       >
                         <Pencil className="h-3 w-3" /> Edit
                       </button>
@@ -193,8 +193,8 @@ export default function LookupTab({
                         onClick={() => handleToggle(item.id, item.isActive)}
                         className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                           item.isActive
-                            ? 'text-red-600 hover:bg-red-50'
-                            : 'text-emerald-600 hover:bg-emerald-50'
+                            ? 'text-red-600 hover:bg-red-50 dark:bg-red-950 dark:hover:bg-red-950'
+                            : 'text-emerald-600 hover:bg-emerald-50 dark:bg-emerald-950 dark:hover:bg-emerald-950'
                         }`}
                       >
                         {item.isActive ? (
@@ -214,8 +214,8 @@ export default function LookupTab({
 
       {/* ═══ ADD DIALOG ══════════════════════════════════════ */}
       {showAddDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowAddDialog(false); }}>
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
             {/* Navy header bar */}
             <div className="bg-[#012061] px-5 py-3 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-white">Add New Value</h3>
@@ -228,13 +228,13 @@ export default function LookupTab({
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+                className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
               />
               {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
             </div>
             {/* Footer */}
-            <div className="px-5 py-3 border-t border-slate-100 flex justify-end gap-2 bg-slate-50/50">
-              <button className="rounded-lg px-4 py-2 text-xs font-medium text-[#012061] hover:bg-[#012061]/5 transition-colors" onClick={() => setShowAddDialog(false)}>Cancel</button>
+            <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-2 bg-slate-50 dark:bg-slate-900/50">
+              <button className="rounded-lg px-4 py-2 text-xs font-medium text-[#012061] dark:text-slate-100 hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 dark:bg-slate-700/40 transition-colors" onClick={() => setShowAddDialog(false)}>Cancel</button>
               <button className="rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors" onClick={handleAdd} disabled={saving}>
                 {saving ? 'Saving…' : 'Add Value'}
               </button>
@@ -245,8 +245,8 @@ export default function LookupTab({
 
       {/* ═══ EDIT DIALOG ═════════════════════════════════════ */}
       {showEditDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowEditDialog(false); }}>
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
             {/* Navy header bar */}
             <div className="bg-[#012061] px-5 py-3 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-white">Edit Value</h3>
@@ -259,13 +259,13 @@ export default function LookupTab({
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleEdit(); }}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+                className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
               />
               {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
             </div>
             {/* Footer */}
-            <div className="px-5 py-3 border-t border-slate-100 flex justify-end gap-2 bg-slate-50/50">
-              <button className="rounded-lg px-4 py-2 text-xs font-medium text-[#012061] hover:bg-[#012061]/5 transition-colors" onClick={() => setShowEditDialog(false)}>Cancel</button>
+            <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-2 bg-slate-50 dark:bg-slate-900/50">
+              <button className="rounded-lg px-4 py-2 text-xs font-medium text-[#012061] dark:text-slate-100 hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 dark:bg-slate-700/40 transition-colors" onClick={() => setShowEditDialog(false)}>Cancel</button>
               <button className="rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors" onClick={handleEdit} disabled={saving}>
                 {saving ? 'Saving…' : 'Save Changes'}
               </button>

@@ -121,13 +121,13 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       if (imageFile) {
         // Send as multipart/form-data with 'image' file + 'data' JSON string
         // This matches the backend: multer single('image') + JSON.parse(req.body.data)
-        console.log('[AssetFormModal] Submitting data:', data);
+        if (import.meta.env.DEV) console.log('[AssetFormModal] Submitting data:', data);
         const fd = new FormData();
         fd.append('image', imageFile);
         fd.append('data', JSON.stringify(data));
         await onSubmit(fd);
       } else {
-        console.log('[AssetFormModal] Submitting data (no image):', data);
+        if (import.meta.env.DEV) console.log('[AssetFormModal] Submitting data (no image):', data);
         // No image — send as plain JSON
         await onSubmit(data);
       }
@@ -149,14 +149,14 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     return [{ id: -1, value: currentValue }, ...options];
   }
 
-  const inputClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent transition";
-  const labelClass = "text-xs font-medium text-slate-700 mb-1 block";
+  const inputClass = "w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent transition";
+  const labelClass = "text-xs font-medium text-slate-700 dark:text-slate-300 mb-1 block";
 
   return (
     <div
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/50"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-xl bg-white dark:bg-slate-800 shadow-xl" onClick={e => e.stopPropagation()}>
 
         {/* ── Header ── */}
         <div className="bg-[#012061] px-6 py-4 flex items-center justify-between shrink-0">
@@ -168,7 +168,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg border border-white/20 bg-white/10 p-1.5 text-white/60 hover:text-white hover:bg-white/20 transition-colors"
+            className="rounded-lg border border-white/20 bg-white dark:bg-slate-800/10 p-1.5 text-slate-700 dark:text-white/60 hover:text-white hover:bg-white/20 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -200,7 +200,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                     >
                       <Upload className="w-3.5 h-3.5" />
                       {imagePreview ? 'Change Image' : 'Upload Image'}
@@ -231,7 +231,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                     onClick={handleSuggest}
                     disabled={suggesting || !form.name.trim()}
                     title="AI suggest type & manufacturer"
-                    className="rounded-lg border border-slate-200 px-3 py-2 text-[#f8931f] hover:bg-[#f8931f]/10 disabled:opacity-40 transition-colors"
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-[#f8931f] hover:bg-[#f8931f]/10 disabled:opacity-40 transition-colors"
                   >
                     <Sparkles className="w-4 h-4" />
                   </button>
@@ -242,7 +242,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               <div>
                 <label className={labelClass}>Type *</label>
                 <Select value={form.type} onValueChange={(val) => val != null && set('type', val)} disabled={typeLoading}>
-                  <SelectTrigger className="w-full bg-white border-slate-200 focus:ring-2 focus:ring-[#f8931f]">
+                  <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
                     <SelectValue placeholder={typeLoading ? 'Loading...' : 'Select type'} />
                   </SelectTrigger>
                   <SelectContent>
@@ -259,7 +259,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               <div>
                 <label className={labelClass}>Manufacturer</label>
                 <Select value={form.manufacturer || '__none__'} onValueChange={(val) => val != null && set('manufacturer', val === '__none__' ? '' : val)} disabled={manufacturerLoading}>
-                  <SelectTrigger className="w-full bg-white border-slate-200 focus:ring-2 focus:ring-[#f8931f]">
+                  <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
                     <SelectValue placeholder={manufacturerLoading ? 'Loading...' : 'Select manufacturer'} />
                   </SelectTrigger>
                   <SelectContent>
@@ -298,7 +298,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               <div>
                 <label className={labelClass}>Assigned To</label>
                 <Select value={form.assignedTo || '__none__'} onValueChange={(val) => val != null && set('assignedTo', val === '__none__' ? '' : val)} disabled={assignedToLoading}>
-                  <SelectTrigger className="w-full bg-white border-slate-200 focus:ring-2 focus:ring-[#f8931f]">
+                  <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
                     <SelectValue placeholder={assignedToLoading ? 'Loading...' : 'Select assignee'} />
                   </SelectTrigger>
                   <SelectContent>
@@ -322,7 +322,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               <div>
                 <label className={labelClass}>Location</label>
                 <Select value={form.location || '__none__'} onValueChange={(val) => val != null && set('location', val === '__none__' ? '' : val)} disabled={locationLoading}>
-                  <SelectTrigger className="w-full bg-white border-slate-200 focus:ring-2 focus:ring-[#f8931f]">
+                  <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
                     <SelectValue placeholder={locationLoading ? 'Loading...' : 'Select location'} />
                   </SelectTrigger>
                   <SelectContent>
@@ -352,7 +352,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 13. Warranty Section */}
               <div className="col-span-2">
-                <div className="border-t border-slate-100 my-2" />
+                <div className="border-t border-slate-100 dark:border-slate-700 my-2" />
                 <label className={labelClass}>Warranty (Optional)</label>
                 <div className="grid grid-cols-2 gap-3 mt-1">
                   <div>
@@ -376,8 +376,8 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
           )}
 
           {/* ── Footer ── */}
-          <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-100 shrink-0">
-            <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-[#012061] hover:bg-slate-50 transition-colors">
+          <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-100 dark:border-slate-700 shrink-0">
+            <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-[#012061] dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
               Cancel
             </button>
             <button type="submit" disabled={loading || !form.name} className="rounded-lg bg-[#f8931f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#e0841a] disabled:opacity-50 transition-colors inline-flex items-center gap-1.5">

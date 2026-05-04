@@ -33,6 +33,8 @@ async function refreshTokens(): Promise<{ accessToken: string; refreshToken: str
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshToken: rt }),
   });
+  // Rate limited — throw a distinguishable error so callers can retry
+  if (res.status === 429) throw new Error('RATE_LIMITED');
   const data = await res.json();
   if (!data.success) throw new Error(data.error?.message || 'Session expired');
 
@@ -127,6 +129,50 @@ export async function apiFetch(url: string, options?: { method?: string; body?: 
   });
 }
 
+export async function apiFetchBlob(url: string, options?: { method?: string; body?: Record<string, any> }): Promise<Blob> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE}${url}`, {
+    method: options?.method || 'GET',
+    body: options?.body ? JSON.stringify(options.body) : undefined,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (res.status === 401) {
+    const isAuthEndpoint = url.startsWith('/auth/login') || url.startsWith('/auth/refresh');
+    if (!isAuthEndpoint) {
+      try {
+        const tokens = await getSharedRefresh();
+        const retryRes = await fetch(`${API_BASE}${url}`, {
+          method: options?.method || 'GET',
+          body: options?.body ? JSON.stringify(options.body) : undefined,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${tokens.accessToken}`,
+          },
+        });
+        if (!retryRes.ok) {
+          throw new ApiError('Failed to fetch blob', retryRes.status);
+        }
+        return await retryRes.blob();
+      } catch (refreshErr: any) {
+        emitSessionExpired();
+        throw new ApiError('Session expired. Please log in again.', 401);
+      }
+    }
+    throw new ApiError('Authentication failed', 401);
+  }
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new ApiError(errorData.error?.message || 'Request failed', res.status);
+  }
+
+  return await res.blob();
+}
+
 export function apiFetchWithRefresh() {
   return refreshTokens();
 }
@@ -185,6 +231,10 @@ export interface AssetFilters {
   limit?: number;
   sortBy?: string;
   sortOrder?: string;
+  purchaseDateFrom?: string;
+  purchaseDateTo?: string;
+  warrantyExpiryFrom?: string;
+  warrantyExpiryTo?: string;
 }
 
 // Assets API
@@ -214,6 +264,9 @@ export const assetsApi = {
   delete: (id: string) => request<{ data: Asset }>(`/assets/${id}`, { method: 'DELETE' }),
   bulkStatus: (ids: string[], status: string) => request<{ data: { updated: number } }>('/assets/bulk-status', { method: 'PATCH', body: JSON.stringify({ ids, status }) }),
   bulkDelete: (ids: string[]) => request<{ data: { deleted: number } }>('/assets/bulk-delete', { method: 'DELETE', body: JSON.stringify({ ids }) }),
+  bulkAssign: (assetIds: string[], personnelId: string, notes?: string) => request<{ data: { assigned: number; errors: any[] } }>('/assets/bulk-assign', { method: 'POST', body: JSON.stringify({ assetIds, personnelId, notes }) }),
+  bulkReturn: (issuanceIds: string[], condition?: string) => request<{ data: { returned: number; errors: any[] } }>('/assets/bulk-return', { method: 'POST', body: JSON.stringify({ issuanceIds, condition }) }),
+  bulkUpdate: (assetIds: string[], updates: { location?: string; status?: string }) => request<{ data: { updated: number } }>('/assets/bulk-update', { method: 'POST', body: JSON.stringify({ assetIds, ...updates }) }),
   uploadImage: async (id: string, file: File) => {
     const token = localStorage.getItem('accessToken');
     const form = new FormData();

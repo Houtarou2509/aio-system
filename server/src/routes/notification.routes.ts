@@ -1,20 +1,32 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
-const prisma = new PrismaClient();
 
-// GET /api/notifications — unread only
+
+// GET /api/notifications — paginated unread
 router.get('/', authenticate, async (req: Request, res: Response) => {
   try {
-    const notifications = await prisma.notification.findMany({
-      where: { isRead: false },
-      include: { asset: { select: { id: true, name: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
 
-    res.json({ success: true, data: notifications });
+    const [notifications, total] = await Promise.all([
+      prisma.notification.findMany({
+        where: { isRead: false },
+        include: { asset: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.notification.count({ where: { isRead: false } }),
+    ]);
+
+    res.json({
+      success: true,
+      data: notifications,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: { message: err.message } });
   }

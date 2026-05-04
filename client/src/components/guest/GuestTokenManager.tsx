@@ -47,10 +47,10 @@ export function GuestTokenManager({ assetId }: Props) {
       <h3 className="text-sm font-bold">Guest Access</h3>
 
       {newToken && (
-        <div className="rounded-md bg-green-50 border border-green-200 p-3 space-y-1">
+        <div className="rounded-md bg-green-50 dark:bg-green-950 border border-green-200 p-3 space-y-1">
           <p className="text-xs font-medium text-green-800">Link created!</p>
           <div className="flex gap-1">
-            <input readOnly value={guestUrl} className="flex-1 rounded border border-green-300 bg-white px-2 py-1 text-xs" onClick={e => (e.target as HTMLInputElement).select()} />
+            <input readOnly value={guestUrl} className="flex-1 rounded border border-green-300 bg-white dark:bg-slate-800 px-2 py-1 text-xs" onClick={e => (e.target as HTMLInputElement).select()} />
             <button onClick={() => navigator.clipboard.writeText(guestUrl)} className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700">Copy</button>
           </div>
           <p className="text-xs text-green-700">Expires: {new Date(newToken.expiresAt).toLocaleDateString()} · Max: {newToken.maxAccess} accesses</p>

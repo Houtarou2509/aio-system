@@ -53,5 +53,12 @@ export default defineConfig({
   build: {
     outDir: '../server/public',
     emptyOutDir: true,
+    // Strip console.log in production (keep console.error/warn for debugging)
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        pure_funcs: ['console.log'],
+      },
+    },
   },
 });

@@ -7,15 +7,16 @@ import {
 import { useSearchParams } from 'react-router-dom';
 import QRReturnScanner from '../components/issuances/QRReturnScanner';
 import PDFPreviewModal from '../components/issuances/PDFPreviewModal';
+import BulkIssuanceWizard from '../components/issuances/BulkIssuanceWizard';
 
 /* ─── Types ─── */
 interface AssetOption { id: string; name: string; serialNumber: string | null; propertyNumber: string | null; type: string; manufacturer: string | null }
-interface PersonnelOption { id: string; fullName: string; position: string | null; project: string | null; department: string | null }
+interface PersonnelOption { id: string; fullName: string; position: string | null; project: string | null; department: string | null; designation: string | null; designationLookup: { name: string } | null }
 interface Issuance {
   id: string; assetId: string; personnelId: string | null; assignedTo: string | null; assignedAt: string; returnedAt: string | null;
-  condition: string | null; notes: string | null;
+  condition: string | null; notes: string | null; agreementId: string | null;
   asset: { id: string; name: string; serialNumber: string | null; propertyNumber: string | null; status: string } | null;
-  personnel: { id: string; fullName: string; position: string | null; project: string | null; department: string | null } | null;
+  personnel: { id: string; fullName: string; position: string | null; project: string | null; department: string | null; designation: string | null; designationLookup: { name: string } | null } | null;
 }
 interface TemplateOption { id: string; name: string; content: string; headerLogo: string | null; isDefault: boolean; defaultPropertyOfficer?: string | null; defaultAuthorizedRep?: string | null }
 
@@ -476,6 +477,7 @@ export default function IssuancesPage() {
   const [showWizard, setShowWizard] = useState(false);
   const [showReturn, setShowReturn] = useState(false);
   const [showQRReturn, setShowQRReturn] = useState(false);
+  const [showBulkWizard, setShowBulkWizard] = useState(false);
 
   const fetchIssuances = async () => {
     setLoading(true);
@@ -497,9 +499,13 @@ export default function IssuancesPage() {
   const returnedCount = issuances.filter(i => i.returnedAt).length;
 
   const [pdfPreview, setPdfPreview] = useState<{ blobUrl: string | null; loading: boolean; filename: string }>({ blobUrl: null, loading: false, filename: 'agreement.pdf' });
+  const [pdfPersonnelId, setPdfPersonnelId] = useState<string | undefined>(undefined);
+  const [pdfPersonnelName, setPdfPersonnelName] = useState<string | undefined>(undefined);
 
   const openAgreementPreview = useCallback(async (params: Record<string, any>) => {
     setPdfPreview({ blobUrl: null, loading: true, filename: 'agreement.pdf' });
+    setPdfPersonnelId(params.personnelId || undefined);
+    setPdfPersonnelName(params.personnelName || undefined);
     try {
       const token = localStorage.getItem('accessToken');
       let res = await fetch('/api/agreements/pdf', {
@@ -555,29 +561,52 @@ export default function IssuancesPage() {
 
   const closePdfPreview = useCallback(() => {
     setPdfPreview({ blobUrl: null, loading: false, filename: 'agreement.pdf' });
+    setPdfPersonnelId(undefined);
+    setPdfPersonnelName(undefined);
   }, []);
 
   return (
     <div className="min-h-screen bg-white">
-      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <FileSignature className="h-6 w-6 text-[#f8931f]" />
-            <h1 className="text-lg font-bold text-white tracking-tight">Issuances</h1>
-            <div className="hidden sm:flex items-center gap-2 ml-3">
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#f8931f] text-white">{activeCount} Active</span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-300">{returnedCount} Returned</span>
+      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-6 text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none"></div>
+        <div className="relative flex items-center justify-between gap-6">
+          <div className="flex flex-col gap-1">
+            <nav className="flex items-center gap-1.5 mb-1">
+              <span className="text-[10px] text-[#f8931f] font-bold uppercase tracking-wide">Accountability</span>
+              <span className="text-[10px] text-white/60">/</span>
+              <span className="text-[10px] text-white font-bold uppercase tracking-wide">Issuances</span>
+            </nav>
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-3">
+              <FileSignature className="h-6 w-6 text-[#f8931f]" />
+              Issuances
+            </h1>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#f8931f] text-white flex items-center gap-1">
+                <ArrowRightLeft className="w-3 h-3" />
+                {activeCount} Active
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-500/30 text-slate-200 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" />
+                {returnedCount} Returned
+              </span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
             <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
               <button onClick={() => setShowQRReturn(true)}
                 className="inline-flex items-center gap-1.5 rounded-lg border-2 border-white/20 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 transition-colors">
-                <QrCode className="w-3.5 h-3.5" /> QR Return
+                <QrCode className="w-3.5 h-3.5" />
+                QR Return
+              </button>
+              <button onClick={() => setShowBulkWizard(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border-2 border-white/20 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 transition-colors">
+                <Package className="w-3.5 h-3.5" />
+                Bulk Issuance
               </button>
               <button onClick={() => setShowWizard(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e07e0a] transition-colors">
-                <PlusCircle className="w-3.5 h-3.5" /> New Issuance
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e07e0a] transition-colors shadow-md hover:shadow-lg">
+                <PlusCircle className="w-3.5 h-3.5" />
+                New Issuance
               </button>
             </RoleGate>
           </div>
@@ -593,16 +622,16 @@ export default function IssuancesPage() {
       )}
 
       {/* Filter Bar */}
-      <div className="bg-slate-50 px-6 py-3 border-b border-slate-200">
+      <div className="bg-white/95 backdrop-blur-md px-6 py-4 border-b border-slate-200">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative max-w-md flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search asset, serial, personnel..."
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent shadow-sm" />
           </div>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent">
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent shadow-sm">
             <option value="all">All</option>
             <option value="active">Active</option>
             <option value="returned">Returned</option>
@@ -612,86 +641,110 @@ export default function IssuancesPage() {
 
       {/* Issuance Table */}
       <div className="px-6 py-4">
-        <table className="w-full">
-          <thead>
-            <tr style={{ backgroundColor: '#e8ecf4' }}>
-              <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Asset</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Serial #</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Issued To</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Date</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Status</th>
-              <th className="text-right px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400 text-sm"><Loader2 className="w-5 h-5 animate-spin inline mr-2" />Loading...</td></tr>
-            ) : issuances.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400 text-sm"><FileSignature className="w-8 h-8 mx-auto mb-2 opacity-40" />No issuances found</td></tr>
-            ) : issuances.map(iss => (
-              <tr key={iss.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                <td className="px-3 py-3">
-                  <span className="text-sm font-semibold" style={{ color: '#012061' }}>{iss.asset?.name || '—'}</span>
-                </td>
-                <td className="px-3 py-3"><span className="text-xs font-mono text-slate-600">{iss.asset?.serialNumber || '—'}</span></td>
-                <td className="px-3 py-3">
-                  <div>
-                    <span className="text-sm font-medium text-slate-700">{iss.personnel?.fullName || iss.assignedTo || '—'}</span>
-                    {iss.personnel?.department && <p className="text-[10px] text-slate-400">{iss.personnel.department}</p>}
-                  </div>
-                </td>
-                <td className="px-3 py-3">
-                  <div className="text-xs text-slate-500">{new Date(iss.assignedAt).toLocaleDateString()}</div>
-                  <div className="text-[10px] text-slate-400">{new Date(iss.assignedAt).toLocaleTimeString()}</div>
-                </td>
-                <td className="px-3 py-3">
-                  {iss.returnedAt ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
-                      <CheckCircle2 className="w-3 h-3" /> RETURNED
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
-                      <ArrowRightLeft className="w-3 h-3" /> ACTIVE
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-3 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <button
-                      onClick={() => openAgreementPreview({
-                        personnelName: iss.personnel?.fullName || iss.assignedTo || 'Unknown',
-                        position: iss.personnel?.position || undefined,
-                        department: iss.personnel?.department || undefined,
-                        project: iss.personnel?.project || undefined,
-                        assetName: iss.asset?.name || 'Unknown',
-                        serialNumber: iss.asset?.serialNumber || undefined,
-                        propertyNumber: iss.asset?.propertyNumber || undefined,
-                        condition: iss.condition || undefined,
-                      })}
-                      className="inline-flex items-center gap-1 text-[10px] font-semibold rounded-lg border-2 border-[#012061] text-[#012061] px-2 py-1 hover:bg-[#012061] hover:text-white transition-colors"
-                      title="View Agreement PDF"
-                    >
-                      📄 Agreement
-                    </button>
-                    <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
-                      {!iss.returnedAt && (
-                        <button onClick={async () => {
-                          if (!confirm('Mark this asset as returned?')) return;
-                          try {
-                            await apiFetch(`/issuances/${iss.id}/return`, { method: 'POST', body: { condition: 'Good' } });
-                            fetchIssuances();
-                          } catch (e: any) { alert(e instanceof ApiError ? e.message : 'An unexpected error occurred'); }
-                        }} className="inline-flex items-center gap-1 text-[10px] font-semibold rounded-lg border-2 border-[#f8931f] text-[#f8931f] px-2 py-1 hover:bg-[#f8931f] hover:text-white transition-colors">
-                          <RotateCcw className="w-3 h-3" /> Return
-                        </button>
+        <div className="flex-1 overflow-auto">
+          {loading ? (
+            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 text-slate-400 animate-spin" /></div>
+          ) : issuances.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+              <FileSignature className="h-10 w-10 mb-3 text-slate-300" />
+              <p className="text-sm">No issuances found</p>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-900 border-b sticky top-
+0 z-10">
+                <tr className="text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                  <th className="px-6 py-3">Asset Details</th>
+                  <th className="px-6 py-3">Assigned Personnel</th>
+                  <th className="px-6 py-3">Issuance Date</th>
+                  <th className="px-6 py-3">Return Status</th>
+                  <th className="px-6 py-3 w-12 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {issuances.map(iss => (
+                  <tr key={iss.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all group">
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <p className="font-bold text-sm" style={{ color: '#012061' }}>{iss.asset?.name || '—'}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] font-medium text-slate-400 uppercase tracking-tight">S/N:</span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400">{iss.asset?.serialNumber || '—'}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">{iss.personnel?.fullName || iss.assignedTo || '—'}</p>
+                        {iss.personnel && (
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 italic">
+                            {iss.personnel.designationLookup?.name || iss.personnel.designation || 'No designation'}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-xs font-medium text-slate-600 dark:text-slate-400">
+                      {new Date(iss.assignedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                    </td>
+                    <td className="px-6 py-4">
+                      {iss.returnedAt ? (
+                        <div className="flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                            Returned {new Date(iss.returnedAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Active</span>
+                        </div>
                       )}
-                    </RoleGate>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {!iss.returnedAt && (
+                          <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await apiFetch(`/issuances/${iss.id}/return`, { method: 'POST', body: { condition: 'Good' } });
+                                  fetchIssuances();
+                                } catch (e: any) { alert(e instanceof ApiError ? e.message : 'Return failed'); }
+                              }}
+                              className="p-2 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all group-hover:shadow-sm"
+                              title="Return Asset"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                            </button>
+                          </RoleGate>
+                        )}
+                        <button
+                          onClick={() => openAgreementPreview({
+                            personnelName: iss.personnel?.fullName,
+                            position: iss.personnel?.position || undefined,
+                            department: iss.personnel?.department || undefined,
+                            project: iss.personnel?.project || undefined,
+                            assetName: iss.asset?.name,
+                            serialNumber: iss.asset?.serialNumber || undefined,
+                            propertyNumber: iss.asset?.propertyNumber || undefined,
+                            condition: iss.condition,
+                            templateId: iss.agreementId || undefined,
+                            personnelId: iss.personnelId || undefined,
+                          })}
+                          className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#012061] dark:hover:text-white transition-all group-hover:shadow-sm"
+                          title="View Agreement"
+                        >
+                          <FileText className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
       {/* Pagination */}
@@ -705,7 +758,8 @@ export default function IssuancesPage() {
       {showWizard && <NewIssuanceWizard onClose={() => setShowWizard(false)} onSave={fetchIssuances} onPreviewPdf={openAgreementPreview} />}
       <ReturnStationModal open={showReturn} onClose={() => setShowReturn(false)} onSave={fetchIssuances} />
       <QRReturnScanner open={showQRReturn} onClose={() => setShowQRReturn(false)} onReturned={fetchIssuances} />
-      <PDFPreviewModal open={!!(pdfPreview.blobUrl || pdfPreview.loading)} onClose={closePdfPreview} blobUrl={pdfPreview.blobUrl} loading={pdfPreview.loading} downloadFilename={pdfPreview.filename} />
+      {showBulkWizard && <BulkIssuanceWizard onClose={() => setShowBulkWizard(false)} onSave={fetchIssuances} onPreviewPdf={openAgreementPreview} />}
+      <PDFPreviewModal open={!!(pdfPreview.blobUrl || pdfPreview.loading)} onClose={closePdfPreview} blobUrl={pdfPreview.blobUrl} loading={pdfPreview.loading} downloadFilename={pdfPreview.filename} personnelId={pdfPersonnelId} personnelName={pdfPersonnelName} />
     </div>
   );
 }

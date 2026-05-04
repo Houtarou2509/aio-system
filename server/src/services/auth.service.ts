@@ -1,10 +1,10 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import bcrypt from 'bcryptjs';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import speakeasy from 'speakeasy';
 import crypto from 'crypto';
 
-const prisma = new PrismaClient();
+
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '15m';

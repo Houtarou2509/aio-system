@@ -1,9 +1,10 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import path from 'path';
 import fs from 'fs';
 import { classifySeverity, generateSummary } from '../utils/auditHelpers';
 
-const prisma = new PrismaClient();
+
 const UPLOAD_DIR = path.resolve(__dirname, '../../uploads');
 
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -13,6 +14,8 @@ export async function listAssets(query: {
   page: number; limit: number;
   type?: string; status?: string; location?: string; assignedTo?: string; search?: string;
   sortBy: string; sortOrder: string;
+  purchaseDateFrom?: string; purchaseDateTo?: string;
+  warrantyExpiryFrom?: string; warrantyExpiryTo?: string;
 }) {
   const where: Prisma.AssetWhereInput = { deletedAt: null };
   if (query.type) {
@@ -21,6 +24,21 @@ export async function listAssets(query: {
   if (query.status) where.status = query.status as any;
   if (query.location) where.location = { contains: query.location, mode: 'insensitive' };
   if (query.assignedTo) where.assignedTo = { contains: query.assignedTo };
+
+  // Date filters
+  if (query.purchaseDateFrom || query.purchaseDateTo) {
+    where.purchaseDate = {
+      ...(query.purchaseDateFrom ? { gte: new Date(query.purchaseDateFrom) } : {}),
+      ...(query.purchaseDateTo ? { lte: new Date(query.purchaseDateTo) } : {}),
+    };
+  }
+  if (query.warrantyExpiryFrom || query.warrantyExpiryTo) {
+    where.warrantyExpiry = {
+      ...(query.warrantyExpiryFrom ? { gte: new Date(query.warrantyExpiryFrom) } : {}),
+      ...(query.warrantyExpiryTo ? { lte: new Date(query.warrantyExpiryTo) } : {}),
+    };
+  }
+
   if (query.search) {
     // Check if search looks like a date (YYYY-MM-DD or YYYY)
     const isDateSearch = /^\d{4}-\d{2}-\d{2}$/.test(query.search);

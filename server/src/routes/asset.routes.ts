@@ -5,8 +5,8 @@ import fs from 'fs/promises';
 import sharp from 'sharp';
 import { parse as parseCsv } from 'csv-parse/sync';
 import * as assetService from '../services/asset.service';
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma';
+
 import { authenticate, authorize } from '../middleware/auth';
 import { success, error } from '../utils/response';
 
@@ -21,6 +21,9 @@ import {
   historyQuerySchema,
   bulkStatusSchema,
   bulkDeleteSchema,
+  bulkAssignSchema,
+  bulkReturnSchema,
+  bulkUpdateSchema,
 } from './asset.schema';
 
 const router = Router();
@@ -280,6 +283,148 @@ router.delete('/bulk-delete', authorize(['ADMIN']), async (req: Request, res: Re
     });
 
     return success(res, { deleted: result.count }, 200);
+  } catch (err: any) {
+    return error(res, err.message, 500);
+  }
+});
+
+// POST /api/assets/bulk-assign — assign multiple assets to one person
+router.post('/bulk-assign', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const parsed = bulkAssignSchema.safeParse(req.body);
+    if (!parsed.success) return error(res, parsed.error.message, 400);
+
+    const { assetIds, personnelId, notes } = parsed.data;
+    const results = [];
+    const errors = [];
+
+    // Verify personnel
+    const personnel = await prisma.personnel.findUnique({ where: { id: personnelId } });
+    if (!personnel) return error(res, 'Personnel not found', 404);
+    if (personnel.status !== 'active') return error(res, 'Personnel is not active', 400);
+
+    for (const assetId of assetIds) {
+      try {
+        const asset = await prisma.asset.findUnique({ where: { id: assetId } });
+        if (!asset) { errors.push({ assetId, reason: 'Asset not found' }); continue; }
+        if (asset.status !== 'AVAILABLE') { errors.push({ assetId, reason: 'Asset not available' }); continue; }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.assignment.create({
+            data: {
+              assetId,
+              personnelId,
+              assignedTo: personnel.fullName,
+              condition: 'Good',
+              notes: notes || null,
+            },
+          });
+          await tx.asset.update({ where: { id: assetId }, data: { status: 'ASSIGNED' } });
+        });
+        results.push({ assetId, status: 'ASSIGNED' });
+      } catch (e: any) {
+        errors.push({ assetId, reason: e.message || 'Unknown error' });
+      }
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        entityType: 'Asset',
+        entityId: 'bulk',
+        action: 'BULK_ASSIGN',
+        field: '*',
+        newValue: `Bulk assigned ${results.length} assets to ${personnel.fullName}`,
+        performedById: req.user!.id,
+        ipAddress: getClientIp(req),
+      },
+    });
+
+    return success(res, { assigned: results.length, errors }, 200);
+  } catch (err: any) {
+    return error(res, err.message, 500);
+  }
+});
+
+// POST /api/assets/bulk-return — return multiple assets at once
+router.post('/bulk-return', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const parsed = bulkReturnSchema.safeParse(req.body);
+    if (!parsed.success) return error(res, parsed.error.message, 400);
+
+    const { issuanceIds, condition } = parsed.data;
+    const results = [];
+    const errors = [];
+
+    for (const issuanceId of issuanceIds) {
+      try {
+        const assignment = await prisma.assignment.findUnique({ where: { id: issuanceId } });
+        if (!assignment) { errors.push({ issuanceId, reason: 'Issuance not found' }); continue; }
+        if (assignment.returnedAt) { errors.push({ issuanceId, reason: 'Already returned' }); continue; }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.assignment.update({
+            where: { id: issuanceId },
+            data: { returnedAt: new Date(), condition: condition || assignment.condition },
+          });
+          await tx.asset.update({ where: { id: assignment.assetId }, data: { status: 'AVAILABLE' } });
+        });
+        results.push({ issuanceId, status: 'RETURNED' });
+      } catch (e: any) {
+        errors.push({ issuanceId, reason: e.message || 'Unknown error' });
+      }
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        entityType: 'Asset',
+        entityId: 'bulk',
+        action: 'BULK_RETURN',
+        field: '*',
+        newValue: `Bulk returned ${results.length} assets`,
+        performedById: req.user!.id,
+        ipAddress: getClientIp(req),
+      },
+    });
+
+    return success(res, { returned: results.length, errors }, 200);
+  } catch (err: any) {
+    return error(res, err.message, 500);
+  }
+});
+
+// POST /api/assets/bulk-update — update location/status for multiple assets
+router.post('/bulk-update', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const parsed = bulkUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return error(res, parsed.error.message, 400);
+
+    const { assetIds, location, status } = parsed.data;
+    const updateData: any = {};
+    if (location) updateData.location = location;
+    if (status) updateData.status = status;
+
+    const result = await prisma.asset.updateMany({
+      where: { id: { in: assetIds }, deletedAt: null },
+      data: updateData,
+    });
+
+    const changed = [];
+    if (location) changed.push(`location → ${location}`);
+    if (status) changed.push(`status → ${status}`);
+
+    await prisma.auditLog.create({
+      data: {
+        entityType: 'Asset',
+        entityId: 'bulk',
+        action: 'BULK_UPDATE',
+        field: '*',
+        newValue: `Bulk updated ${result.count} assets: ${changed.join(', ')}`,
+        performedById: req.user!.id,
+        ipAddress: getClientIp(req),
+      },
+    });
+
+    return success(res, { updated: result.count }, 200);
   } catch (err: any) {
     return error(res, err.message, 500);
   }

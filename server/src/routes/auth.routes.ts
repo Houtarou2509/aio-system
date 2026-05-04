@@ -34,7 +34,14 @@ router.post('/login', loginLimiter, validate(loginSchema), async (req: Request, 
 });
 
 // POST /api/auth/refresh
-router.post('/refresh', validate(refreshSchema), async (req: Request, res: Response) => {
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: { success: false, data: null, error: { message: 'Too many refresh attempts, try again later' }, meta: null },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+router.post('/refresh', refreshLimiter, validate(refreshSchema), async (req: Request, res: Response) => {
   try {
     const { refreshToken } = req.body;
     const result = await authService.refreshToken(refreshToken);

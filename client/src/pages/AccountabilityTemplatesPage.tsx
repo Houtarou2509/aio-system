@@ -41,6 +41,8 @@ const SAMPLE_DATA: Record<string, string> = {
   '{{personnelName}}': 'Juan Dela Cruz',
   '{{designation}}': 'Software Engineer',
   '{{designationComma}}': ', Software Engineer',
+  '{{institution}}': 'DOST',
+  '{{institutionText}}': ' of DOST',
   '{{project}}': 'AIO System',
   '{{projectText}}': ' (AIO System)',
   '{{assetName}}': 'Dell Latitude 5540',
@@ -310,7 +312,7 @@ export default function AccountabilityTemplatesPage() {
   /* ─── RENDER ─── */
 
   return (
-    <div className="h-full flex flex-col bg-slate-50">
+    <div className="h-full flex flex-col bg-light-bg dark:bg-slate-900">
       {/* Page header — consistent with Accountability section */}
       <header className="shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-4">
@@ -339,9 +341,9 @@ export default function AccountabilityTemplatesPage() {
         {/* ══════════════════════════════════════
             LEFT PANEL — Template list
             ══════════════════════════════════════ */}
-        <div className="w-80 border-r border-slate-200 bg-white flex flex-col shrink-0">
+        <div className="w-80 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex flex-col shrink-0">
           {/* Add new button */}
-          <div className="p-3 border-b border-slate-100">
+          <div className="p-3 border-b border-slate-100 dark:border-slate-700">
             <button
               onClick={startNew}
               className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-md text-sm font-semibold bg-[#f8931f] text-white hover:bg-[#e68410] transition-colors"
@@ -360,7 +362,7 @@ export default function AccountabilityTemplatesPage() {
             ) : templates.length === 0 && !isNew ? (
               <div className="px-4 py-12 text-center">
                 <FileText className="h-8 w-8 text-slate-300 mx-auto mb-3" />
-                <p className="text-sm text-slate-500">No templates yet</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">No templates yet</p>
                 <p className="text-xs text-slate-400 mt-1">Create your first agreement template</p>
               </div>
             ) : (
@@ -388,17 +390,17 @@ export default function AccountabilityTemplatesPage() {
                       onClick={() => selectTemplate(t)}
                       className={`group mx-2 mb-0.5 rounded-md cursor-pointer transition-all ${
                         isSelected
-                          ? 'bg-[#012061]/10 border-l-2 border-l-[#f8931f]'
-                          : 'hover:bg-slate-50 border-l-2 border-l-transparent'
+                          ? 'bg-[#012061]/10 dark:bg-slate-700/50 border-l-2 border-l-[#f8931f]'
+                          : 'hover:bg-slate-50 dark:hover:bg-slate-700 border-l-2 border-l-transparent'
                       }`}
                     >
                       <div className="px-3 py-3 flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <FileText className={`h-3.5 w-3.5 shrink-0 ${isSelected ? 'text-[#012061]' : 'text-slate-400'}`} />
+                            <FileText className={`h-3.5 w-3.5 shrink-0 ${isSelected ? 'text-[#012061] dark:text-slate-100' : 'text-slate-400'}`} />
                             <span
                               className={`text-sm font-medium truncate block ${
-                                isSelected ? 'text-[#012061]' : 'text-slate-700'
+                                isSelected ? 'text-[#012061] dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'
                               }`}
                             >
                               {t.name}
@@ -451,7 +453,7 @@ export default function AccountabilityTemplatesPage() {
             <div className="max-w-3xl mx-auto px-6 py-6 space-y-6">
               {/* Name */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                   Template Name
                 </label>
                 <input
@@ -459,7 +461,7 @@ export default function AccountabilityTemplatesPage() {
                   value={editName}
                   onChange={e => setEditName(e.target.value)}
                   placeholder="e.g., Smart Campus Standard"
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow"
                 />
               </div>
 
@@ -469,10 +471,10 @@ export default function AccountabilityTemplatesPage() {
                   type="checkbox"
                   checked={editIsDefault}
                   onChange={e => setEditIsDefault(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-[#f8931f] focus:ring-[#f8931f]"
+                  className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-[#f8931f] focus:ring-[#f8931f]"
                 />
                 <div>
-                  <span className="text-sm font-medium text-slate-700">Set as Default Template</span>
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Set as Default Template</span>
                   <p className="text-xs text-slate-400 mt-0.5">Used when no specific template is chosen during issuance</p>
                 </div>
                 {editIsDefault ? (
@@ -484,7 +486,7 @@ export default function AccountabilityTemplatesPage() {
 
               {/* Document Title */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                   Document Title
                 </label>
                 <input
@@ -492,13 +494,13 @@ export default function AccountabilityTemplatesPage() {
                   value={editTitle}
                   onChange={e => setEditTitle(e.target.value)}
                   placeholder="e.g., ISSUANCE &amp; ACCOUNTABILITY AGREEMENT"
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow"
                 />
               </div>
 
               {/* Logo Upload */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                   Header Logo
                 </label>
                 <div className="flex items-start gap-4">
@@ -508,11 +510,11 @@ export default function AccountabilityTemplatesPage() {
                         <img
                           src={editLogoPreview}
                           alt="Logo preview"
-                          className="h-16 w-auto max-w-[120px] object-contain rounded-md border border-slate-200 bg-white p-1"
+                          className="h-16 w-auto max-w-[120px] object-contain rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-1"
                         />
                         <button
                           onClick={clearLogo}
-                          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-50 dark:bg-red-9500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -520,7 +522,7 @@ export default function AccountabilityTemplatesPage() {
                     ) : (
                       <div
                         onClick={() => fileInputRef.current?.click()}
-                        className="h-16 w-[120px] border-2 border-dashed border-slate-300 rounded-md flex flex-col items-center justify-center cursor-pointer hover:border-[#f8931f] hover:bg-orange-50 transition-colors"
+                        className="h-16 w-[120px] border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-md flex flex-col items-center justify-center cursor-pointer hover:border-[#f8931f] hover:bg-orange-50 transition-colors"
                       >
                         <ImageIcon className="h-5 w-5 text-slate-400" />
                         <span className="text-[10px] text-slate-400 mt-0.5">Upload logo</span>
@@ -541,7 +543,7 @@ export default function AccountabilityTemplatesPage() {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-[#012061] hover:text-[#f8931f] transition-colors"
+                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-[#012061] dark:text-slate-100 hover:text-[#f8931f] transition-colors"
                     >
                       <Upload className="h-3 w-3" />
                       {editLogoPreview ? 'Change logo' : 'Choose file'}
@@ -552,7 +554,7 @@ export default function AccountabilityTemplatesPage() {
 
               {/* Letter Content */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                   Letter Body
                 </label>
                 <div className="relative">
@@ -561,14 +563,14 @@ export default function AccountabilityTemplatesPage() {
                     onChange={e => setEditContent(e.target.value)}
                     placeholder={`Dear {{fullName}}{{designationComma}},\n\nThis letter serves as confirmation that you have been issued the following asset...\n\nAsset: {{assetName}}\nSerial Number: {{serialNumber}}\nProperty Number: {{propertyNumber}}\nCondition: {{condition}}\n\nIssued on: {{date}}\n\nSignature: _______________`}
                     rows={16}
-                    className="w-full px-4 py-3 text-sm font-mono border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow resize-y leading-relaxed"
+                    className="w-full px-4 py-3 text-sm font-mono border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow resize-y leading-relaxed"
                   />
                 </div>
               </div>
 
               {/* Default Signatories */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                   Default Signatories
                 </label>
                 <p className="text-xs text-slate-400 mb-3">
@@ -576,23 +578,23 @@ export default function AccountabilityTemplatesPage() {
                 </p>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-medium text-slate-600 mb-1">Property Officer</label>
+                    <label className="block text-[10px] font-medium text-slate-600 dark:text-slate-400 mb-1">Property Officer</label>
                     <input
                       type="text"
                       value={editPropertyOfficer}
                       onChange={e => setEditPropertyOfficer(e.target.value)}
                       placeholder="e.g., Juan Dela Cruz"
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow"
+                      className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-medium text-slate-600 mb-1">Authorized Representative</label>
+                    <label className="block text-[10px] font-medium text-slate-600 dark:text-slate-400 mb-1">Authorized Representative</label>
                     <input
                       type="text"
                       value={editAuthorizedRep}
                       onChange={e => setEditAuthorizedRep(e.target.value)}
                       placeholder="e.g., Maria Santos"
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow"
+                      className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow"
                     />
                   </div>
                 </div>
@@ -600,7 +602,7 @@ export default function AccountabilityTemplatesPage() {
 
               {/* Placeholder Legend */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                   Available Placeholders
                 </label>
                 <div className="grid grid-cols-2 gap-1.5">
@@ -608,12 +610,12 @@ export default function AccountabilityTemplatesPage() {
                     <button
                       key={ph.key}
                       onClick={() => copyPlaceholder(ph.key)}
-                      className="group flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left hover:bg-[#012061]/5 transition-colors"
+                      className="group flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 dark:bg-slate-700/40 transition-colors"
                     >
-                      <code className="text-[11px] font-mono font-semibold text-[#012061] bg-[#012061]/8 px-1.5 py-0.5 rounded select-none">
+                      <code className="text-[11px] font-mono font-semibold text-[#012061] dark:text-slate-100 bg-[#012061]/8 px-1.5 py-0.5 rounded select-none">
                         {ph.key}
                       </code>
-                      <span className="text-[11px] text-slate-500 truncate flex-1">{ph.description}</span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate flex-1">{ph.description}</span>
                       {copiedKey === ph.key ? (
                         <Check className="h-3 w-3 text-green-500 shrink-0" />
                       ) : (
@@ -624,15 +626,15 @@ export default function AccountabilityTemplatesPage() {
                 </div>
                 <div className="mt-3 flex items-start gap-2 p-3 rounded-md bg-[#f8931f]/5 border border-[#f8931f]/20">
                   <Wand2 className="h-4 w-4 text-[#f8931f] shrink-0 mt-0.5" />
-                  <p className="text-xs text-slate-600">
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
                     Click any placeholder to copy it to your clipboard, then paste it into the letter body above.
-                    Use <code className="text-[11px] bg-slate-200 px-1 rounded">{'{{designationComma}}'}</code> to add a comma before the title when it exists (empty otherwise).
+                    Use <code className="text-[11px] bg-slate-200 dark:bg-slate-700 px-1 rounded">{'{{designationComma}}'}</code> to add a comma before the title when it exists (empty otherwise).
                   </p>
                 </div>
               </div>
 
               {/* Action buttons */}
-              <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+              <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 text-xs text-slate-400">
                   {isNew ? (
                     <span className="flex items-center gap-1.5">
@@ -658,7 +660,7 @@ export default function AccountabilityTemplatesPage() {
                         setEditIsDefault(false);
                       }
                     }}
-                    className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
+                    className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 transition-colors"
                   >
                     Reset
                   </button>
@@ -695,12 +697,12 @@ export default function AccountabilityTemplatesPage() {
           onClick={() => setShowPreview(false)}
         >
           <div
-            className="bg-white rounded-lg shadow-2xl flex flex-col max-h-[90vh] max-w-2xl w-full"
+            className="bg-white dark:bg-slate-800 rounded-lg shadow-2xl flex flex-col max-h-[90vh] max-w-2xl w-full"
             onClick={e => e.stopPropagation()}
           >
             {/* Modal header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
-              <h2 className="text-sm font-bold text-[#012061]">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-700">
+              <h2 className="text-sm font-bold text-[#012061] dark:text-slate-100">
                 {editName || 'Untitled'} — Preview
               </h2>
               <button
@@ -712,9 +714,9 @@ export default function AccountabilityTemplatesPage() {
             </div>
 
             {/* A4-paper preview */}
-            <div className="flex-1 overflow-auto p-6 bg-slate-200 flex justify-center">
+            <div className="flex-1 overflow-auto p-6 bg-slate-200 dark:bg-slate-700 flex justify-center">
               <div
-                className="bg-white shadow-md"
+                className="bg-white dark:bg-slate-800 shadow-md"
                 style={{
                   width: '210mm',
                   minHeight: '297mm',
@@ -741,7 +743,7 @@ export default function AccountabilityTemplatesPage() {
                     )}
                   </div>
                   <div className="flex-1 text-center">
-                    <span className="text-[9px] font-bold tracking-wider text-slate-700">{editTitle || 'ISSUANCE & ACCOUNTABILITY AGREEMENT'}</span>
+                    <span className="text-[9px] font-bold tracking-wider text-slate-700 dark:text-slate-300">{editTitle || 'ISSUANCE & ACCOUNTABILITY AGREEMENT'}</span>
                   </div>
                   <div className="flex-1" />
                 </div>
@@ -763,18 +765,18 @@ export default function AccountabilityTemplatesPage() {
                 <div className="mt-8 pt-4">
                   <div className="grid grid-cols-3 gap-6">
                     <div className="text-center">
-                      <div className="border-b border-slate-300 mb-1.5" />
-                      <p className="text-[10px] text-slate-600">Juan Dela Cruz</p>
+                      <div className="border-b border-slate-300 dark:border-slate-600 mb-1.5" />
+                      <p className="text-[10px] text-slate-600 dark:text-slate-400">Juan Dela Cruz</p>
                       <p className="text-[8px] text-slate-400 uppercase tracking-wider">Recipient</p>
                     </div>
                     <div className="text-center">
-                      <div className="border-b border-slate-300 mb-1.5" />
-                      <p className="text-[10px] text-slate-600">{editPropertyOfficer || '_________________'}</p>
+                      <div className="border-b border-slate-300 dark:border-slate-600 mb-1.5" />
+                      <p className="text-[10px] text-slate-600 dark:text-slate-400">{editPropertyOfficer || '_________________'}</p>
                       <p className="text-[8px] text-slate-400 uppercase tracking-wider">Property Officer</p>
                     </div>
                     <div className="text-center">
-                      <div className="border-b border-slate-300 mb-1.5" />
-                      <p className="text-[10px] text-slate-600">{editAuthorizedRep || '_________________'}</p>
+                      <div className="border-b border-slate-300 dark:border-slate-600 mb-1.5" />
+                      <p className="text-[10px] text-slate-600 dark:text-slate-400">{editAuthorizedRep || '_________________'}</p>
                       <p className="text-[8px] text-slate-400 uppercase tracking-wider">Authorized Rep.</p>
                     </div>
                   </div>

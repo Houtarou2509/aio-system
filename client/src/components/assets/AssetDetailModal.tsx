@@ -49,11 +49,11 @@ interface Props {
 
 /* ─── Status Badge Config ─── */
 const STATUS_CONFIG: Record<string, { className: string; label: string }> = {
-  AVAILABLE: { className: 'bg-[#012061]/5 text-[#012061] border-[#012061]/20', label: 'Available' },
-  ASSIGNED: { className: 'bg-blue-50 text-blue-700 border-blue-200', label: 'Assigned' },
-  MAINTENANCE: { className: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Maintenance' },
-  RETIRED: { className: 'bg-slate-100 text-slate-600 border-slate-200', label: 'Retired' },
-  LOST: { className: 'bg-red-50 text-red-700 border-red-200', label: 'Lost' },
+  AVAILABLE: { className: 'bg-[#012061]/5 dark:bg-slate-700/40 text-[#012061] dark:text-slate-100 border-[#012061]/20', label: 'Available' },
+  ASSIGNED: { className: 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-200 border-blue-200', label: 'Assigned' },
+  MAINTENANCE: { className: 'bg-amber-50 dark:bg-amber-950 text-amber-700 border-amber-200', label: 'Maintenance' },
+  RETIRED: { className: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700', label: 'Retired' },
+  LOST: { className: 'bg-red-50 dark:bg-red-950 text-red-700 border-red-200', label: 'Lost' },
 };
 
 /* ─── Info Card ─── */
@@ -67,12 +67,12 @@ function InfoCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-xs">
+    <div className="rounded-xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-xs">
       <div className="flex items-center gap-2 mb-3">
         <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-[#f8931f]/10 text-[#f8931f]">
           <Icon className="w-3.5 h-3.5" />
         </div>
-        <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">{title}</h3>
+        <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">{title}</h3>
       </div>
       <div className="space-y-2 text-sm">{children}</div>
     </div>
@@ -83,8 +83,8 @@ function InfoCard({
 function InfoRow({ label, value, highlight }: { label: string; value: React.ReactNode; highlight?: boolean }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-slate-500 text-xs">{label}</span>
-      <span className={`text-xs font-medium text-right ${highlight ? 'text-[#f8931f]' : 'text-slate-900'}`}>{value}</span>
+      <span className="text-slate-500 dark:text-slate-400 text-xs">{label}</span>
+      <span className={`text-xs font-medium text-right ${highlight ? 'text-[#f8931f]' : 'text-slate-900 dark:text-slate-100'}`}>{value}</span>
     </div>
   );
 }
@@ -105,7 +105,7 @@ export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
       })
         .then(r => r.json())
         .then(d => { if (d.meta?.frequentRepair) setFrequentRepair(true); })
-        .catch(() => {});
+        .catch((e) => console.error('[AssetDetailModal] Failed to check frequent repair:', e));
     }
   }, [tab, asset.id]);
 
@@ -132,7 +132,7 @@ export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
                 </div>
                 <div>
                   <DialogTitle className="text-lg font-bold text-white">Asset Details</DialogTitle>
-                  <p className="text-xs text-white/60">{asset.name} · {asset.type}</p>
+                  <p className="text-xs text-slate-700 dark:text-white/60">{asset.name} · {asset.type}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -141,14 +141,14 @@ export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
                 </span>
                 <button
                   onClick={() => onEdit(asset)}
-                  className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20 transition-colors inline-flex items-center gap-1"
+                  className="rounded-lg border border-white/20 bg-white dark:bg-slate-800/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20 transition-colors inline-flex items-center gap-1"
                 >
                   <Pencil className="w-3 h-3" />
                   Edit
                 </button>
                 <button
                   onClick={onClose}
-                  className="rounded-lg border border-white/20 bg-white/10 p-1.5 text-white/60 hover:text-white hover:bg-white/20 transition-colors"
+                  className="rounded-lg border border-white/20 bg-white dark:bg-slate-800/10 p-1.5 text-slate-700 dark:text-white/60 hover:text-white hover:bg-white/20 transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -162,7 +162,7 @@ export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
             onValueChange={setTab}
             className="flex-1 flex flex-col min-h-0"
           >
-            <div className="px-6 pt-3 shrink-0 border-b border-slate-100">
+            <div className="px-6 pt-3 shrink-0 border-b border-slate-100 dark:border-slate-700">
               <TabsList variant="line" className="w-full justify-start gap-0">
                 {[
                   { value: 'overview', label: 'Overview', icon: Info },
@@ -193,7 +193,7 @@ export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
 
                     {/* ─── Premium Hero Image ─── */}
                     {hasImage ? (
-                      <div className="relative rounded-xl overflow-hidden border border-slate-100 bg-slate-50 group">
+                      <div className="relative rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 group">
                         <img
                           src={resolvedImgUrl}
                           alt={asset.name}
@@ -208,7 +208,7 @@ export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12">
+                      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 py-12">
                         <ImageIcon className="h-10 w-10 text-slate-300 mb-2" />
                         <p className="text-sm text-slate-400 font-medium">No Image Available</p>
                       </div>
@@ -236,9 +236,9 @@ export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
                       <InfoCard icon={Shield} title="Warranty">
                         {(!((asset as any).warrantyExpiry == null && !(asset as any).warrantyNotes)) ? (() => {
                           const w = getWarrantyStatus((asset as any).warrantyExpiry);
-                          const wBadge = w.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : w.status === 'expiring' ? 'bg-amber-50 text-amber-700 border-amber-200'
-                            : 'bg-red-50 text-red-700 border-red-200';
+                          const wBadge = w.status === 'active' ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border-emerald-200'
+                            : w.status === 'expiring' ? 'bg-amber-50 dark:bg-amber-950 text-amber-700 border-amber-200'
+                            : 'bg-red-50 dark:bg-red-950 text-red-700 border-red-200';
                           const wLabel = w.status === 'active' ? 'Active'
                             : w.status === 'expiring' ? 'Expiring Soon'
                             : 'Expired';
@@ -272,15 +272,15 @@ export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
                 {tab === 'history' && (
                   <div className="space-y-3">
                     {asset.assignedTo ? (
-                      <div className="flex items-center gap-3 rounded-xl border border-slate-100 p-4 bg-white shadow-xs">
+                      <div className="flex items-center gap-3 rounded-xl border border-slate-100 dark:border-slate-700 p-4 bg-white dark:bg-slate-800 shadow-xs">
                         <div className="flex items-center justify-center w-10 h-10 rounded-full bg-[#012061] text-white text-sm font-bold">
                           {asset.assignedTo[0].toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-[#012061]">{asset.assignedTo}</p>
-                          <p className="text-xs text-slate-500">Currently assigned · Since {new Date(asset.updatedAt).toLocaleDateString()}</p>
+                          <p className="text-sm font-semibold text-[#012061] dark:text-slate-100">{asset.assignedTo}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">Currently assigned · Since {new Date(asset.updatedAt).toLocaleDateString()}</p>
                         </div>
-                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#012061]/5 text-[#012061] border border-[#012061]/20">Active</span>
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#012061]/5 dark:bg-slate-700/40 text-[#012061] dark:text-slate-100 border border-[#012061]/20">Active</span>
                       </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center py-12 text-slate-400">

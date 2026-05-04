@@ -56,23 +56,23 @@ function ScheduleTile({
   return (
     <div className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
       isDone
-        ? 'border-slate-100 bg-slate-50/50 opacity-60'
+        ? 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 opacity-60'
         : isOverdue
-        ? 'border-red-100 bg-red-50/30 hover:border-red-200'
-        : 'border-slate-100 bg-white hover:border-slate-200 shadow-xs'
+        ? 'border-red-100 bg-red-50 dark:bg-red-950/30 hover:border-red-200'
+        : 'border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-200 shadow-xs'
     }`}>
       <div className={`flex items-center justify-center w-9 h-9 rounded-lg shrink-0 ${
         isDone
-          ? 'bg-emerald-50 text-emerald-600'
+          ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600'
           : isOverdue
-          ? 'bg-red-50 text-red-600'
-          : 'bg-blue-50 text-blue-600'
+          ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-200'
+          : 'bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-200'
       }`}>
         {isDone ? <CheckCircle2 className="w-4 h-4" /> : isOverdue ? <AlertCircle className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className={`text-sm font-medium truncate ${isDone ? 'line-through text-slate-500' : 'text-slate-900'}`}>{schedule.title}</p>
+          <p className={`text-sm font-medium truncate ${isDone ? 'line-through text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-slate-100'}`}>{schedule.title}</p>
           {schedule.frequency && schedule.frequency !== 'none' && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-medium shrink-0">
               {FREQ_LABELS[schedule.frequency] || '🔁'}
@@ -100,7 +100,7 @@ function ScheduleTile({
         {canDelete && !isDone && (
           <button
             onClick={() => onDelete(schedule.id)}
-            className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors"
+            className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 dark:bg-red-950 dark:hover:bg-red-950 transition-colors"
           >
             <Trash2 className="w-3 h-3" />
           </button>
@@ -225,18 +225,18 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
     <div className="space-y-4">
       {/* Frequent repair warning */}
       {frequentRepair && (
-        <div className="flex items-center gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50 text-xs text-amber-800">
+        <div className="flex items-center gap-2 p-3 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950 text-xs text-amber-800">
           <AlertCircle className="w-4 h-4 shrink-0" />
           Frequent repair flag: more than 3 maintenance events in the past 12 months
         </div>
       )}
 
       {/* ─── Upcoming Maintenance (Connectivity Matrix style) ─── */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-        <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xs overflow-hidden">
+        <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Wrench className="w-3.5 h-3.5 text-indigo-600" />
-            <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Upcoming Maintenance</h3>
+            <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Upcoming Maintenance</h3>
           </div>
           <button
             onClick={() => setIsScheduleModalOpen(true)}
@@ -266,10 +266,10 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
 
         {/* Completed schedules */}
         {completedSchedules.length > 0 && (
-          <div className="border-t border-slate-200">
+          <div className="border-t border-slate-200 dark:border-slate-700">
             <button
               onClick={() => setIsCompletedExpanded(!isCompletedExpanded)}
-              className="w-full flex items-center gap-2 px-4 py-2 text-xs text-slate-500 hover:bg-slate-50 transition-colors"
+              className="w-full flex items-center gap-2 px-4 py-2 text-xs text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
             >
               {isCompletedExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
               Completed ({completedSchedules.length})
@@ -297,11 +297,11 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
       />
 
       {/* ─── Maintenance Logs ─── */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-        <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xs overflow-hidden">
+        <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock className="w-3.5 h-3.5 text-indigo-600" />
-            <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Maintenance Logs</h3>
+            <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Maintenance Logs</h3>
           </div>
           <RoleGate roles={['ADMIN', 'STAFF_ADMIN', 'STAFF']}>
             <button
@@ -316,13 +316,13 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
 
         {/* Add form */}
         {showForm && (
-          <form onSubmit={handleCreate} className="p-3 border-b border-slate-200 space-y-2 bg-slate-50/50">
+          <form onSubmit={handleCreate} className="p-3 border-b border-slate-200 dark:border-slate-700 space-y-2 bg-slate-50 dark:bg-slate-900/50">
             <div className="grid grid-cols-2 gap-2">
-              <input placeholder="Technician name *" value={form.technicianName} onChange={e => setForm(f => ({ ...f, technicianName: e.target.value }))} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400" />
-              <input type="number" step="0.01" placeholder="Cost" value={form.cost} onChange={e => setForm(f => ({ ...f, cost: e.target.value }))} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400" />
+              <input placeholder="Technician name *" value={form.technicianName} onChange={e => setForm(f => ({ ...f, technicianName: e.target.value }))} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400" />
+              <input type="number" step="0.01" placeholder="Cost" value={form.cost} onChange={e => setForm(f => ({ ...f, cost: e.target.value }))} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400" />
             </div>
-            <textarea placeholder="Description *" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400" rows={2} />
-            <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400" />
+            <textarea placeholder="Description *" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400" rows={2} />
+            <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400" />
             {validationError && <p className="text-xs text-red-600">{validationError}</p>}
             <button type="submit" disabled={saving} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors">
               {saving ? 'Saving...' : 'Save'}
@@ -332,14 +332,14 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
 
         {/* Success message */}
         {successMsg && (
-          <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border-b border-emerald-100 text-xs text-emerald-700">
+          <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-950 border-b border-emerald-100 text-xs text-emerald-700">
             <CheckCircle2 className="w-3 h-3" />
             {successMsg}
           </div>
         )}
 
         {/* Log list */}
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-slate-100 dark:divide-slate-700">
           {loading ? (
             <div className="flex items-center justify-center py-8 text-sm text-slate-400">
               <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -352,16 +352,16 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
             </div>
           ) : (
             logs.map(l => (
-              <div key={l.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors">
-                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-slate-500 shrink-0">
+              <div key={l.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 shrink-0">
                   <Wrench className="w-3.5 h-3.5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900">{l.technicianName}</p>
-                  <p className="text-xs text-slate-500 truncate">{l.description}</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{l.technicianName}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{l.description}</p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-xs text-slate-500">{new Date(l.date).toLocaleDateString()}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(l.date).toLocaleDateString()}</p>
                   {Number(l.cost) > 0 && <p className="text-xs text-indigo-600 font-medium">₱{Number(l.cost).toLocaleString()}</p>}
                 </div>
                 <RoleGate roles={['ADMIN']}>

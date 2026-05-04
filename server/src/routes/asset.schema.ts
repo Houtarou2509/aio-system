@@ -38,6 +38,10 @@ export const listAssetsQuerySchema = z.object({
   search: z.string().optional(),
   sortBy: z.enum(['name', 'createdAt', 'purchasePrice', 'type', 'status', 'purchaseDate', 'propertyNumber']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
+  purchaseDateFrom: z.string().optional(),
+  purchaseDateTo: z.string().optional(),
+  warrantyExpiryFrom: z.string().optional(),
+  warrantyExpiryTo: z.string().optional(),
 });
 
 export const bulkStatusSchema = z.object({
@@ -52,4 +56,23 @@ export const bulkDeleteSchema = z.object({
 export const historyQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
+});
+
+export const bulkAssignSchema = z.object({
+  assetIds: z.array(z.string().uuid()).min(1).max(50),
+  personnelId: z.string().uuid(),
+  notes: z.string().optional(),
+});
+
+export const bulkReturnSchema = z.object({
+  issuanceIds: z.array(z.string().uuid()).min(1).max(50),
+  condition: z.string().min(1).default('Good'),
+});
+
+export const bulkUpdateSchema = z.object({
+  assetIds: z.array(z.string().uuid()).min(1).max(100),
+  location: z.string().optional(),
+  status: z.enum(['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST']).optional(),
+}).refine((data) => data.location || data.status, {
+  message: 'At least one of location or status is required',
 });

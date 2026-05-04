@@ -123,8 +123,8 @@ export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={handleClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onMouseDown={e => { if (e.target === e.currentTarget) handleClose(); }}>
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b" style={{ background: '#012061' }}>
           <div className="flex items-center gap-2">
@@ -140,7 +140,7 @@ export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
             <div className="text-center py-6">
               <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-emerald-500" />
               <h3 className="text-base font-bold text-emerald-700 mb-1">Asset Returned!</h3>
-              <p className="text-xs text-slate-500 mb-4">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
                 {issuance?.asset?.name} has been marked as returned from {issuance?.personnel?.fullName || '—'}
               </p>
               <button onClick={handleClose} className="px-4 py-2 rounded-lg text-xs font-semibold bg-[#012061] text-white hover:bg-[#001a4d]">
@@ -157,11 +157,11 @@ export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
                 <h3 className="text-sm font-bold" style={{ color: '#012061' }}>Confirm Return</h3>
               </div>
 
-              <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+              <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4 space-y-3">
                 <div className="flex items-center gap-3">
                   <Package className="w-5 h-5 text-[#f8931f]" />
                   <div>
-                    <p className="text-xs text-slate-500">Asset</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Asset</p>
                     <p className="text-sm font-semibold" style={{ color: '#012061' }}>{issuance.asset?.name}</p>
                     <p className="text-[10px] text-slate-400">S/N: {issuance.asset?.serialNumber || '—'} • P/N: {issuance.asset?.propertyNumber || '—'}</p>
                   </div>
@@ -169,7 +169,7 @@ export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
                 <div className="flex items-center gap-3">
                   <Users className="w-5 h-5 text-[#f8931f]" />
                   <div>
-                    <p className="text-xs text-slate-500">Currently Held By</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Currently Held By</p>
                     <p className="text-sm font-semibold" style={{ color: '#012061' }}>{issuance.personnel?.fullName || '—'}</p>
                     <p className="text-[10px] text-slate-400">{issuance.personnel?.position || ''} {issuance.personnel?.department ? `• ${issuance.personnel.department}` : ''}</p>
                   </div>
@@ -178,7 +178,7 @@ export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
               </div>
 
               <div className="flex gap-2">
-                <button onClick={handleClose} className="flex-1 py-2.5 rounded-lg text-xs font-semibold text-slate-600 border border-slate-200 hover:bg-slate-50">
+                <button onClick={handleClose} className="flex-1 py-2.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700">
                   Cancel
                 </button>
                 <button onClick={handleReturn} disabled={returning}
@@ -195,7 +195,7 @@ export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
             <div className="text-center py-6">
               <AlertCircle className="w-10 h-10 mx-auto mb-3 text-amber-500" />
               <h3 className="text-sm font-bold text-amber-700 mb-1">No Active Issuance</h3>
-              <p className="text-xs text-slate-500 mb-4">{notFound}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">{notFound}</p>
               <button onClick={() => { setNotFound(''); setScanning(false); }} className="px-4 py-2 rounded-lg text-xs font-semibold bg-[#012061] text-white hover:bg-[#001a4d]">
                 Scan Again
               </button>
@@ -207,16 +207,16 @@ export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
             <>
               <div
                 id="qr-return-reader"
-                className="w-full rounded-lg overflow-hidden bg-slate-100"
+                className="w-full rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800"
                 style={{ minHeight: scanning ? '250px' : '0' }}
               />
               {!scanning && !error && (
-                <p className="text-center text-sm text-slate-500 py-8">Starting camera...</p>
+                <p className="text-center text-sm text-slate-500 dark:text-slate-400 py-8">Starting camera...</p>
               )}
               {error && (
                 <div className="text-center py-8">
                   <p className="text-sm text-red-600 mb-3">{error}</p>
-                  <p className="text-xs text-slate-500">Make sure camera permissions are granted and you're using HTTPS or localhost.</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Make sure camera permissions are granted and you're using HTTPS or localhost.</p>
                 </div>
               )}
               {scanning && (

@@ -2,10 +2,10 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import archiver from 'archiver';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
-const prisma = new PrismaClient();
+
 const BACKUP_DIR = path.resolve(__dirname, '../../backups');
 const ENCRYPTION_KEY = process.env.BACKUP_ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
 

@@ -48,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearTokens = () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('cachedUser');
   };
 
   const login = useCallback(async (email: string, password: string, twoFactorToken?: string) => {
@@ -67,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     storeTokens(data.data.accessToken, data.data.refreshToken);
+    localStorage.setItem('cachedUser', JSON.stringify(data.data.user));
     setState({
       user: data.data.user,
       accessToken: data.data.accessToken,
@@ -103,12 +105,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setState(prev => ({ ...prev, isLoading: false }));
       return;
     }
+    // Skip refresh if access token still has time — decode JWT expiry
+    const at = localStorage.getItem('accessToken');
+    if (at) {
+      try {
+        const payload = JSON.parse(atob(at.split('.')[1]));
+        const expiryMs = (payload.exp || 0) * 1000;
+        // If token has more than 2 minutes left, skip refresh
+        if (expiryMs > Date.now() + 120_000) {
+          // Restore user from cache if available
+          const cached = localStorage.getItem('cachedUser');
+          if (cached) {
+            setState(prev => ({
+              ...prev,
+              accessToken: at,
+              isAuthenticated: true,
+              user: JSON.parse(cached),
+              isLoading: false,
+            }));
+            return;
+          }
+        }
+      } catch { /* ignore decode errors */ }
+    }
     try {
       const res = await fetch('/api/auth/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: rt }),
       });
+      // Rate limit — don't log out, just flag and retry next time
+      if (res.status === 429) {
+        setState(prev => ({ ...prev, isLoading: false }));
+        return;
+      }
       const data = await res.json();
       if (!data.success) {
         clearTokens();
@@ -121,6 +151,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       const meData = await meRes.json();
       if (meData.success) {
+        // Cache user for next page load
+        localStorage.setItem('cachedUser', JSON.stringify(meData.data));
         setState(prev => ({
           ...prev,
           accessToken: data.data.accessToken,

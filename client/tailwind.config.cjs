@@ -8,6 +8,7 @@ export default {
         'brand-blue': '#012061',
         'brand-orange': '#f8931f',
         'brand-red': '#7B1113',
+        'light-bg': '#DEDEDE',
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',

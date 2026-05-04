@@ -156,7 +156,7 @@ const KPI_CARDS: { key: keyof KpiData; label: string; icon: React.ElementType }[
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <div
-      className={`rounded-lg border border-slate-100 bg-white overflow-hidden ${className}`}
+      className={`rounded-lg border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden ${className}`}
       style={{ borderTop: '2px solid #012061' }}
     >
       {children}
@@ -169,7 +169,7 @@ function CardTitle({ icon: Icon, children }: { icon: React.ElementType; children
     <div className="px-4 pt-3 pb-2">
       <div className="flex items-center gap-2 mb-1">
         <Icon className="h-4 w-4 text-[#f8931f]" />
-        <h3 className="text-sm font-semibold text-[#012061]">{children}</h3>
+        <h3 className="text-sm font-semibold text-[#012061] dark:text-slate-100">{children}</h3>
       </div>
       <div className="h-[2px] w-8 rounded-full bg-[#f8931f]" />
     </div>
@@ -202,11 +202,11 @@ function KpiBar() {
     return (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 px-4 py-3 bg-white rounded-lg border border-slate-100 animate-pulse">
-            <div className="h-10 w-10 rounded-lg bg-slate-100" />
+          <div key={i} className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 animate-pulse">
+            <div className="h-10 w-10 rounded-lg bg-slate-100 dark:bg-slate-800" />
             <div className="space-y-1.5">
-              <div className="h-5 w-12 rounded bg-slate-100" />
-              <div className="h-2.5 w-16 rounded bg-slate-100" />
+              <div className="h-5 w-12 rounded bg-slate-100 dark:bg-slate-800" />
+              <div className="h-2.5 w-16 rounded bg-slate-100 dark:bg-slate-800" />
             </div>
           </div>
         ))}
@@ -217,13 +217,13 @@ function KpiBar() {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
       {KPI_CARDS.map(({ key, label, icon: Icon }) => (
-        <div key={key} className="flex items-center gap-3 px-4 py-3 bg-white rounded-lg border border-slate-100">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#012061]/5">
+        <div key={key} className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#012061]/5 dark:bg-slate-700/40">
             <Icon className="h-5 w-5 text-[#f8931f]" />
           </div>
           <div className="min-w-0">
             <p className="text-2xl font-bold leading-tight text-[#f8931f]">{data[key]}</p>
-            <p className="text-[10px] tracking-widest text-slate-500 uppercase">{label}</p>
+            <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">{label}</p>
           </div>
         </div>
       ))}
@@ -254,30 +254,30 @@ export default function DashboardPage() {
     fetch('/api/dashboard/stats', { headers: h })
       .then(r => r.json())
       .then(d => { if (d.success) setData(d.data); })
-      .catch(() => {})
+      .catch((e) => console.error('[Dashboard] Failed to load stats:', e))
       .finally(() => setLoading(false));
 
     fetch('/api/maintenance/upcoming', { headers: h })
       .then(r => r.json())
       .then(d => { if (d.success) setUpcomingMaintenance(d.data); })
-      .catch(() => {})
+      .catch((e) => console.error('[Dashboard] Failed to load upcoming maintenance:', e))
       .finally(() => setMaintenanceLoading(false));
 
     fetch('/api/dashboard/warranties-expiring', { headers: h })
       .then(r => r.json())
       .then(d => { if (d.success) setWarrantiesExpiring(d.data); })
-      .catch(() => {})
+      .catch((e) => console.error('[Dashboard] Failed to load warranties expiring:', e))
       .finally(() => setWarrantiesLoading(false));
 
     fetch('/api/dashboard/location-stats', { headers: h })
       .then(r => r.json())
       .then(d => { if (d.success) setLocationStats(d.data); })
-      .catch(() => {});
+      .catch((e) => console.error('[Dashboard] Failed to load location stats:', e));
 
     fetch('/api/dashboard/age-stats', { headers: h })
       .then(r => r.json())
       .then(d => { if (d.success) setAgeStats(d.data); })
-      .catch(() => {});
+      .catch((e) => console.error('[Dashboard] Failed to load age stats:', e));
   }, []);
 
   /* ── Chart data ───────────────────────────────────────── */
@@ -302,21 +302,21 @@ export default function DashboardPage() {
 
   const legendOpts = {
     position: 'bottom' as const,
-    labels: { boxWidth: 10, padding: 12, font: { size: 11 }, color: '#012061' },
+    labels: { boxWidth: 10, padding: 12, font: { size: 11 }, color: '#64748b' },
   };
 
   const hiddenScrollbarStyle = { height: 400, scrollbarWidth: 'none' as const };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* ── Header ─────────────────────────────────────────── */}
+      <div className="min-h-screen bg-light-bg dark:bg-slate-900">
+{/* ── Header ─────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <BarChart3 className="h-6 w-6 text-[#f8931f]" />
             <h1 className="text-lg font-bold text-white tracking-tight">AIO System Dashboard</h1>
           </div>
-          <span className="hidden sm:flex items-center gap-2 text-xs text-white/60 bg-white/10 rounded-lg px-3 py-2 tabular-nums">
+          <span className="hidden sm:flex items-center gap-2 text-xs text-slate-700 dark:text-white/60 bg-white dark:bg-slate-800/10 rounded-lg px-3 py-2 tabular-nums">
             <Activity className="w-3.5 h-3.5" />
             {now.toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
             {' · '}
@@ -333,22 +333,22 @@ export default function DashboardPage() {
       {/* ── Quick Actions ──────────────────────────────────── */}
       <section className="px-6 pt-3 pb-2">
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => navigate('/assets')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors">
+          <button onClick={() => navigate('/assets')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-colors">
             <Package className="h-3.5 w-3.5 text-[#f8931f]" /> View Assets
           </button>
-          <button onClick={() => navigate('/assets?action=scan')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors">
+          <button onClick={() => navigate('/assets?action=scan')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-colors">
             <ScanLine className="h-3.5 w-3.5 text-[#f8931f]" /> Scan QR
           </button>
           <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
-            <button onClick={() => navigate('/assets?action=create')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors">
+            <button onClick={() => navigate('/assets?action=create')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-colors">
               <Plus className="h-3.5 w-3.5 text-[#f8931f]" /> Add Asset
             </button>
           </RoleGate>
-          <button onClick={() => navigate('/audit')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors">
+          <button onClick={() => navigate('/audit')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-colors">
             <ClipboardList className="h-3.5 w-3.5 text-[#f8931f]" /> Audit Trail
           </button>
           <RoleGate roles={['ADMIN']}>
-            <button onClick={() => navigate('/settings')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors">
+            <button onClick={() => navigate('/settings')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-colors">
               <Settings className="h-3.5 w-3.5 text-[#f8931f]" /> Settings
             </button>
           </RoleGate>
@@ -358,7 +358,7 @@ export default function DashboardPage() {
       {/* ── Dashboard content ───────────────────────────────── */}
       <div className="px-6 pb-6">
         {loading || !data ? (
-          <p className="text-sm text-slate-500">Loading dashboard…</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Loading dashboard…</p>
         ) : (
           <div className="space-y-4">
 
@@ -387,8 +387,8 @@ export default function DashboardPage() {
                       maintainAspectRatio: false,
                       plugins: { legend: { display: false } },
                       scales: {
-                        y: { beginAtZero: true, ticks: { stepSize: 1, color: '#012061', font: { size: 10 } }, grid: { color: '#f1f5f9' } },
-                        x: { ticks: { color: '#012061', font: { size: 10 } }, grid: { display: false } },
+                        y: { beginAtZero: true, ticks: { stepSize: 1, color: '#64748b', font: { size: 10 } }, grid: { color: '#cbd5e1' } },
+                        x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { display: false } },
                       },
                     }}
                   />
@@ -401,38 +401,38 @@ export default function DashboardPage() {
                 <div className="flex-1 px-4 pb-3 overflow-y-auto max-h-52 space-y-0">
                   <div className="flex items-center gap-1.5 py-1">
                     <Wrench className="h-3 w-3 shrink-0 text-[#f8931f]" />
-                    <span className="text-[10px] tracking-widest text-slate-500 uppercase">Maintenance</span>
+                    <span className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Maintenance</span>
                   </div>
                   {maintenanceLoading && <p className="text-xs text-slate-400 pl-5">Loading…</p>}
                   {!maintenanceLoading && upcomingMaintenance.length === 0 && (
                     <p className="text-xs text-slate-400 italic pl-5">No upcoming</p>
                   )}
                   {!maintenanceLoading && upcomingMaintenance.slice(0, 3).map(s => (
-                    <div key={s.id} className="flex items-center justify-between py-1.5 pl-5 border-b border-slate-50 last:border-b-0">
-                      <span className="text-xs font-medium text-slate-700 truncate">{s.asset.name}</span>
+                    <div key={s.id} className="flex items-center justify-between py-1.5 pl-5 border-b border-slate-50 dark:border-slate-700 last:border-b-0">
+                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{s.asset.name}</span>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ml-2 ${
-                        s.status === 'overdue' ? 'bg-red-50 text-red-600' : 'bg-[#012061]/5 text-[#f8931f]'
+                        s.status === 'overdue' ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-200' : 'bg-[#012061]/5 dark:bg-slate-700/40 text-[#f8931f]'
                       }`}>
                         {s.status.toUpperCase()}
                       </span>
                     </div>
                   ))}
 
-                  <div className="border-t border-slate-100 my-1" />
+                  <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
 
                   <div className="flex items-center gap-1.5 py-1">
                     <ShieldAlert className="h-3 w-3 shrink-0 text-[#f8931f]" />
-                    <span className="text-[10px] tracking-widest text-slate-500 uppercase">Warranties</span>
+                    <span className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Warranties</span>
                   </div>
                   {warrantiesLoading && <p className="text-xs text-slate-400 pl-5">Loading…</p>}
                   {!warrantiesLoading && warrantiesExpiring.length === 0 && (
                     <p className="text-xs text-slate-400 italic pl-5">No expiring warranties</p>
                   )}
                   {!warrantiesLoading && warrantiesExpiring.slice(0, 3).map(a => (
-                    <div key={a.id} className="flex items-center justify-between py-1.5 pl-5 border-b border-slate-50 last:border-b-0">
-                      <span className="text-xs font-medium text-slate-700 truncate">{a.name}</span>
+                    <div key={a.id} className="flex items-center justify-between py-1.5 pl-5 border-b border-slate-50 dark:border-slate-700 last:border-b-0">
+                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{a.name}</span>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ml-2 ${
-                        a.warrantyStatus === 'expired' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
+                        a.warrantyStatus === 'expired' ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-200' : 'bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-200'
                       }`}>
                         {a.daysUntilExpiry < 0 ? `${Math.abs(a.daysUntilExpiry)}d overdue` : `${a.daysUntilExpiry}d left`}
                       </span>
@@ -461,8 +461,8 @@ export default function DashboardPage() {
                         maintainAspectRatio: false,
                         plugins: { legend: { display: false } },
                         scales: {
-                          x: { beginAtZero: true, ticks: { stepSize: 1, precision: 0, color: '#012061', font: { size: 10 } }, grid: { color: '#f1f5f9' } },
-                          y: { ticks: { color: '#012061', font: { size: 10 } }, grid: { display: false } },
+                          x: { beginAtZero: true, ticks: { stepSize: 1, precision: 0, color: '#64748b', font: { size: 10 } }, grid: { color: '#cbd5e1' } },
+                          y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { display: false } },
                         },
                       }}
                     />
@@ -496,21 +496,21 @@ export default function DashboardPage() {
                 <div className="flex-1 px-4 pb-3 overflow-y-auto" style={hiddenScrollbarStyle}>
                   {data.activityFeed.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#012061]/5 mb-2">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#012061]/5 dark:bg-slate-700/40 mb-2">
                         <Activity className="h-5 w-5 text-[#f8931f]" />
                       </div>
-                      <p className="text-sm font-medium text-[#012061]">All Quiet</p>
+                      <p className="text-sm font-medium text-[#012061] dark:text-slate-100">All Quiet</p>
                       <p className="text-[10px] text-slate-400 mt-0.5">No recent activity to show</p>
                     </div>
                   ) : (
-                    <div className="divide-y divide-slate-100">
+                    <div className="divide-y divide-slate-100 dark:divide-slate-700">
                       {data.activityFeed.map((item, i) => {
                         const initials = extractInitials(cleanActivityText(item));
                         const actionType = extractActionType(cleanActivityText(item));
                         return (
                           <div
                             key={i}
-                            className="flex items-center gap-3 py-2.5 hover:bg-slate-50 transition-colors cursor-default"
+                            className="flex items-center gap-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-default"
                             style={{ borderLeft: '2px solid transparent' }}
                             onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderLeftColor = '#f8931f'; }}
                             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderLeftColor = 'transparent'; }}
@@ -519,7 +519,7 @@ export default function DashboardPage() {
                               {initials}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-xs text-[#012061] font-medium truncate">{truncateFeed(cleanActivityText(item))}</p>
+                              <p className="text-xs text-[#012061] dark:text-slate-100 font-medium truncate">{truncateFeed(cleanActivityText(item))}</p>
                               <p className="text-[10px] text-slate-400 mt-0.5">{extractRelativeTime(cleanActivityText(item))}</p>
                             </div>
                             <span className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#f8931f]/10 text-[#f8931f]">
@@ -543,18 +543,18 @@ export default function DashboardPage() {
                     </div>
                   ) : upcomingMaintenance.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#012061]/5 mb-2">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#012061]/5 dark:bg-slate-700/40 mb-2">
                         <CheckCircle className="h-5 w-5 text-[#f8931f]" />
                       </div>
-                      <p className="text-sm font-medium text-[#012061]">All Clear</p>
+                      <p className="text-sm font-medium text-[#012061] dark:text-slate-100">All Clear</p>
                       <p className="text-[10px] text-slate-400 mt-0.5">No upcoming maintenance</p>
                     </div>
                   ) : (
-                    <div className="divide-y divide-slate-100">
+                    <div className="divide-y divide-slate-100 dark:divide-slate-700">
                       {upcomingMaintenance.map(s => (
                         <div
                           key={s.id}
-                          className="flex items-center gap-3 py-2.5 hover:bg-slate-50 transition-colors cursor-default"
+                          className="flex items-center gap-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-default"
                           style={{ borderLeft: '2px solid transparent' }}
                           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderLeftColor = '#f8931f'; }}
                           onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderLeftColor = 'transparent'; }}
@@ -563,13 +563,13 @@ export default function DashboardPage() {
                             <Wrench className="h-3.5 w-3.5 text-[#f8931f]" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-xs text-[#012061] font-medium truncate">{s.asset.name}</p>
+                            <p className="text-xs text-[#012061] dark:text-slate-100 font-medium truncate">{s.asset.name}</p>
                             <p className="text-[10px] text-slate-400 mt-0.5">{s.title} · {relativeDate(s.scheduledDate)}</p>
                           </div>
                           <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                            s.status === 'overdue' ? 'bg-red-50 text-red-600'
-                              : s.status === 'completed' ? 'bg-emerald-50 text-emerald-700'
-                                : 'bg-[#012061]/5 text-[#012061]'
+                            s.status === 'overdue' ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-200'
+                              : s.status === 'completed' ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200'
+                                : 'bg-[#012061]/5 dark:bg-slate-700/40 text-[#012061] dark:text-slate-100'
                           }`}>
                             {s.status.toUpperCase()}
                           </span>

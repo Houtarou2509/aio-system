@@ -28,8 +28,6 @@ import lookupRoutes from './routes/lookup.routes';
 import institutionRoutes from './routes/institution.routes';
 import projectRoutes from './routes/project.routes';
 import accountabilityLookupRoutes from './routes/accountabilityLookup.routes';
-import maintenanceSchedulesRouter from './routes/maintenanceSchedules';
-import maintenanceUpcomingRouter from './routes/maintenanceUpcoming';
 import { startCronJobs } from './jobs/cron';
 
 // Start server only when not in test
@@ -56,9 +54,25 @@ app.use(helmet({
   crossOriginOpenerPolicy: false,
 }));
 
-// CORS — whitelist frontend only
+// CORS — whitelist trusted origins only
+const ALLOWED_ORIGINS = (process.env.CLIENT_URL || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+// Always allow localhost origins
+ALLOWED_ORIGINS.push('http://localhost:3000', 'http://localhost:5173');
+
+// Reject requests from disallowed origins before they reach any route
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (!origin) return next();
+  if (ALLOWED_ORIGINS.includes(origin)) return next();
+  res.status(403).json({ success: false, data: null, error: { message: 'Origin not allowed by CORS' }, meta: null });
+});
+
 app.use(cors({
-  origin: true,
+  origin: true, // we pre-filter above
   credentials: true,
 }));
 
@@ -67,9 +81,9 @@ app.use(morgan(isProduction ? 'combined' : 'dev'));
 
 app.use(express.json({ limit: '10mb' }));
 
-// Serve uploaded images
+// Serve uploaded images (logos stored in server/uploads/ to survive vite builds)
 app.use('/aio-system/uploads', express.static(path.resolve(__dirname, '../uploads')));
-app.use('/aio-system/uploads/logos', express.static(path.resolve(__dirname, '../public/uploads/logos')));
+app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
 // Serve built frontend in production
 if (isProduction) {
@@ -83,13 +97,12 @@ app.use('/api/guest', guestRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/assets', maintenanceRoutes);
+app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/labels', labelRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/backups', backupRoutes);
-app.use('/api/assets', maintenanceSchedulesRouter);
-app.use('/api/maintenance', maintenanceUpcomingRouter);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/lookups', lookupRoutes);
 app.use('/api/institutions', institutionRoutes);

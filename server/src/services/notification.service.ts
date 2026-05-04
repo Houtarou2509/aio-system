@@ -1,14 +1,16 @@
-import { PrismaClient, NotificationType } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { NotificationType } from '@prisma/client';
+import { prisma } from '../lib/prisma';
+import { sendSystemAlert } from './email.service';
 
 /**
  * Scan assets and maintenance schedules, generating notifications
  * for warranties expiring within 30 days and overdue maintenance.
  * Deduplicates by (assetId + type) — skips if one already exists.
+ * Sends email alerts to admins when notifications are created.
  */
 export async function checkAndGenerateNotifications(): Promise<number> {
   let created = 0;
+  const emailMessages: { subject: string; message: string }[] = [];
 
   const now = new Date();
   const thirtyDays = new Date();
@@ -46,6 +48,10 @@ export async function checkAndGenerateNotifications(): Promise<number> {
         },
       });
       created++;
+      emailMessages.push({
+        subject: `Warranty Expiring: ${asset.name}`,
+        message,
+      });
     }
   }
 
@@ -78,6 +84,17 @@ export async function checkAndGenerateNotifications(): Promise<number> {
         },
       });
       created++;
+      emailMessages.push({
+        subject: `Maintenance Overdue: ${schedule.asset.name}`,
+        message,
+      });
+    }
+  }
+
+  // ── Send batched email alerts ──
+  if (emailMessages.length > 0) {
+    for (const m of emailMessages) {
+      await sendSystemAlert(m.subject, m.message);
     }
   }
 

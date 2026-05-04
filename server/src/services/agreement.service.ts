@@ -1,10 +1,10 @@
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { parseTemplate } from '../utils/templateParser';
 
-const prisma = new PrismaClient();
+
 
 /* ═══════════════════════════════════════════════════════
    INTERFACE
@@ -113,7 +113,7 @@ export async function deleteTemplate(id: string) {
   if (template.headerLogo) {
     const logoFullPath = path.resolve(
       __dirname,
-      '../../public',
+      '../..',
       template.headerLogo.replace(/^\/+/, ''), // strip leading slash
     );
     try {
@@ -160,7 +160,8 @@ function parseBodySegments(filled: string): TextSegment[] {
   const segments: TextSegment[] = [];
   const lines = filled.split('\n');
 
-  for (const raw of lines) {
+  for (const rawLine of lines) {
+    const raw = rawLine.replace(/\r/g, '');
     const ln = raw.trim();
     if (ln === '' || ln.startsWith('ISSUANCE AND ACCOUNTABILITY AGREEMENT')) continue;
     if (/^_{5,}/.test(ln) || ln.startsWith('____')) break;
@@ -199,7 +200,7 @@ function parseBodySegments(filled: string): TextSegment[] {
 /** Try to load a logo image from disk and return its data for embedding. */
 function loadLogoImage(logoPath: string | null | undefined): Buffer | null {
   if (!logoPath) return null;
-  const fullPath = path.resolve(__dirname, '../../public', logoPath.replace(/^\/+/, ''));
+  const fullPath = path.resolve(__dirname, '../..', logoPath.replace(/^\/+/, ''));
   try {
     if (fs.existsSync(fullPath)) return fs.readFileSync(fullPath);
   } catch {
@@ -212,6 +213,7 @@ export async function generateAgreementPdf(p: {
   personnelName: string;
   designation?: string;
   project?: string;
+  institution?: string;
   assetName: string;
   serialNumber?: string;
   propertyNumber?: string;
@@ -221,7 +223,7 @@ export async function generateAgreementPdf(p: {
   authorizedRepName?: string;
 }): Promise<Buffer> {
   const {
-    personnelName, designation, project, assetName, serialNumber,
+    personnelName, designation, project, institution, assetName, serialNumber,
     propertyNumber, condition, templateId,
     propertyOfficerName, authorizedRepName,
   } = p;
@@ -234,13 +236,14 @@ export async function generateAgreementPdf(p: {
     personnelName,
     designation,
     project,
+    institution,
     assetName,
     serialNumber: serialNumber || undefined,
     propertyNumber: propertyNumber || undefined,
     condition: condition || undefined,
   });
 
-  const cleanBody = stripSignatureSection(filled);
+  const cleanBody = stripSignatureSection(filled).replace(/\r\n?/g, '\n');
   const segments = parseBodySegments(cleanBody);
 
   // Load logo if configured on template

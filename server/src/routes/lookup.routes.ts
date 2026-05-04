@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient, LookupCategory } from '@prisma/client';
+import { LookupCategory } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { z } from 'zod';
 import { authenticate, authorize } from '../middleware/auth';
 import { success, error } from '../utils/response';
 
 const router = Router();
-const prisma = new PrismaClient();
+
 
 // Map URL param to LookupCategory enum
 const categoryMap: Record<string, LookupCategory> = {

@@ -1,8 +1,8 @@
 import PDFDocument from 'pdfkit';
 import bwipjs from 'bwip-js';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 
-const prisma = new PrismaClient();
+
 
 const PAGE_WIDTH = 595;
 const PAGE_HEIGHT = 842;

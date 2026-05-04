@@ -1,8 +1,8 @@
 import crypto from 'crypto';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import rateLimit from 'express-rate-limit';
 
-const prisma = new PrismaClient();
+
 
 function generateToken(): string {
   return crypto.randomBytes(20).toString('base64').replace(/[+/=]/g, '').substring(0, 27);
@@ -54,13 +54,19 @@ export async function getAssetByGuestToken(token: string, ipAddress?: string) {
   return { ...asset, _accessCount: guestToken.accessCount + 1, _maxAccess: guestToken.maxAccess };
 }
 
-export async function listGuestTokens(assetId?: string) {
+export async function listGuestTokens(assetId?: string, page = 1, limit = 20) {
   const where = assetId ? { assetId } : {};
-  return prisma.guestToken.findMany({
-    where,
-    orderBy: { createdAt: 'desc' },
-    include: { asset: { select: { id: true, name: true } } },
-  });
+  const [items, total] = await Promise.all([
+    prisma.guestToken.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: { asset: { select: { id: true, name: true } } },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.guestToken.count({ where }),
+  ]);
+  return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 export async function revokeGuestToken(id: string) {

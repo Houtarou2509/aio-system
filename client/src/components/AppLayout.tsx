@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { BookOpen, Settings2, LayoutDashboard, Package, Users, History, LogOut, Menu, X, FileSignature, Database, FileText } from 'lucide-react';
+import { BookOpen, Settings2, LayoutDashboard, Package, Users, History, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/notifications/NotificationBell';
+import { useTheme } from '../context/ThemeContext';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import ShortcutsHelpModal from '../components/ShortcutsHelpModal';
 
 /* ─── Navigation Sections ─── */
 const inventoryNav = [
@@ -26,7 +29,9 @@ const systemNav = [
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { helpOpen, setHelpOpen } = useKeyboardShortcuts();
 
   const visibleInventory = inventoryNav.filter(item => !item.roles || item.roles.includes(user?.role || ''));
   const visibleIssuance = issuanceNav.filter(item => !item.roles || item.roles.includes(user?.role || ''));
@@ -38,7 +43,7 @@ export default function AppLayout() {
       : 'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-slate-300 hover:bg-white/10 hover:text-[#f8931f] transition-colors';
 
   return (
-    <div className="flex h-screen bg-slate-50">
+    <div className="flex h-screen bg-light-bg dark:bg-slate-900">
       {/* ── Desktop Sidebar ── */}
       <aside className="hidden md:flex w-56 flex-col bg-[#012061]">
         {/* Logo */}
@@ -49,7 +54,7 @@ export default function AppLayout() {
         {/* Navigation — Inventory */}
         <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
           <div className="px-3 pt-2 pb-1">
-            <span className="text-[10px] tracking-widest font-semibold text-slate-500 uppercase">Inventory</span>
+            <span className="text-[10px] tracking-widest font-semibold text-slate-500 dark:text-slate-400 uppercase">Inventory</span>
           </div>
           {visibleInventory.map(item => (
             <NavLink key={item.to} to={item.to} end={item.end ?? (item.to === '/')} className={linkClass}>
@@ -60,7 +65,7 @@ export default function AppLayout() {
 
           {/* Issuance */}
           <div className="px-3 pt-4 pb-1 border-t border-[#001a4d] mt-2">
-            <span className="text-[10px] tracking-widest font-semibold text-slate-500 uppercase">Accountability</span>
+            <span className="text-[10px] tracking-widest font-semibold text-slate-500 dark:text-slate-400 uppercase">Accountability</span>
           </div>
           {visibleIssuance.map(item => (
             <NavLink key={item.to} to={item.to} className={linkClass}>
@@ -71,7 +76,7 @@ export default function AppLayout() {
 
           {/* System */}
           <div className="px-3 pt-4 pb-1 border-t border-[#001a4d] mt-2">
-            <span className="text-[10px] tracking-widest font-semibold text-slate-500 uppercase">System</span>
+            <span className="text-[10px] tracking-widest font-semibold text-slate-500 dark:text-slate-400 uppercase">System</span>
           </div>
           {visibleSystem.map(item => (
             <NavLink key={item.to} to={item.to} className={linkClass}>
@@ -87,10 +92,17 @@ export default function AppLayout() {
             <div className="relative z-50">
               <NotificationBell />
             </div>
-            <div>
-              <p className="text-sm font-semibold text-white leading-tight">{user?.username}</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white leading-tight truncate">{user?.username}</p>
               <p className="text-[10px] tracking-widest font-medium text-[#f8931f] uppercase">{user?.role?.replace('_', '-')}</p>
             </div>
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 rounded-md text-slate-400 hover:text-[#f8931f] hover:bg-white/10 transition-colors shrink-0"
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
           </div>
           <button
             onClick={logout}
@@ -117,12 +129,12 @@ export default function AppLayout() {
 
       {/* ── Mobile Nav Overlay ── */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-30 bg-black/50" onClick={() => setMobileOpen(false)}>
+        <div className="md:hidden fixed inset-0 z-30 bg-black/50" onMouseDown={(e) => { if (e.target === e.currentTarget) setMobileOpen(false); }}>
           <div className="w-56 h-full bg-[#012061] border-r border-[#001a4d]" onClick={e => e.stopPropagation()}>
             {/* Mobile Nav Links */}
             <nav className="px-3 py-2 space-y-0.5 pt-20 overflow-y-auto">
               <div className="px-3 pt-2 pb-1">
-                <span className="text-[10px] tracking-widest font-semibold text-slate-500 uppercase">Inventory</span>
+                <span className="text-[10px] tracking-widest font-semibold text-slate-500 dark:text-slate-400 uppercase">Inventory</span>
               </div>
               {visibleInventory.map(item => (
                 <NavLink key={item.to} to={item.to} end={item.end ?? (item.to === '/')} className={linkClass} onClick={() => setMobileOpen(false)}>
@@ -132,7 +144,7 @@ export default function AppLayout() {
               ))}
 
               <div className="px-3 pt-4 pb-1 border-t border-[#001a4d] mt-2">
-                <span className="text-[10px] tracking-widest font-semibold text-slate-500 uppercase">Accountability</span>
+                <span className="text-[10px] tracking-widest font-semibold text-slate-500 dark:text-slate-400 uppercase">Accountability</span>
               </div>
               {visibleIssuance.map(item => (
                 <NavLink key={item.to} to={item.to} className={linkClass} onClick={() => setMobileOpen(false)}>
@@ -142,7 +154,7 @@ export default function AppLayout() {
               ))}
 
               <div className="px-3 pt-4 pb-1 border-t border-[#001a4d] mt-2">
-                <span className="text-[10px] tracking-widest font-semibold text-slate-500 uppercase">System</span>
+                <span className="text-[10px] tracking-widest font-semibold text-slate-500 dark:text-slate-400 uppercase">System</span>
               </div>
               {visibleSystem.map(item => (
                 <NavLink key={item.to} to={item.to} className={linkClass} onClick={() => setMobileOpen(false)}>
@@ -174,6 +186,9 @@ export default function AppLayout() {
       <main className="flex-1 overflow-auto">
         <Outlet />
       </main>
+
+      {/* Keyboard Shortcuts Help Modal */}
+      <ShortcutsHelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }

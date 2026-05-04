@@ -24,7 +24,21 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/export', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res: Response) => {
   try {
     const query = auditExportQuerySchema.parse(req.query);
-    const csv = await auditService.exportAuditLogsCsv(query);
+    const { csv, recordCount } = await auditService.exportAuditLogsCsv(query);
+
+    // Log the export action (lazy-import prisma to avoid circular deps)
+    const { prisma } = await import('../lib/prisma');
+    await prisma.auditLog.create({
+      data: {
+        entityType: 'AuditLog',
+        entityId: req.user!.id,
+        action: 'EXPORT_DATA',
+        performedById: req.user!.id,
+        severity: 'MEDIUM',
+        summary: `Exported ${recordCount} audit log(s) to CSV`,
+      },
+    });
+
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename=audit-logs.csv');
     return res.send(csv);

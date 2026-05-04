@@ -1,7 +1,8 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { classifySeverity, generateSummary } from '../utils/auditHelpers';
 
-const prisma = new PrismaClient();
+
 
 export async function listMaintenanceLogs(assetId: string, page: number, limit: number) {
   const [items, total] = await Promise.all([

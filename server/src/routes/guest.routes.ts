@@ -32,12 +32,16 @@ router.post('/tokens', authorize(['ADMIN', 'STAFF_ADMIN']), validate(createGuest
   }
 });
 
-// GET /api/guest/tokens — list tokens (optional ?assetId= filter)
+// GET /api/guest/tokens — paginated list (optional ?assetId= filter)
 router.get('/tokens', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res: Response) => {
   try {
     const assetId = req.query.assetId as string | undefined;
-    const tokens = await guestService.listGuestTokens(assetId);
-    return success(res, tokens, 200);
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const result = await guestService.listGuestTokens(assetId, page, limit);
+    return success(res, result.items, 200, {
+      page, limit, total: result.total, totalPages: result.totalPages,
+    });
   } catch (err: any) {
     return error(res, err.message, 500);
   }

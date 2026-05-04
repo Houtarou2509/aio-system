@@ -23,34 +23,34 @@ function StatusBadge({ status }: { status: string }) {
   const s = status.toLowerCase();
   if (s === 'active') {
     return (
-      <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-200">
+      <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border border-emerald-200">
         ACTIVE
       </span>
     );
   }
   if (s === 'inactive') {
     return (
-      <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-slate-100 text-slate-500 border border-slate-200">
+      <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
         INACTIVE
       </span>
     );
   }
   if (s === 'completed') {
     return (
-      <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-blue-50 text-blue-700 border border-blue-200">
+      <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-200 border border-blue-200">
         COMPLETED
       </span>
     );
   }
   if (s === 'archived') {
     return (
-      <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-amber-50 text-amber-700 border border-amber-200">
+      <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-amber-50 dark:bg-amber-950 text-amber-700 border border-amber-200">
         ARCHIVED
       </span>
     );
   }
   return (
-    <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-slate-100 text-slate-500 border border-slate-200">
+    <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
       {status.toUpperCase()}
     </span>
   );
@@ -94,7 +94,7 @@ function AddEditModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xl w-full max-w-md mx-4 overflow-hidden">
         <div className="bg-[#012061] px-5 py-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-white">{title}</h3>
         </div>
@@ -106,12 +106,12 @@ function AddEditModal({
             onChange={e => setValue(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
             autoFocus
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+            className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
           />
           {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
         </div>
-        <div className="px-5 py-3 border-t border-slate-100 flex justify-end gap-2 bg-slate-50/50">
-          <button className="rounded-lg px-4 py-2 text-xs font-medium text-[#012061] hover:bg-[#012061]/5 transition-colors" onClick={onClose}>
+        <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-2 bg-slate-50 dark:bg-slate-900/50">
+          <button className="rounded-lg px-4 py-2 text-xs font-medium text-[#012061] dark:text-slate-100 hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 dark:bg-slate-700/40 transition-colors" onClick={onClose}>
             Cancel
           </button>
           <button className="rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors" onClick={handleSave} disabled={saving}>
@@ -191,6 +191,10 @@ function LookupTable({
         );
         throw new Error(json.error?.message || 'Failed to update status');
       }
+      // Show cascade warning if present
+      if (json.data?._warning) {
+        alert('⚠️ ' + json.data._warning);
+      }
     } catch (e: any) {
       // Already reverted above for API errors; re-throw for other failures
       if (!e.message?.includes('Failed to update status')) {
@@ -211,7 +215,7 @@ function LookupTable({
   return (
     <div className="w-full">
       {/* Filter bar */}
-      <div className="flex flex-row items-center gap-4 flex-wrap bg-white rounded-lg border border-slate-200 px-4 py-2.5 mb-4">
+      <div className="flex flex-row items-center gap-4 flex-wrap bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2.5 mb-4">
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
           <input
@@ -219,13 +223,13 @@ function LookupTable({
             placeholder="Search..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none transition-colors"
+            className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 pl-9 pr-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none transition-colors"
           />
         </div>
         <button
           onClick={() => setShowInactive(!showInactive)}
           className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-            showInactive ? 'bg-[#012061] text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            showInactive ? 'bg-[#012061] text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
           }`}
         >
           {showInactive ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
@@ -242,7 +246,7 @@ function LookupTable({
 
       {/* Table */}
       {loading ? (
-        <p className="text-sm text-slate-500 py-8 text-center">Loading…</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 py-8 text-center">Loading…</p>
       ) : error ? (
         <p className="text-sm text-red-500 py-4">Error: {error}</p>
       ) : filtered.length === 0 ? (
@@ -250,41 +254,41 @@ function LookupTable({
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#f8931f]/10 mb-3">
             <Plus className="h-8 w-8 text-[#f8931f]" />
           </div>
-          <p className="text-sm text-slate-500 mb-1">No values found</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">No values found</p>
           <p className="text-xs text-slate-400">{search ? 'Try adjusting your search.' : 'Add one to get started.'}</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-[#012061]/5">
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-slate-500 uppercase">Name</th>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-slate-500 uppercase w-32">Status</th>
-                <th className="px-4 py-2.5 text-right text-[10px] font-semibold tracking-widest text-slate-500 uppercase w-48">Actions</th>
+              <tr className="bg-[#012061]/5 dark:bg-slate-700/40">
+                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase">Name</th>
+                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase w-32">Status</th>
+                <th className="px-4 py-2.5 text-right text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase w-48">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(item => (
                 <tr
                   key={item.id}
-                  className={`group border-b border-slate-100 cursor-default transition-colors ${
-                    item.status !== 'active' ? 'opacity-60' : 'hover:bg-slate-50 hover:border-l-2 hover:border-l-[#f8931f]'
+                  className={`group border-b border-slate-100 dark:border-slate-700 cursor-default transition-colors ${
+                    item.status !== 'active' ? 'opacity-60' : 'hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-l-2 hover:border-l-[#f8931f]'
                   }`}
                 >
-                  <td className="px-4 py-2.5 font-semibold text-[#012061]">{item.name}</td>
+                  <td className="px-4 py-2.5 font-semibold text-[#012061] dark:text-slate-100">{item.name}</td>
                   <td className="px-4 py-2.5"><StatusBadge status={item.status} /></td>
                   <td className="px-4 py-2.5 text-right">
                     <div className="inline-flex items-center gap-1.5">
                       <button
                         onClick={() => setEditTarget(item)}
-                        className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-[#012061] hover:bg-[#012061]/5 transition-colors"
+                        className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-[#012061] dark:text-slate-100 hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 dark:bg-slate-700/40 transition-colors"
                       >
                         <Pencil className="h-3 w-3" /> Edit
                       </button>
                       <button
                         onClick={() => handleToggle(item.id, item.status)}
                         className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                          item.status === 'active' ? 'text-red-600 hover:bg-red-50' : 'text-emerald-600 hover:bg-emerald-50'
+                          item.status === 'active' ? 'text-red-600 hover:bg-red-50 dark:bg-red-950 dark:hover:bg-red-950' : 'text-emerald-600 hover:bg-emerald-50 dark:bg-emerald-950 dark:hover:bg-emerald-950'
                         }`}
                       >
                         {item.status === 'active' ? <><PowerOff className="h-3 w-3" /> Deactivate</> : <><Power className="h-3 w-3" /> Activate</>}
@@ -315,20 +319,17 @@ function LookupTable({
         onClose={() => setEditTarget(null)}
         onSave={async (name: string) => {
           if (!editTarget) return;
-          // For editing, we just re-add (since there's no rename endpoint) — use a simple approach
-          // Actually, the backend PATCH only toggles status. For renaming, we'll do a delete+add pattern.
-          // But let's keep it simple: just create a new one and deactivate old
-          // OR better: let's just use the PATCH for status only, and let edit be name change via delete+add
-          // For now, let's just allow editing name by recreating:
+          // PATCH now supports { name } for renaming
           const res = await fetch(`${endpoint}/${editTarget.id}`, {
             method: 'PATCH', headers: authHeaders, body: JSON.stringify({ name }),
           });
           const json = await res.json();
-          if (!json.success) {
-            // If name edit isn't supported, just create new
-            await handleAdd(name);
+          if (json.success) {
+            // Update local state with the renamed item
+            setItems(prev => prev.map(item => item.id === editTarget.id ? { ...item, name } : item));
+          } else {
+            throw new Error(json.error?.message || 'Failed to rename');
           }
-          await fetchItems();
           setEditTarget(null);
         }}
       />
@@ -373,7 +374,7 @@ export default function AccountabilityLookupPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50">
+    <div className="flex flex-col h-screen bg-light-bg dark:bg-slate-900">
       {/* Header */}
       <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-4">
@@ -381,7 +382,7 @@ export default function AccountabilityLookupPage() {
             <Building2 className="h-6 w-6 text-[#f8931f]" />
             <h1 className="text-lg font-bold text-white tracking-tight">Accountability Lookups</h1>
           </div>
-          <p className="hidden sm:block text-xs text-white/60 bg-white/10 rounded-lg px-3 py-2">
+          <p className="hidden sm:block text-xs text-slate-700 dark:text-white/60 bg-white dark:bg-slate-800/10 rounded-lg px-3 py-2">
             Manage designations, institutions & projects
           </p>
         </div>
@@ -395,7 +396,7 @@ export default function AccountabilityLookupPage() {
               key={key}
               onClick={() => setActiveTab(key)}
               className={`flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors text-left ${
-                activeTab === key ? 'border-[#f8931f] bg-[#f8931f]/5' : 'border-slate-200 bg-white hover:border-slate-300'
+                activeTab === key ? 'border-[#f8931f] bg-[#f8931f]/5' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
               }`}
             >
               <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
@@ -404,8 +405,8 @@ export default function AccountabilityLookupPage() {
                 <Icon className={`h-5 w-5 ${activeTab === key ? 'text-[#f8931f]' : 'text-[#f8931f]/70'}`} />
               </div>
               <div className="min-w-0">
-                <p className={`text-xl font-bold leading-tight ${activeTab === key ? 'text-[#f8931f]' : 'text-slate-900'}`}>{counts[key] ?? 0}</p>
-                <p className="text-[10px] tracking-widest text-slate-500 uppercase">Total {label}</p>
+                <p className={`text-xl font-bold leading-tight ${activeTab === key ? 'text-[#f8931f]' : 'text-slate-900 dark:text-slate-100'}`}>{counts[key] ?? 0}</p>
+                <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Total {label}</p>
               </div>
             </button>
           ))}
@@ -422,7 +423,7 @@ export default function AccountabilityLookupPage() {
               className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
                 activeTab === key
                   ? 'bg-[#f8931f] text-white shadow-sm'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
               }`}
             >
               {label}

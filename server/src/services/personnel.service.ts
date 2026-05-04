@@ -1,7 +1,8 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { classifySeverity, generateSummary } from '../utils/auditHelpers';
 
-const prisma = new PrismaClient();
+
 
 /* ─── List personnel with pagination & search ─── */
 export async function listPersonnel(params: {

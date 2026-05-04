@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAssets } from '../hooks/useAssets';
 import { assetsApi, Asset } from '../lib/api';
 import { RoleGate } from '../components/auth';
-import { AssetTable, AssetDetailModal, AssetFormModal, ImportAssetsModal } from '../components/assets';
+import { AssetTable, AssetDetailModal, AssetFormModal, ImportAssetsModal, BulkActionModal } from '../components/assets';
 import QRScannerModal from '../components/assets/QRScannerModal';
 import {
   Select, SelectContent, SelectItem,
@@ -12,8 +12,12 @@ import {
 import { useLookupOptions } from '@/hooks/useLookupOptions';
 import {
   Package, Search, ScanLine, Plus,
-  CheckCircle, Wrench, PackageOpen, X,
+  CheckCircle, Wrench, PackageOpen, X, Calendar
 } from 'lucide-react';
+import {
+  setFocusSearchCallback,
+  setNewAssetCallback,
+} from '../hooks/useKeyboardShortcuts';
 
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
 const BULK_STATUS_OPTIONS = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED'];
@@ -34,8 +38,8 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-[#f8931f]/10 mb-4">
         <PackageOpen className="h-10 w-10 text-[#f8931f]" />
       </div>
-      <h3 className="text-lg font-semibold text-slate-900 mb-1">No assets yet</h3>
-      <p className="text-sm text-slate-500 mb-5 max-w-xs">
+      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">No assets yet</h3>
+      <p className="text-sm text-slate-500 dark:text-slate-400 mb-5 max-w-xs">
         Start building your inventory by adding your first asset to the system.
       </p>
       <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
@@ -74,12 +78,31 @@ export default function AssetsPage() {
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Search ref for keyboard shortcut
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Register keyboard shortcuts for Assets page
+  useEffect(() => {
+    setFocusSearchCallback(() => {
+      searchRef.current?.focus();
+    });
+    setNewAssetCallback(() => {
+      setEditAsset(null);
+      setShowForm(true);
+    });
+    return () => {
+      setFocusSearchCallback(null);
+      setNewAssetCallback(null);
+    };
+  }, []);
+
   // Action loading states
   const [printLoading, setPrintLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [statusDropdown, setStatusDropdown] = useState(false);
+  const [bulkAction, setBulkAction] = useState<'none' | 'assign' | 'update'>('none');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
@@ -100,7 +123,7 @@ export default function AssetsPage() {
           });
         }
       })
-      .catch(() => {});
+      .catch((e) => console.error('[AssetsPage] Failed to load KPI stats:', e));
   }, []);
 
   // Auto-open scanner when navigated with ?action=scan
@@ -168,10 +191,10 @@ export default function AssetsPage() {
 
   const deselectAll = () => setSelectedIds(new Set());
 
-  const hasActiveFilters = filters.type || filters.status || filters.location || filters.search || manufacturerFilter;
+  const hasActiveFilters = filters.type || filters.status || filters.location || filters.search || manufacturerFilter || filters.purchaseDateFrom || filters.purchaseDateTo || filters.warrantyExpiryFrom || filters.warrantyExpiryTo;
 
   const handleClearAllFilters = () => {
-    setFilters({ ...filters, type: undefined, status: undefined, location: undefined, search: undefined, page: 1 });
+    setFilters({ ...filters, type: undefined, status: undefined, location: undefined, search: undefined, purchaseDateFrom: undefined, purchaseDateTo: undefined, warrantyExpiryFrom: undefined, warrantyExpiryTo: undefined, page: 1 });
     setManufacturerFilter('');
     setSelectedIds(new Set());
   };
@@ -269,7 +292,7 @@ export default function AssetsPage() {
   ];
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50">
+    <div className="flex flex-col h-screen bg-light-bg dark:bg-slate-900">
 
       {/* ═══ STICKY NAVY HEADER ═════════════════════════════ */}
       <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
@@ -301,13 +324,13 @@ export default function AssetsPage() {
       <section className="px-6 pt-4 shrink-0">
         <div className="grid grid-cols-3 gap-3">
           {KPI_CARDS.map(({ key, label, icon: Icon, value }) => (
-            <div key={key} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <div key={key} className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
                 <Icon className="h-5 w-5 text-[#f8931f]" />
               </div>
               <div className="min-w-0">
                 <p className="text-xl font-bold leading-tight text-[#f8931f]">{value}</p>
-                <p className="text-[10px] tracking-widest text-slate-500 uppercase">{label}</p>
+                <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">{label}</p>
               </div>
             </div>
           ))}
@@ -316,22 +339,23 @@ export default function AssetsPage() {
 
       {/* ═══ HORIZONTAL FILTER BAR ══════════════════════════ */}
       <section className="px-6 pt-3 pb-2 shrink-0">
-        <div className="flex flex-row items-center gap-4 flex-wrap bg-white rounded-lg border border-slate-200 px-4 py-2.5">
+        <div className="flex flex-row items-center gap-4 flex-wrap bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2.5">
           {/* Search — expands to fill available space */}
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             <input
+              ref={searchRef}
               type="text"
               placeholder="Search name, property #, serial, assignee, date..."
               value={filters.search || ''}
               onChange={e => setFilters({ ...filters, search: e.target.value || undefined, page: 1 })}
-              className="w-full rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none transition-colors"
+              className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 pl-9 pr-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none transition-colors"
             />
           </div>
 
           {/* Type filter */}
           <Select value={filters.type || ''} onValueChange={(val) => val != null && setFilters({ ...filters, type: val || undefined, page: 1 })}>
-            <SelectTrigger className="w-[130px] h-8 text-xs bg-slate-50 border-slate-200">
+            <SelectTrigger className="w-[130px] h-8 text-xs bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
               <SelectValue placeholder="Type: All" />
             </SelectTrigger>
             <SelectContent>
@@ -346,7 +370,7 @@ export default function AssetsPage() {
           <select
             value={filters.status || ''}
             onChange={e => setFilters({ ...filters, status: e.target.value || undefined, page: 1 })}
-            className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+            className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
           >
             <option value="">Status: All</option>
             {ASSET_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -356,7 +380,7 @@ export default function AssetsPage() {
           <select
             value={manufacturerFilter}
             onChange={e => setManufacturerFilter(e.target.value)}
-            className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none max-w-[160px]"
+            className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none max-w-[160px]"
           >
             <option value="">Mfr: All</option>
             {manufacturerOptions.map((opt) => (
@@ -368,7 +392,7 @@ export default function AssetsPage() {
           <select
             value={filters.location || ''}
             onChange={e => setFilters({ ...filters, location: e.target.value || undefined, page: 1 })}
-            className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+            className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
           >
             <option value="">Loc: All</option>
             {locationOptions.map((opt) => (
@@ -376,9 +400,49 @@ export default function AssetsPage() {
             ))}
           </select>
 
+          {/* Purchase date range */}
+          <div className="flex items-center gap-1.5">
+            <Calendar className="h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="date"
+              placeholder="Purch From"
+              value={filters.purchaseDateFrom || ''}
+              onChange={e => setFilters({ ...filters, purchaseDateFrom: e.target.value || undefined, page: 1 })}
+              className="w-[105px] rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2 py-1.5 text-[10px] text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+            />
+            <span className="text-slate-400 text-[10px]">-</span>
+            <input
+              type="date"
+              placeholder="Purch To"
+              value={filters.purchaseDateTo || ''}
+              onChange={e => setFilters({ ...filters, purchaseDateTo: e.target.value || undefined, page: 1 })}
+              className="w-[105px] rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2 py-1.5 text-[10px] text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+            />
+          </div>
+
+          {/* Warranty expiry date range */}
+          <div className="flex items-center gap-1.5">
+            <Calendar className="h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="date"
+              placeholder="Warranty From"
+              value={filters.warrantyExpiryFrom || ''}
+              onChange={e => setFilters({ ...filters, warrantyExpiryFrom: e.target.value || undefined, page: 1 })}
+              className="w-[105px] rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2 py-1.5 text-[10px] text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+            />
+            <span className="text-slate-400 text-[10px]">-</span>
+            <input
+              type="date"
+              placeholder="Warranty To"
+              value={filters.warrantyExpiryTo || ''}
+              onChange={e => setFilters({ ...filters, warrantyExpiryTo: e.target.value || undefined, page: 1 })}
+              className="w-[105px] rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2 py-1.5 text-[10px] text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+            />
+          </div>
+
           {/* Clear All */}
           {hasActiveFilters && (
-            <button onClick={handleClearAllFilters} className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#012061] hover:underline shrink-0">
+            <button onClick={handleClearAllFilters} className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#012061] dark:text-slate-100 hover:underline shrink-0">
               <X className="h-3 w-3" /> Clear All
             </button>
           )}
@@ -387,8 +451,8 @@ export default function AssetsPage() {
 
       {/* ═══ BULK ACTION TOOLBAR ════════════════════════════ */}
       {selectedIds.size > 0 && (
-        <div className="shrink-0 px-6 py-2 bg-[#012061]/5 border-b border-[#012061]/10 flex items-center justify-between">
-          <span className="text-sm font-semibold text-[#012061]">
+        <div className="shrink-0 px-6 py-2 bg-[#012061]/5 dark:bg-slate-700/40 border-b border-[#012061]/10 flex items-center justify-between">
+          <span className="text-sm font-semibold text-[#012061] dark:text-slate-100">
             ☑ {selectedIds.size} asset{selectedIds.size !== 1 ? 's' : ''} selected
           </span>
           <div className="flex items-center gap-2">
@@ -396,9 +460,9 @@ export default function AssetsPage() {
               <button onClick={() => setStatusDropdown(!statusDropdown)} disabled={bulkLoading}
                 className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50">Change Status ▾</button>
               {statusDropdown && (
-                <div className="absolute right-0 mt-1 w-44 rounded-lg border border-slate-200 bg-white shadow-lg z-50 py-1">
+                <div className="absolute right-0 mt-1 w-44 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg z-50 py-1">
                   {BULK_STATUS_OPTIONS.map(s => (
-                    <button key={s} onClick={() => handleBulkStatus(s)} className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">{s}</button>
+                    <button key={s} onClick={() => handleBulkStatus(s)} className="w-full text-left px-3 py-1.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">{s}</button>
                   ))}
                 </div>
               )}
@@ -406,6 +470,14 @@ export default function AssetsPage() {
             <button onClick={handlePrintQR} disabled={printLoading}
               className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50">
               {printLoading ? 'Generating...' : 'Print QR'}
+            </button>
+            <button onClick={() => setBulkAction('assign')} disabled={bulkLoading}
+              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50">
+              Bulk Assign
+            </button>
+            <button onClick={() => setBulkAction('update')} disabled={bulkLoading}
+              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50">
+              Bulk Update
             </button>
             <button onClick={handleExportCSV} disabled={exportLoading}
               className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50">
@@ -416,7 +488,7 @@ export default function AssetsPage() {
                 className="rounded-lg bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-50">Delete Selected</button>
             </RoleGate>
             <button onClick={deselectAll}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-50">Deselect All</button>
+              className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Deselect All</button>
           </div>
         </div>
       )}
@@ -424,14 +496,14 @@ export default function AssetsPage() {
       {/* Confirm delete modal */}
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-lg p-6 w-96">
-            <h3 className="text-lg font-semibold mb-2 text-slate-900">Confirm Delete</h3>
-            <p className="text-sm text-slate-500 mb-4">
-              You are about to retire <strong className="text-slate-900">{selectedIds.size}</strong> asset{selectedIds.size !== 1 ? 's' : ''}.
+          <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-lg p-6 w-96">
+            <h3 className="text-lg font-semibold mb-2 text-slate-900 dark:text-slate-100">Confirm Delete</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+              You are about to retire <strong className="text-slate-900 dark:text-slate-100">{selectedIds.size}</strong> asset{selectedIds.size !== 1 ? 's' : ''}.
               This will set their status to RETIRED. This action can be undone by changing status back.
             </p>
             <div className="flex justify-end gap-2">
-              <button className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50" onClick={() => setConfirmDelete(false)}>Cancel</button>
+              <button className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700" onClick={() => setConfirmDelete(false)}>Cancel</button>
               <button className="rounded-lg bg-red-600 px-3 py-1.5 text-xs text-white hover:bg-red-700" onClick={handleBulkDelete} disabled={bulkLoading}>
                 {bulkLoading ? 'Deleting...' : 'Confirm Delete'}
               </button>
@@ -442,7 +514,7 @@ export default function AssetsPage() {
 
       {/* Toast */}
       {toast && (
-        <div className="shrink-0 px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 text-sm text-[#012061] text-center font-medium">
+        <div className="shrink-0 px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 text-sm text-[#012061] dark:text-slate-100 text-center font-medium">
           {toast}
         </div>
       )}
@@ -450,7 +522,7 @@ export default function AssetsPage() {
       {/* ═══ TABLE or EMPTY STATE (full width) ══════════════ */}
       <div className="flex-1 overflow-auto px-6 py-4">
         {loading && assets.length === 0 ? (
-          <p className="text-slate-500 text-sm">Loading assets…</p>
+          <p className="text-slate-500 dark:text-slate-400 text-sm">Loading assets…</p>
         ) : !loading && displayAssets.length === 0 && !hasActiveFilters ? (
           <EmptyState onAdd={() => { setEditAsset(null); setShowForm(true); }} />
         ) : (
@@ -472,11 +544,11 @@ export default function AssetsPage() {
 
       {/* ═══ PAGINATION ════════════════════════════════════ */}
       {meta && meta.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 border-t border-slate-200 px-6 py-2 shrink-0 bg-white">
-          <button className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        <div className="flex items-center justify-center gap-2 border-t border-slate-200 dark:border-slate-700 px-6 py-2 shrink-0 bg-white dark:bg-slate-800">
+          <button className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
             disabled={meta.page <= 1} onClick={() => setFilters({ ...filters, page: meta.page - 1 })}>Prev</button>
-          <span className="text-sm text-slate-500">Page {meta.page} of {meta.totalPages}</span>
-          <button className="rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          <span className="text-sm text-slate-500 dark:text-slate-400">Page {meta.page} of {meta.totalPages}</span>
+          <button className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
             disabled={meta.page >= meta.totalPages} onClick={() => setFilters({ ...filters, page: meta.page + 1 })}>Next</button>
         </div>
       )}
@@ -491,7 +563,34 @@ export default function AssetsPage() {
       <ImportAssetsModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImportComplete={handleImportComplete} />
       <QRScannerModal open={scannerOpen} onClose={() => setScannerOpen(false)} />
 
-
+      {/* ═══ BULK OPERATION MODAL ═══════════════════════════ */}
+      {bulkAction !== 'none' && (
+        <BulkActionModal
+          action={bulkAction}
+          selectedCount={selectedIds.size}
+          onClose={() => { setBulkAction('none'); }}
+          onAssign={async (personnelId: string, notes?: string) => {
+            setBulkLoading(true);
+            try {
+              const res = await assetsApi.bulkAssign(Array.from(selectedIds), personnelId, notes);
+              showToast(`Assigned ${res.data.assigned} assets`);
+              if (res.data.errors.length > 0) showToast(`${res.data.errors.length} failed`);
+              deselectAll(); refetch();
+            } catch { showToast('Bulk assign failed'); }
+            finally { setBulkLoading(false); setBulkAction('none'); }
+          }}
+          onUpdate={async (updates: { location?: string; status?: string }) => {
+            setBulkLoading(true);
+            try {
+              const res = await assetsApi.bulkUpdate(Array.from(selectedIds), updates);
+              showToast(`Updated ${res.data.updated} assets`);
+              deselectAll(); refetch();
+            } catch { showToast('Bulk update failed'); }
+            finally { setBulkLoading(false); setBulkAction('none'); }
+          }}
+          loading={bulkLoading}
+        />
+      )}
 
       {/* ═══ IMAGE LIGHTBOX ═════════════════════════════════ */}
       {expandedImage && (

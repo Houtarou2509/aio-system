@@ -55,16 +55,16 @@ function LayoutShell({ children }: { children: React.ReactNode }) {
 
         {/* Corner glows */}
         <div className="absolute top-0 right-0 w-48 h-48 bg-[#f8931f]/5 rounded-full blur-3xl -mr-24 -mt-24" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/3 rounded-full blur-3xl -ml-24 -mb-24" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-white dark:bg-slate-800/3 rounded-full blur-3xl -ml-24 -mb-24" />
 
         {/* Bottom tagline */}
         <div className="absolute bottom-8 left-0 right-0 text-center">
-          <p className="text-[10px] text-slate-500 tracking-widest uppercase">Secured Research Gateway</p>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 tracking-widest uppercase">Secured Research Gateway</p>
         </div>
       </div>
 
       {/* ─── Right Panel — Form (60% / 100% mobile) ─── */}
-      <div className="w-full md:w-[60%] flex flex-col items-center justify-center p-6 md:p-16 bg-slate-50 relative">
+      <div className="w-full md:w-[60%] flex flex-col items-center justify-center p-6 md:p-16 bg-light-bg dark:bg-slate-900 relative">
         {/* Subtle background grid */}
         <div
           className="absolute inset-0 pointer-events-none"
@@ -141,12 +141,12 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#f8931f] mb-3">
             <span className="text-white font-extrabold text-sm">AIO</span>
           </div>
-          <h2 className="text-xl font-bold text-[#012061]">AIO SYSTEM</h2>
+          <h2 className="text-xl font-bold text-[#012061] dark:text-slate-100">AIO SYSTEM</h2>
         </div>
 
         <button
           onClick={() => { /* soft reset */ }}
-          className="flex items-center gap-2 text-sm text-slate-500 hover:text-[#012061] transition-colors mb-8"
+          className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-[#012061] dark:hover:text-slate-100 dark:text-slate-100 transition-colors mb-8"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to sign in
@@ -156,8 +156,8 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[#f8931f]/10 mb-4 border border-[#f8931f]/20">
             <ShieldEllipsis className="w-6 h-6 text-[#f8931f]" />
           </div>
-          <h1 className="text-3xl font-bold text-[#012061] mb-2">Two-Factor Authentication</h1>
-          <p className="text-slate-500 text-sm">
+          <h1 className="text-3xl font-bold text-[#012061] dark:text-slate-100 mb-2">Two-Factor Authentication</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm">
             Enter the 6-digit code from your authenticator app
           </p>
         </div>
@@ -171,7 +171,7 @@ export default function LoginPage() {
 
         <form onSubmit={handle2FaSubmit} className="space-y-6">
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Authentication Code
             </label>
             <div className="relative">
@@ -182,7 +182,7 @@ export default function LoginPage() {
                 value={twoFactorToken}
                 onChange={e => setTwoFactorToken(e.target.value.replace(/\D/g, ''))}
                 placeholder="000000"
-                className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 text-center text-2xl font-semibold tracking-[0.5em] placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-[#f8931f]/30 focus:border-[#f8931f] transition-all"
+                className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 text-center text-2xl font-semibold tracking-[0.5em] placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-[#f8931f]/30 focus:border-[#f8931f] transition-all"
                 autoFocus
               />
             </div>
@@ -220,7 +220,7 @@ export default function LoginPage() {
         <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#f8931f] mb-3">
           <span className="text-white font-extrabold text-sm">AIO</span>
         </div>
-        <h2 className="text-xl font-bold text-[#012061]">AIO SYSTEM</h2>
+        <h2 className="text-xl font-bold text-[#012061] dark:text-slate-100">AIO SYSTEM</h2>
       </div>
 
       {/* Logos — right panel */}
@@ -231,9 +231,9 @@ export default function LoginPage() {
 
       {/* Welcome heading */}
       <div className="mb-10">
-        <h1 className="text-3xl font-bold text-[#012061] mb-2">Access Portal</h1>
+        <h1 className="text-3xl font-bold text-[#012061] dark:text-slate-100 mb-2">Access Portal</h1>
         <div className="w-10 h-[3px] rounded-full bg-[#f8931f]" />
-        <p className="text-slate-500 text-sm mt-3">
+        <p className="text-slate-500 dark:text-slate-400 text-sm mt-3">
           Enter your credentials to access the dashboard
         </p>
       </div>
@@ -248,11 +248,11 @@ export default function LoginPage() {
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Email */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             Email
           </label>
           <div className="relative">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#012061]/50">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#012061] dark:text-slate-100/50">
               <User className="w-4 h-4" />
             </span>
             <input
@@ -261,18 +261,18 @@ export default function LoginPage() {
               onChange={e => setEmail(e.target.value)}
               placeholder="you@institution.edu"
               required
-              className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f8931f]/30 focus:border-[#f8931f] transition-all hover:border-slate-300"
+              className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f8931f]/30 focus:border-[#f8931f] transition-all hover:border-slate-300"
             />
           </div>
         </div>
 
         {/* Password */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             Password
           </label>
           <div className="relative">
-            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#012061]/50">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-[#012061] dark:text-slate-100/50">
               <Lock className="w-4 h-4" />
             </span>
             <input
@@ -281,12 +281,12 @@ export default function LoginPage() {
               onChange={e => setPassword(e.target.value)}
               placeholder="Enter password"
               required
-              className="w-full pl-10 pr-10 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f8931f]/30 focus:border-[#f8931f] transition-all hover:border-slate-300"
+              className="w-full pl-10 pr-10 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f8931f]/30 focus:border-[#f8931f] transition-all hover:border-slate-300"
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#012061]/40 hover:text-[#012061] transition-colors"
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#012061] dark:text-slate-100/40 hover:text-[#012061] dark:hover:text-slate-100 dark:text-slate-100 transition-colors"
             >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
@@ -300,11 +300,11 @@ export default function LoginPage() {
               id="remember"
               checked={rememberMe}
               onCheckedChange={(checked: boolean) => setRememberMe(checked)}
-              className="border-slate-300 data-[state=checked]:bg-[#f8931f] data-[state=checked]:border-[#f8931f]"
+              className="border-slate-300 dark:border-slate-600 data-[state=checked]:bg-[#f8931f] data-[state=checked]:border-[#f8931f]"
             />
-            <label htmlFor="remember" className="text-xs text-slate-500 cursor-pointer select-none">Remember me</label>
+            <label htmlFor="remember" className="text-xs text-slate-500 dark:text-slate-400 cursor-pointer select-none">Remember me</label>
           </div>
-          <a href="#" className="text-xs text-slate-500 hover:text-[#f8931f] transition-colors" onClick={e => e.preventDefault()}>Forgot password?</a>
+          <a href="#" className="text-xs text-slate-500 dark:text-slate-400 hover:text-[#f8931f] transition-colors" onClick={e => e.preventDefault()}>Forgot password?</a>
         </div>
 
         {/* Submit */}
@@ -328,7 +328,7 @@ export default function LoginPage() {
         <p className="text-slate-400 text-xs">
           &copy; {new Date().getFullYear()} Office Asset Manager
         </p>
-        <a href="#" className="text-[10px] text-slate-400 hover:text-[#012061] transition-colors tracking-wide uppercase" onClick={e => e.preventDefault()}>Help &amp; Support</a>
+        <a href="#" className="text-[10px] text-slate-400 hover:text-[#012061] dark:hover:text-slate-100 dark:text-slate-100 transition-colors tracking-wide uppercase" onClick={e => e.preventDefault()}>Help &amp; Support</a>
       </div>
     </LayoutShell>
   );

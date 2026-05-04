@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { classifySeverity, generateSummary } from '../utils/auditHelpers';
 
-const prisma = new PrismaClient();
+
 
 function getClientIp(req: Request): string {
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';

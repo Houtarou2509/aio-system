@@ -69,9 +69,12 @@ model Assignment {
   returnedAt    DateTime?
   condition     String?
   notes         String?
+  agreementText String?          // Resolved agreement content (separate from general notes)
+  agreementId   String?          // FK to the template used for this issuance
   asset         Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
   user          User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
   personnel     Personnel?       @relation("PersonnelAssignments", fields: [personnelId], references: [id], onDelete: SetNull)
+  agreement     AgreementTemplate? @relation("AssignmentAgreement", fields: [agreementId], references: [id], onDelete: SetNull)
 
   @@map("assignments")
 }
@@ -224,6 +227,11 @@ model Personnel {
   phone             String?
   hiredDate         DateTime?
   employmentHistory String? @default("")
+  personnelType          String   @default("employee")
+  contractDurationMonths Int?
+  contractStartDate      DateTime?
+  contractEndDate        DateTime?
+  signedAgreementPath    String?
   status            String   @default("active")  // active, inactive, resigned
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -293,6 +301,7 @@ model AgreementTemplate {
   defaultAuthorizedRep   String?  // default name for Authorized Representative signatory
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
+  assignments            Assignment[] @relation("AssignmentAgreement")
 
   @@map("agreement_templates")
 }

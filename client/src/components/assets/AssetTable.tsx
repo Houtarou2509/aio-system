@@ -19,11 +19,11 @@ function getImageUrl(url: string | null | undefined): string {
 /* ── Status pill colors (Navy/Orange brand) ──────────────── */
 
 const STATUS_COLORS: Record<string, string> = {
-  AVAILABLE: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  ASSIGNED: 'bg-[#012061]/10 text-[#012061] border border-[#012061]/20',
+  AVAILABLE: 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border border-emerald-200',
+  ASSIGNED: 'bg-[#012061]/10 dark:bg-slate-700/50 text-[#012061] dark:text-slate-100 border border-[#012061]/20',
   MAINTENANCE: 'bg-[#f8931f]/10 text-[#f8931f] border border-[#012061]/30',
-  RETIRED: 'bg-slate-100 text-slate-500 border border-slate-200',
-  LOST: 'bg-red-50 text-red-600 border border-red-200',
+  RETIRED: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700',
+  LOST: 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-200 border border-red-200',
 };
 
 /* ── Props ───────────────────────────────────────────────── */
@@ -53,7 +53,7 @@ export function AssetTable({
     sortBy === field ? (sortOrder === 'asc' ? ' ↑' : ' ↓') : '';
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
       <table className="w-full text-sm">
         {/* ── Header: Navy ──────────────────────────────── */}
         <thead>
@@ -97,8 +97,8 @@ export function AssetTable({
             return (
               <tr
                 key={a.id}
-                className={`group border-b border-slate-100 cursor-pointer transition-colors
-                  ${isSelected ? 'bg-[#f8931f]/5 border-l-2 border-l-[#f8931f]' : 'hover:bg-slate-50 hover:border-l-2 hover:border-l-[#f8931f]'}
+                className={`group border-b border-slate-100 dark:border-slate-700 cursor-pointer transition-colors
+                  ${isSelected ? 'bg-[#f8931f]/5 border-l-2 border-l-[#f8931f]' : 'hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-l-2 hover:border-l-[#f8931f]'}
                 `}
                 onClick={() => onView(a)}
               >
@@ -108,7 +108,7 @@ export function AssetTable({
                     type="checkbox"
                     checked={isSelected}
                     onChange={() => onToggleSelect(a.id)}
-                    className="rounded border-slate-300 accent-[#f8931f]"
+                    className="rounded border-slate-300 dark:border-slate-600 accent-[#f8931f]"
                   />
                 </td>
 
@@ -118,7 +118,7 @@ export function AssetTable({
                     <img
                       src={imgUrl}
                       alt={a.name}
-                      className="h-10 w-10 rounded-full object-cover border-2 border-slate-100 cursor-pointer hover:opacity-80 transition-opacity"
+                      className="h-10 w-10 rounded-full object-cover border-2 border-slate-100 dark:border-slate-700 cursor-pointer hover:opacity-80 transition-opacity"
                       onClick={() => onImageClick?.(imgUrl)}
                     />
                   ) : (
@@ -129,7 +129,7 @@ export function AssetTable({
                 </td>
 
                 {/* Name — Bold Navy */}
-                <td className="px-3 py-2 font-semibold text-[#012061] whitespace-nowrap">
+                <td className="px-3 py-2 font-semibold text-[#012061] dark:text-slate-100 whitespace-nowrap">
                   {a.name}
                   {(() => {
                     const w = getWarrantyStatus((a as any).warrantyExpiry);
@@ -146,31 +146,31 @@ export function AssetTable({
                 </td>
 
                 {/* Type */}
-                <td className="px-3 py-2 text-xs text-slate-600 whitespace-nowrap">{a.type}</td>
+                <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">{a.type}</td>
 
                 {/* Status — Pill */}
                 <td className="px-3 py-2">
-                  <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide ${STATUS_COLORS[a.status] || 'bg-slate-100 text-slate-500'}`}>
+                  <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide ${STATUS_COLORS[a.status] || 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
                     {a.status}
                   </span>
                 </td>
 
                 {/* Location */}
-                <td className="px-3 py-2 text-xs text-slate-600">{a.location || <span className="text-slate-300">—</span>}</td>
+                <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">{a.location || <span className="text-slate-300">—</span>}</td>
 
                 {/* Assigned To */}
-                <td className="px-3 py-2 text-xs text-slate-600">{a.assignedTo || <span className="text-slate-300">—</span>}</td>
+                <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">{a.assignedTo || <span className="text-slate-300">—</span>}</td>
 
                 {/* Property # */}
-                <td className="px-3 py-2 text-xs text-slate-600 font-mono">{(a as any).propertyNumber || <span className="text-slate-300">—</span>}</td>
+                <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 font-mono">{(a as any).propertyNumber || <span className="text-slate-300">—</span>}</td>
 
                 {/* Price */}
-                <td className="px-3 py-2 text-xs text-slate-600 whitespace-nowrap">
+                <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">
                   {a.purchasePrice != null ? <span className="font-medium">₱{Number(a.purchasePrice).toLocaleString()}</span> : <span className="text-slate-300">—</span>}
                 </td>
 
                 {/* Added */}
-                <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
+                <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
                   {new Date(a.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}
                 </td>
               </tr>

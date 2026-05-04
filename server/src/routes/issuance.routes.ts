@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import * as issuanceService from '../services/issuance.service';
 import { authenticate, requireRole } from '../middleware/auth';
 import { success, error } from '../utils/response';
+import { validate } from '../middleware/validate';
+import { createIssuanceSchema, returnIssuanceSchema, resolveTemplateSchema, bulkIssuanceSchema, resolveBulkTemplateSchema } from './issuance.schema';
 
 const router = Router();
 
@@ -48,7 +50,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 });
 
 /* ─── Create issuance ─── */
-router.post('/', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res: Response) => {
+router.post('/', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), validate(createIssuanceSchema), async (req: Request, res: Response) => {
   try {
     const result = await issuanceService.createIssuance(
       req.body,
@@ -63,7 +65,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), async (req
 });
 
 /* ─── Return issuance ─── */
-router.post('/:id/return', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res: Response) => {
+router.post('/:id/return', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), validate(returnIssuanceSchema), async (req: Request, res: Response) => {
   try {
     const result = await issuanceService.returnIssuance(
       String(req.params.id),
@@ -105,6 +107,48 @@ router.post('/agreement', authenticate, (req: Request, res: Response) => {
   try {
     const text = issuanceService.generateAgreementText(req.body);
     success(res, { text });
+  } catch (e: any) {
+    error(res, e.message, 400);
+  }
+});
+
+/* ─── Resolve template placeholders server-side ─── */
+router.post('/resolve-template', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), validate(resolveTemplateSchema), async (req: Request, res: Response) => {
+  try {
+    const result = await issuanceService.resolveTemplate(req.body);
+    success(res, result);
+  } catch (e: any) {
+    const status = e.message.includes('not found') ? 404 : 400;
+    error(res, e.message, status);
+  }
+});
+
+/* ─── Resolve template for multi-asset preview ─── */
+router.post('/resolve-template/bulk', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), validate(resolveBulkTemplateSchema), async (req: Request, res: Response) => {
+  try {
+    const { assetIds, ...rest } = req.body;
+    const result = await issuanceService.resolveTemplate({
+      ...rest,
+      assetIds,
+      templateId: req.body.templateId,
+    });
+    success(res, result);
+  } catch (e: any) {
+    const status = e.message.includes('not found') ? 404 : 400;
+    error(res, e.message, status);
+  }
+});
+
+/* ─── Bulk issuance (multi-asset) ─── */
+router.post('/bulk', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), validate(bulkIssuanceSchema), async (req: Request, res: Response) => {
+  try {
+    const result = await issuanceService.bulkIssueAssets(
+      req.body,
+      req.user!.id,
+      getClientIp(req),
+      getUA(req),
+    );
+    success(res, result, 201);
   } catch (e: any) {
     error(res, e.message, 400);
   }
