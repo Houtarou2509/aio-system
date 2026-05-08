@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { BookOpen, Settings2, LayoutDashboard, Package, Users, History, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon } from 'lucide-react';
+import { BookOpen, Settings2, LayoutDashboard, Package, Users, History, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, Truck, ShoppingCart, ScanLine } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/notifications/NotificationBell';
 import { useTheme } from '../context/ThemeContext';
@@ -11,6 +12,7 @@ import ShortcutsHelpModal from '../components/ShortcutsHelpModal';
 const inventoryNav = [
   { to: '/', label: 'Dashboard', IconComponent: LayoutDashboard, end: true },
   { to: '/assets', label: 'Assets', IconComponent: Package },
+  { to: '/reports', label: 'Reports', IconComponent: BarChart3 },
   { to: '/lookup', label: 'Inventory Lookup', IconComponent: BookOpen, roles: ['ADMIN', 'STAFF_ADMIN'] },
 ];
 
@@ -22,6 +24,8 @@ const issuanceNav = [
 ];
 
 const systemNav = [
+  { to: '/suppliers', label: 'Suppliers', IconComponent: Truck },
+  { to: '/purchase-requests', label: 'Purchase Requests', IconComponent: ShoppingCart },
   { to: '/users', label: 'Users', IconComponent: Users, roles: ['ADMIN'] },
   { to: '/audit', label: 'Audit Trail', IconComponent: History },
   { to: '/settings', label: 'Settings', IconComponent: Settings2 },
@@ -30,6 +34,7 @@ const systemNav = [
 export default function AppLayout() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { helpOpen, setHelpOpen } = useKeyboardShortcuts();
 
@@ -183,9 +188,38 @@ export default function AppLayout() {
       )}
 
       {/* ── Main Content ── */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto md:pb-0 pb-16 md:pt-0 bg-[#012061] md:bg-transparent">
         <Outlet />
       </main>
+
+      {/* ── Mobile Bottom Tab Bar (md:hidden) ── */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#012061] border-t border-[#001a4d] flex items-center justify-around safe-bottom"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        {[
+          { to: '/', icon: LayoutDashboard, label: 'Home', end: true },
+          { to: '/assets', icon: Package, label: 'Assets' },
+          { to: '/assets?action=scan', icon: ScanLine, label: 'Scan' },
+          { to: '/reports', icon: BarChart3, label: 'Reports' },
+          { to: '/issuances', icon: FileSignature, label: 'Issuances', roles: ['ADMIN', 'STAFF_ADMIN'] },
+        ].filter(item => !item.roles || item.roles.includes(user?.role || '')).slice(0, 5).map(item => {
+          const isActive = item.end
+            ? location.pathname === item.to
+            : location.pathname.startsWith(item.to.replace(/\/$/, '')) && item.to !== '/';
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={`flex flex-col items-center justify-center gap-0.5 py-2 px-3 min-w-[44px] min-h-[44px] transition-colors duration-200 ${
+                isActive ? 'text-[#f8931f]' : 'text-white/50 hover:text-white/80'
+              }`}
+            >
+              <item.icon className="h-5 w-5" />
+              <span className="text-[9px] font-medium leading-none">{item.label}</span>
+            </NavLink>
+          );
+        })}
+      </nav>
 
       {/* Keyboard Shortcuts Help Modal */}
       <ShortcutsHelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />

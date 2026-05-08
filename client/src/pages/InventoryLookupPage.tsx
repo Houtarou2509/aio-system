@@ -71,7 +71,7 @@ export default function InventoryLookupPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-light-bg dark:bg-slate-900">
+    <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
 
       {/* ═══ STICKY NAVY HEADER ═════════════════════════════ */}
       <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
@@ -85,6 +85,9 @@ export default function InventoryLookupPage() {
           </p>
         </div>
       </header>
+
+      {/* ═══ CONTENT AREA ════════════════════════════════════ */}
+      <div className="flex-1 flex flex-col overflow-auto bg-light-bg dark:bg-slate-900">
 
       {/* ═══ KPI TILES ═══════════════════════════════════════ */}
       <section className="px-6 pt-4 shrink-0">
@@ -140,6 +143,7 @@ export default function InventoryLookupPage() {
       <div className="flex-1 overflow-auto px-6 pb-6">
         <LookupTabWrapper category={activeTab} />
       </div>
+      </div>{/* close content area */}
     </div>
   );
 }

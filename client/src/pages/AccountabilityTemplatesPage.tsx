@@ -312,7 +312,7 @@ export default function AccountabilityTemplatesPage() {
   /* ─── RENDER ─── */
 
   return (
-    <div className="h-full flex flex-col bg-light-bg dark:bg-slate-900">
+    <div className="h-full flex flex-col pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
       {/* Page header — consistent with Accountability section */}
       <header className="shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-4">
@@ -335,6 +335,9 @@ export default function AccountabilityTemplatesPage() {
           </button>
         </div>
       </header>
+
+      {/* ═══ CONTENT AREA ════════════════════════════════════ */}
+      <div className="flex-1 flex flex-col overflow-auto bg-light-bg dark:bg-slate-900">
 
       {/* ── Main split pane ── */}
       <div className="flex-1 flex overflow-hidden">
@@ -818,6 +821,7 @@ export default function AccountabilityTemplatesPage() {
           </div>
         ))}
       </div>
+      </div>{/* close content area */}
     </div>
   );
 }

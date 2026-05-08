@@ -76,7 +76,10 @@ export function TemplateDesigner() {
           </div>
         </div>
         <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
-          <button onClick={handleSave} disabled={loading || !name.trim()} className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+          <button onClick={handleSave} disabled={loading || !name.trim()}
+            className="rounded-lg px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-colors disabled:opacity-50"
+            style={{ backgroundColor: '#f8931f' }}
+          >
             {loading ? 'Saving...' : 'Save Template'}
           </button>
         </RoleGate>

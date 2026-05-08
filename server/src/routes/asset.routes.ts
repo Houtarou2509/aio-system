@@ -25,6 +25,7 @@ import {
   bulkReturnSchema,
   bulkUpdateSchema,
 } from './asset.schema';
+import { disposeAssetSchema } from './disposal.schema';
 
 const router = Router();
 
@@ -500,6 +501,29 @@ router.post('/:id/image', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), upload.s
     return success(res, result, 200);
   } catch (err: any) {
     return error(res, err.message, 400);
+  }
+});
+
+// POST /api/assets/:id/dispose — formal disposal with reason/method/date (Admin only)
+router.post('/:id/dispose', authorize(['ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const parsed = disposeAssetSchema.safeParse(req.body);
+    if (!parsed.success) return error(res, parsed.error.message, 400);
+
+    const asset = await assetService.disposeAsset(
+      String(req.params.id),
+      parsed.data,
+      req.user!.id,
+      getClientIp(req),
+      String(req.headers['user-agent'] || ''),
+    );
+
+    return success(res, asset, 200);
+  } catch (err: any) {
+    const status = err.message === 'Asset not found' ? 404
+      : err.message === 'Asset is already retired' ? 409
+      : 400;
+    return error(res, err.message, status);
   }
 });
 

@@ -322,3 +322,50 @@ export async function getAssetStats() {
     byLocation: Object.fromEntries(byLocation.filter(l => l.location).map(l => [l.location, l._count.location])),
   };
 }
+
+// --- DISPOSE ---
+export async function disposeAsset(
+  id: string,
+  data: { reason: string; method: string; date: string },
+  performedById: string,
+  ipAddress?: string,
+  userAgent?: string,
+) {
+  const existing = await prisma.asset.findUnique({ where: { id, deletedAt: null } });
+  if (!existing) throw new Error('Asset not found');
+  if (existing.status === 'RETIRED') throw new Error('Asset is already retired');
+
+  const disposalDate = new Date(data.date);
+
+  const asset = await prisma.asset.update({
+    where: { id },
+    data: {
+      status: 'RETIRED',
+      deletedAt: new Date(),
+      disposalReason: data.reason,
+      disposalDate,
+      disposalMethod: data.method as any,
+    },
+  });
+
+  const methodLabel = data.method.replace(/_/g, ' ').toLowerCase();
+  const summary = `Disposed "${existing.name}" — ${methodLabel} on ${disposalDate.toLocaleDateString('en-PH')}: ${data.reason}`;
+
+  await prisma.auditLog.create({
+    data: {
+      entityType: 'Asset',
+      entityId: id,
+      action: 'DISPOSE',
+      performedById,
+      ipAddress,
+      userAgent,
+      field: '*',
+      oldValue: null,
+      newValue: JSON.stringify(data),
+      severity: 'HIGH',
+      summary,
+    },
+  });
+
+  return asset;
+}

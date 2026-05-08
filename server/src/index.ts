@@ -28,6 +28,10 @@ import lookupRoutes from './routes/lookup.routes';
 import institutionRoutes from './routes/institution.routes';
 import projectRoutes from './routes/project.routes';
 import accountabilityLookupRoutes from './routes/accountabilityLookup.routes';
+import reportsRoutes from './routes/reports.routes';
+import purchaseRequestRoutes from './routes/purchase-request.routes';
+import searchRoutes from './routes/search.routes';
+import supplierRoutes from './routes/supplier.routes';
 import { startCronJobs } from './jobs/cron';
 
 // Start server only when not in test
@@ -112,6 +116,10 @@ app.use('/api/users', userRoutes);
 app.use('/api/personnel', personnelRoutes);
 app.use('/api/issuances', issuanceRoutes);
 app.use('/api/agreements', agreementRoutes);
+app.use('/api/reports', reportsRoutes);
+app.use('/api/purchase-requests', purchaseRequestRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/api/suppliers', supplierRoutes);
 
 // Redirect root to /aio-system/
 app.get('/', (_req, res) => {

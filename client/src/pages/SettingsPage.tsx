@@ -120,7 +120,7 @@ export default function SettingsPage() {
   const failedCount = backups.filter(b => b.status === 'FAILED').length;
 
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-800">
+    <div className="flex flex-col min-h-dvh pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
       {/* ── Header (matches Assets Page) ── */}
       <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-4">
@@ -136,6 +136,9 @@ export default function SettingsPage() {
           )}
         </div>
       </header>
+
+      {/* ── Scrollable Content ── */}
+      <div className="flex-1 overflow-y-auto bg-white dark:bg-slate-800 pb-20 md:pb-0">
 
       {/* ── Account Row ── */}
       <div>
@@ -222,42 +225,42 @@ export default function SettingsPage() {
       </div>
 
       {/* ── Security KPIs ── */}
-      <div className="grid grid-cols-4 gap-4 px-6 py-4 border-b border-slate-100 dark:border-slate-700">
-        <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
-          <div className="p-2 rounded-md bg-emerald-50 dark:bg-emerald-950">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 px-4 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+        <div className="flex flex-col items-center text-center bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 p-3 sm:p-4">
+          <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
+            <div className="p-2 rounded-md bg-emerald-50 dark:bg-emerald-950 shrink-0">
+              <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" />
+            </div>
+            <p className="text-lg sm:text-2xl font-bold text-emerald-600">{completedCount}</p>
           </div>
-          <div>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Successful</p>
-            <p className="text-xl font-bold text-emerald-600">{completedCount}</p>
-          </div>
+          <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Successful</p>
         </div>
-        <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
-          <div className="p-2 rounded-md bg-red-50 dark:bg-red-950">
-            <AlertCircle className="w-4 h-4 text-red-600" />
+        <div className="flex flex-col items-center text-center bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 p-3 sm:p-4">
+          <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
+            <div className="p-2 rounded-md bg-red-50 dark:bg-red-950 shrink-0">
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
+            </div>
+            <p className="text-lg sm:text-2xl font-bold text-red-600">{failedCount}</p>
           </div>
-          <div>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Failed</p>
-            <p className="text-xl font-bold text-red-600">{failedCount}</p>
-          </div>
+          <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Failed</p>
         </div>
-        <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
-          <div className="p-2 rounded-md bg-slate-100 dark:bg-slate-800">
-            <Lock className="w-4 h-4" style={{ color: '#012061' }} />
+        <div className="flex flex-col items-center text-center bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 p-3 sm:p-4">
+          <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
+            <div className="p-2 rounded-md bg-slate-100 dark:bg-slate-800 shrink-0">
+              <Lock className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: '#012061' }} />
+            </div>
+            <p className="text-lg sm:text-2xl font-bold" style={{ color: '#012061' }}>AES-256</p>
           </div>
-          <div>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Encryption</p>
-            <p className="text-xl font-bold" style={{ color: '#012061' }}>AES-256</p>
-          </div>
+          <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Encryption</p>
         </div>
-        <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
-          <div className="p-2 rounded-md bg-slate-100 dark:bg-slate-800">
-            <Clock className="w-4 h-4" style={{ color: '#012061' }} />
+        <div className="flex flex-col items-center text-center bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 p-3 sm:p-4">
+          <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
+            <div className="p-2 rounded-md bg-slate-100 dark:bg-slate-800 shrink-0">
+              <Clock className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: '#012061' }} />
+            </div>
+            <p className="text-lg sm:text-2xl font-bold" style={{ color: '#012061' }}>02:00</p>
           </div>
-          <div>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Daily Backup</p>
-            <p className="text-xl font-bold" style={{ color: '#012061' }}>02:00</p>
-          </div>
+          <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Daily Backup</p>
         </div>
       </div>
 
@@ -320,7 +323,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Connectivity Matrix */}
-        <div className="grid grid-cols-2 gap-3 mt-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-4">
           {[
             { icon: Cloud, name: 'AWS S3', envVar: 'AWS_S3_BUCKET', configured: false },
             { icon: CloudCog, name: 'Google Drive', envVar: 'GOOGLE_DRIVE_CREDENTIALS', configured: false },
@@ -331,34 +334,34 @@ export default function SettingsPage() {
             return (
               <div
                 key={item.name}
-                className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-slate-300 transition-colors"
+                className="flex flex-col items-center text-center sm:flex-row sm:text-left sm:items-center gap-2 sm:gap-3 p-2 sm:p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-slate-300 transition-colors"
               >
                 <div className={`flex items-center justify-center w-8 h-8 rounded-lg shrink-0 ${
                   item.configured ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
                 }`}>
                   <Icon className="w-4 h-4" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-semibold" style={{ color: '#012061' }}>{item.name}</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-1.5">
+                    <p className="text-[11px] sm:text-xs font-semibold truncate" style={{ color: '#012061' }}>{item.name}</p>
                     {item.configured ? (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border border-emerald-200">
+                      <span className="inline-flex items-center gap-0.5 text-[9px] sm:text-[10px] font-medium px-1.5 py-0 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border border-emerald-200 self-center sm:self-auto w-fit">
                         <CheckCircle2 className="w-2.5 h-2.5" />
                         Enabled
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                      <span className="inline-flex items-center gap-0.5 text-[9px] sm:text-[10px] font-medium px-1.5 py-0 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 self-center sm:self-auto w-fit">
                         Not Configured
                       </span>
                     )}
                   </div>
                   {item.detail && (
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{item.detail}</p>
+                    <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{item.detail}</p>
                   )}
                   {item.envVar && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <Terminal className="w-2.5 h-2.5 text-slate-400" />
-                      <code className="text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-mono">
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <Terminal className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                      <code className="text-[9px] sm:text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-mono truncate">
                         {item.envVar}
                       </code>
                     </div>
@@ -369,6 +372,7 @@ export default function SettingsPage() {
           })}
         </div>
       </div>
+      </div>{/* close scrollable content */}
     </div>
   );
 }

@@ -71,7 +71,10 @@ export function GuestTokenManager({ assetId }: Props) {
             <label className="text-xs text-muted-foreground">Max accesses</label>
             <input type="number" value={maxAccess} onChange={e => setMaxAccess(e.target.value)} className="w-16 rounded border border-input bg-background px-2 py-1 text-xs" />
           </div>
-          <button onClick={handleCreate} disabled={creating} className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+          <button onClick={handleCreate} disabled={creating}
+            className="rounded-lg px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-colors disabled:opacity-50"
+            style={{ backgroundColor: '#f8931f' }}
+          >
             {creating ? 'Creating...' : 'Generate Link'}
           </button>
         </div>

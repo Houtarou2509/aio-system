@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiFetch, ApiError } from '../lib/api';
+import { useDebounce } from '../hooks/useDebounce';
 import { RoleGate } from '../components/auth';
 import {
-  FileSignature, PlusCircle, Search, Loader2, X, ArrowRightLeft, RotateCcw, Package, Users, FileText, QrCode, CheckCircle2, ChevronRight,
+  FileSignature, PlusCircle, Search, Loader2, X, ArrowRightLeft, RotateCcw,
+  Package, FileText, QrCode, CheckCircle2, ChevronRight, Calendar, CheckCircle,
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import QRReturnScanner from '../components/issuances/QRReturnScanner';
@@ -25,6 +27,8 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
   const [step, setStep] = useState(1);
   const [assetSearch, setAssetSearch] = useState('');
   const [personnelSearch, setPersonnelSearch] = useState('');
+  const debouncedAssetSearch = useDebounce(assetSearch, 300);
+  const debouncedPersonnelSearch = useDebounce(personnelSearch, 300);
   const [assets, setAssets] = useState<AssetOption[]>([]);
   const [personnel, setPersonnel] = useState<PersonnelOption[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<AssetOption | null>(null);
@@ -32,42 +36,27 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
   const [condition, setCondition] = useState('Good');
   const [agreement, setAgreement] = useState('');
   const [saving, setSaving] = useState(false);
-  const timerRef = useRef<any>(null);
 
-  // Template selector
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [templatesLoading, setTemplatesLoading] = useState(false);
-
-  // Signatory names (auto-filled from template, editable per-issuance)
   const [propertyOfficerName, setPropertyOfficerName] = useState('');
   const [authorizedRepName, setAuthorizedRepName] = useState('');
 
-  // Debounced asset search
+  // Debounced asset search — loads all assets on mount
   useEffect(() => {
-    clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(async () => {
-      try {
-        const res = await apiFetch(`/issuances/assets/available${assetSearch ? `?search=${assetSearch}` : ''}`);
-        setAssets(res.data || []);
-      } catch {}
-    }, 300);
-    return () => clearTimeout(timerRef.current);
-  }, [assetSearch]);
+    apiFetch(`/issuances/assets/available${debouncedAssetSearch ? `?search=${debouncedAssetSearch}` : ''}`)
+      .then(res => setAssets(res.data || []))
+      .catch(() => {});
+  }, [debouncedAssetSearch]);
 
   // Debounced personnel search
   useEffect(() => {
-    clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(async () => {
-      try {
-        const res = await apiFetch(`/issuances/personnel/active${personnelSearch ? `?search=${personnelSearch}` : ''}`);
-        setPersonnel(res.data || []);
-      } catch {}
-    }, 300);
-    return () => clearTimeout(timerRef.current);
-  }, [personnelSearch]);
+    apiFetch(`/issuances/personnel/active${debouncedPersonnelSearch ? `?search=${debouncedPersonnelSearch}` : ''}`)
+      .then(res => setPersonnel(res.data || []))
+      .catch(() => {});
+  }, [debouncedPersonnelSearch]);
 
-  // Fetch templates when wizard opens
   useEffect(() => {
     async function loadTemplates() {
       setTemplatesLoading(true);
@@ -75,38 +64,30 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
         const res = await apiFetch('/agreements/templates');
         const list: TemplateOption[] = res.data ?? res;
         setTemplates(list);
-        // Auto-select default template
         const def = list.find(t => t.isDefault) ?? list[0] ?? null;
         if (def) {
           setSelectedTemplateId(def.id);
           setPropertyOfficerName(def.defaultPropertyOfficer || '');
           setAuthorizedRepName(def.defaultAuthorizedRep || '');
         }
-      } catch { /* non-critical */ }
+      } catch {}
       finally { setTemplatesLoading(false); }
     }
     loadTemplates();
   }, []);
 
-  // Generate agreement when asset + personnel selected, using the selected template
   useEffect(() => {
     if (!selectedAsset || !selectedPersonnel) return;
-
     const template = templates.find(t => t.id === selectedTemplateId);
     const templateContent = template?.content;
-
-    // If no template selected or no content, use a sensible fallback
     if (!templateContent) {
       const fallback = `ISSUANCE AND ACCOUNTABILITY AGREEMENT\n\nDate: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}\n\nThis certifies that ${selectedPersonnel.fullName}${selectedPersonnel.position ? `, ${selectedPersonnel.position}` : ''}${selectedPersonnel.department ? ` of ${selectedPersonnel.department}` : ''}${selectedPersonnel.project ? ` (${selectedPersonnel.project})` : ''} has been issued the following asset for official use:\n\nAsset: ${selectedAsset.name}${selectedAsset.serialNumber ? `\nSerial Number: ${selectedAsset.serialNumber}` : ''}${selectedAsset.propertyNumber ? `\nProperty Number: ${selectedAsset.propertyNumber}` : ''}\n\nTerms and Conditions:\n1. The issued asset shall be used solely for official business purposes.\n2. The recipient shall exercise due diligence in the care and protection of the asset.\n3. The asset shall not be transferred to another individual without proper documentation.\n4. Any damage, loss, or theft must be reported immediately to the Property Officer.\n5. The asset shall be returned upon resignation, transfer, or upon request by management.\n6. The recipient assumes full accountability for the asset during the period of possession.\n\n________________________________________\n${selectedPersonnel.fullName} (Recipient)\n\n________________________________________\nProperty Officer\n\n________________________________________\nAuthorized Representative`;
       setAgreement(fallback);
       return;
     }
-
-    // Replace placeholders with actual data
     const position = selectedPersonnel.position || '';
     const department = selectedPersonnel.department || '';
     const project = selectedPersonnel.project || '';
-
     const placeholderMap: Record<string, string> = {
       '{{date}}': new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
       '{{fullName}}': selectedPersonnel.fullName,
@@ -124,11 +105,9 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
       '{{propertyNumber}}': selectedAsset.propertyNumber || 'N/A',
       '{{condition}}': condition,
     };
-
     const filled = templateContent.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => {
       return placeholderMap[`{{${key}}}`] !== undefined ? placeholderMap[`{{${key}}}`] : `{{${key}}}`;
     });
-
     setAgreement(filled);
   }, [selectedAsset, selectedPersonnel, selectedTemplateId, condition, templates]);
 
@@ -153,7 +132,6 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-8 overflow-y-auto" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl mb-10" onClick={e => e.stopPropagation()}>
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b rounded-t-xl" style={{ background: '#012061' }}>
           <div className="flex items-center gap-2">
             <FileSignature className="w-5 h-5 text-[#f8931f]" />
@@ -161,8 +139,6 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
           </div>
           <button onClick={onClose} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
         </div>
-
-        {/* Steps indicator */}
         <div className="flex items-center gap-1 px-5 py-3 bg-slate-50 border-b">
           {[1, 2, 3].map(s => (
             <div key={s} className="flex items-center gap-1">
@@ -172,9 +148,7 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
             </div>
           ))}
         </div>
-
         <div className="p-5">
-          {/* Step 1: Select Asset */}
           {step === 1 && (
             <div className="space-y-3">
               <label className="text-xs font-semibold text-slate-700">Select Available Asset</label>
@@ -201,8 +175,6 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
               )}
             </div>
           )}
-
-          {/* Step 2: Select Personnel */}
           {step === 2 && (
             <div className="space-y-3">
               <button onClick={() => setStep(1)} className="text-xs text-slate-500 hover:text-slate-700 mb-1">← Back to Asset</button>
@@ -224,49 +196,31 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
               </div>
               {selectedPersonnel && (
                 <div className="flex items-center gap-2 bg-emerald-50 px-3 py-2 rounded-lg">
-                  <Users className="w-4 h-4 text-emerald-600" />
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
                   <span className="text-xs font-medium text-emerald-700">Selected: {selectedPersonnel.fullName}</span>
                 </div>
               )}
             </div>
           )}
-
-          {/* Step 3: Agreement */}
           {step === 3 && (
             <div className="flex flex-col" style={{ minHeight: '60vh' }}>
               <button onClick={() => setStep(2)} className="text-xs text-slate-500 hover:text-slate-700 mb-4">← Back to Personnel</button>
-
               <div className="grid grid-cols-1 md:grid-cols-3 gap-5 flex-1">
-                {/* Left Column — Summary Cards */}
                 <div className="space-y-3">
                   <div className="bg-slate-50 rounded-lg p-4">
                     <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Asset</p>
                     <p className="text-sm font-semibold" style={{ color: '#012061' }}>{selectedAsset?.name}</p>
-                    {selectedAsset?.serialNumber && (
-                      <p className="text-[10px] text-slate-500 mt-1">S/N: {selectedAsset.serialNumber}</p>
-                    )}
-                    {selectedAsset?.propertyNumber && (
-                      <p className="text-[10px] text-slate-500">Prop #: {selectedAsset.propertyNumber}</p>
-                    )}
-                    {selectedAsset?.type && (
-                      <p className="text-[10px] text-slate-500">{selectedAsset.type}{selectedAsset.manufacturer ? ` • ${selectedAsset.manufacturer}` : ''}</p>
-                    )}
+                    {selectedAsset?.serialNumber && <p className="text-[10px] text-slate-500 mt-1">S/N: {selectedAsset.serialNumber}</p>}
+                    {selectedAsset?.propertyNumber && <p className="text-[10px] text-slate-500">Prop #: {selectedAsset.propertyNumber}</p>}
+                    {selectedAsset?.type && <p className="text-[10px] text-slate-500">{selectedAsset.type}{selectedAsset.manufacturer ? ` • ${selectedAsset.manufacturer}` : ''}</p>}
                   </div>
-
                   <div className="bg-slate-50 rounded-lg p-4">
                     <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Personnel</p>
                     <p className="text-sm font-semibold" style={{ color: '#012061' }}>{selectedPersonnel?.fullName}</p>
-                    {selectedPersonnel?.position && (
-                      <p className="text-[10px] text-slate-500 mt-1">{selectedPersonnel.position}</p>
-                    )}
-                    {selectedPersonnel?.department && (
-                      <p className="text-[10px] text-slate-500">{selectedPersonnel.department}</p>
-                    )}
-                    {selectedPersonnel?.project && (
-                      <p className="text-[10px] text-slate-500">{selectedPersonnel.project}</p>
-                    )}
+                    {selectedPersonnel?.position && <p className="text-[10px] text-slate-500 mt-1">{selectedPersonnel.position}</p>}
+                    {selectedPersonnel?.department && <p className="text-[10px] text-slate-500">{selectedPersonnel.department}</p>}
+                    {selectedPersonnel?.project && <p className="text-[10px] text-slate-500">{selectedPersonnel.project}</p>}
                   </div>
-
                   <div>
                     <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Agreement Template</label>
                     <div className="relative mt-1">
@@ -286,23 +240,14 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
                           <option value="">No templates available</option>
                         ) : (
                           templates.map(t => (
-                            <option key={t.id} value={t.id}>
-                              {t.name}{t.isDefault ? ' (Default)' : ''}
-                            </option>
+                            <option key={t.id} value={t.id}>{t.name}{t.isDefault ? ' (Default)' : ''}</option>
                           ))
                         )}
                       </select>
-                      {templatesLoading && (
-                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 animate-spin" />
-                      )}
+                      {templatesLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 animate-spin" />}
                     </div>
-                    {selectedTemplateId && (
-                      <p className="text-[10px] text-slate-400 mt-1">
-                        Template content applied below — you can edit before issuing
-                      </p>
-                    )}
+                    {selectedTemplateId && <p className="text-[10px] text-slate-400 mt-1">Template content applied below — you can edit before issuing</p>}
                   </div>
-
                   <div>
                     <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Condition at Issuance</label>
                     <select value={condition} onChange={e => setCondition(e.target.value)}
@@ -310,29 +255,18 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
                       <option>New</option><option>Good</option><option>Fair</option><option>Poor</option>
                     </select>
                   </div>
-
                   <div>
                     <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Signatories</label>
                     <div className="space-y-2 mt-1">
-                      <input
-                        type="text"
-                        value={propertyOfficerName}
-                        onChange={e => setPropertyOfficerName(e.target.value)}
+                      <input type="text" value={propertyOfficerName} onChange={e => setPropertyOfficerName(e.target.value)}
                         placeholder="Property Officer name"
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent"
-                      />
-                      <input
-                        type="text"
-                        value={authorizedRepName}
-                        onChange={e => setAuthorizedRepName(e.target.value)}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                      <input type="text" value={authorizedRepName} onChange={e => setAuthorizedRepName(e.target.value)}
                         placeholder="Authorized Representative name"
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent"
-                      />
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
                     </div>
                   </div>
                 </div>
-
-                {/* Right Column — Agreement Text */}
                 <div className="md:col-span-2 flex flex-col">
                   <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1.5">
                     <FileText className="w-3.5 h-3.5 text-[#f8931f]" />Agreement Letter
@@ -342,8 +276,6 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
                     style={{ minHeight: '400px' }} />
                 </div>
               </div>
-
-              {/* Sticky Footer Action Bar */}
               <div className="sticky bottom-0 bg-white border-t mt-4 pt-4 flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={() => {
@@ -364,7 +296,7 @@ function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => v
                   }}
                   className="flex-1 py-2.5 rounded-lg text-sm font-semibold border-2 border-[#012061] text-[#012061] hover:bg-[#012061] hover:text-white transition-colors flex items-center justify-center gap-2"
                 >
-                  <FileText className="w-4 h-4" /> Generate &amp; Preview PDF
+                  <FileText className="w-4 h-4" /> Generate & Preview PDF
                 </button>
                 <button onClick={handleIssue} disabled={saving}
                   className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white bg-[#f8931f] hover:bg-[#e07e0a] disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
@@ -429,14 +361,12 @@ function ReturnStationModal({ open, onClose, onSave }: { open: boolean; onClose:
               autoFocus />
             <button onClick={handleSearch} className="px-4 py-2 rounded-lg text-xs font-semibold bg-[#012061] text-white hover:bg-[#001a4d]">Find</button>
           </div>
-
           {message && (
             <div className={`text-xs px-3 py-2 rounded-lg ${message.includes('success') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
               {message.includes('success') && <CheckCircle2 className="w-3.5 h-3.5 inline mr-1" />}
               {message}
             </div>
           )}
-
           {searchResults.length > 0 && (
             <div className="border rounded-lg divide-y max-h-60 overflow-y-auto">
               {searchResults.map(iss => (
@@ -455,12 +385,34 @@ function ReturnStationModal({ open, onClose, onSave }: { open: boolean; onClose:
               ))}
             </div>
           )}
-
           {searchResults.length === 0 && scanValue && !message && (
             <p className="text-xs text-slate-400 text-center">No active issuances found</p>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ─── Empty State ─── */
+function EmptyState({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-center">
+      <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-[#f8931f]/10 mb-4">
+        <FileSignature className="h-10 w-10 text-[#f8931f]" />
+      </div>
+      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">No issuances yet</h3>
+      <p className="text-sm text-slate-500 dark:text-slate-400 mb-5 max-w-xs">
+        Issue an asset to personnel to start tracking accountability.
+      </p>
+      <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
+        <button
+          onClick={onAdd}
+          className="inline-flex items-center gap-2 rounded-lg bg-[#f8931f] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors"
+        >
+          <PlusCircle className="h-4 w-4" /> New Issuance
+        </button>
+      </RoleGate>
     </div>
   );
 }
@@ -479,6 +431,13 @@ export default function IssuancesPage() {
   const [showQRReturn, setShowQRReturn] = useState(false);
   const [showBulkWizard, setShowBulkWizard] = useState(false);
 
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkReturning, setBulkReturning] = useState(false);
+
+  // Toast
+  const [toast, setToast] = useState<string | null>(null);
+
   const fetchIssuances = async () => {
     setLoading(true);
     try {
@@ -495,8 +454,52 @@ export default function IssuancesPage() {
 
   useEffect(() => { fetchIssuances(); }, [search, statusFilter]);
 
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
   const activeCount = issuances.filter(i => !i.returnedAt).length;
   const returnedCount = issuances.filter(i => i.returnedAt).length;
+  const returnedThisMonth = issuances.filter(i => {
+    if (!i.returnedAt) return false;
+    const d = new Date(i.returnedAt);
+    const now = new Date();
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }).length;
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedIds.size === issuances.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(issuances.map(i => i.id)));
+  }, [selectedIds.size, issuances]);
+
+  const deselectAll = () => setSelectedIds(new Set());
+
+  const handleBulkReturn = async () => {
+    setBulkReturning(true);
+    let succeeded = 0;
+    let failed = 0;
+    for (const id of selectedIds) {
+      try {
+        await apiFetch(`/issuances/${id}/return`, { method: 'POST', body: { condition: 'Good' } });
+        succeeded++;
+      } catch { failed++; }
+    }
+    setBulkReturning(false);
+    setSelectedIds(new Set());
+    showToast(`${succeeded} returned${failed > 0 ? `, ${failed} failed` : ''}`);
+    fetchIssuances();
+  };
+
+  const KPI_CARDS = [
+    { key: 'activeCount', label: 'ACTIVE ISSUANCES', icon: ArrowRightLeft, value: activeCount },
+    { key: 'returnedCount', label: 'TOTAL RETURNED', icon: CheckCircle, value: returnedCount },
+    { key: 'returnedThisMonth', label: 'RETURNED THIS MONTH', icon: Calendar, value: returnedThisMonth },
+  ];
 
   const [pdfPreview, setPdfPreview] = useState<{ blobUrl: string | null; loading: boolean; filename: string }>({ blobUrl: null, loading: false, filename: 'agreement.pdf' });
   const [pdfPersonnelId, setPdfPersonnelId] = useState<string | undefined>(undefined);
@@ -517,8 +520,6 @@ export default function IssuancesPage() {
         },
         body: JSON.stringify(params),
       });
-
-      // 401 → attempt token refresh and retry once
       if (res.status === 401) {
         const rt = localStorage.getItem('refreshToken');
         if (rt) {
@@ -543,13 +544,9 @@ export default function IssuancesPage() {
           }
         }
       }
-
       if (!res.ok) throw new Error('Failed to generate PDF');
       const blob = await res.blob();
-      // Enforce correct MIME in case server/proxy strips it
-      const typedBlob = blob.type === 'application/pdf'
-        ? blob
-        : new Blob([blob], { type: 'application/pdf' });
+      const typedBlob = blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
       const url = URL.createObjectURL(typedBlob);
       const pName = params.personnelName || 'unknown';
       setPdfPreview({ blobUrl: url, loading: false, filename: `agreement-${pName.replace(/\s+/g, '-').toLowerCase()}.pdf` });
@@ -566,200 +563,272 @@ export default function IssuancesPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white">
-      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-6 text-white relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none"></div>
-        <div className="relative flex items-center justify-between gap-6">
-          <div className="flex flex-col gap-1">
-            <nav className="flex items-center gap-1.5 mb-1">
-              <span className="text-[10px] text-[#f8931f] font-bold uppercase tracking-wide">Accountability</span>
-              <span className="text-[10px] text-white/60">/</span>
-              <span className="text-[10px] text-white font-bold uppercase tracking-wide">Issuances</span>
-            </nav>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-3">
-              <FileSignature className="h-6 w-6 text-[#f8931f]" />
-              Issuances
-            </h1>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#f8931f] text-white flex items-center gap-1">
-                <ArrowRightLeft className="w-3 h-3" />
-                {activeCount} Active
-              </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-500/30 text-slate-200 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" />
-                {returnedCount} Returned
-              </span>
-            </div>
+    <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
+
+      {/* ═══ STICKY NAVY HEADER ═════════════════════════════ */}
+      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
+        <div className="flex items-center justify-between gap-4">
+          {/* Left: Title */}
+          <div className="flex items-center gap-3">
+            <FileSignature className="h-6 w-6 text-[#f8931f]" />
+            <h1 className="text-lg font-bold text-white tracking-tight">Issuances</h1>
           </div>
-          <div className="flex items-center gap-4">
+
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowQRReturn(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors">
+              <QrCode className="h-3.5 w-3.5" /> QR Return
+            </button>
             <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
-              <button onClick={() => setShowQRReturn(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border-2 border-white/20 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 transition-colors">
-                <QrCode className="w-3.5 h-3.5" />
-                QR Return
+              <button onClick={() => setShowBulkWizard(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors">
+                <Package className="h-3.5 w-3.5" /> Bulk Issuance
               </button>
-              <button onClick={() => setShowBulkWizard(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border-2 border-white/20 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 transition-colors">
-                <Package className="w-3.5 h-3.5" />
-                Bulk Issuance
-              </button>
-              <button onClick={() => setShowWizard(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e07e0a] transition-colors shadow-md hover:shadow-lg">
-                <PlusCircle className="w-3.5 h-3.5" />
-                New Issuance
+              <button onClick={() => setShowWizard(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors">
+                <PlusCircle className="h-3.5 w-3.5" /> New Issuance
               </button>
             </RoleGate>
           </div>
         </div>
       </header>
 
+      {/* ═══ CONTENT AREA ════════════════════════════════════ */}
+      <div className="flex-1 flex flex-col overflow-auto bg-light-bg dark:bg-slate-900">
+
+      {/* ═══ KPI TILES ═══════════════════════════════════════ */}
+      <section className="px-4 sm:px-6 pt-4 shrink-0">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          {KPI_CARDS.map(({ key, label, icon: Icon, value }) => (
+            <div key={key} className="flex flex-col items-center text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 sm:p-4">
+              <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
+                  <Icon className="h-5 w-5 text-[#f8931f]" />
+                </div>
+                <p className="text-xl sm:text-2xl font-bold leading-tight text-[#f8931f]">{value}</p>
+              </div>
+              <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">{label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Pre-filter banner */}
       {preFilterPersonnel && (
-        <div className="bg-[#f8931f]/10 border-b border-[#f8931f]/20 px-6 py-2 flex items-center justify-between">
+        <div className="shrink-0 px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 flex items-center justify-between">
           <span className="text-xs font-semibold text-[#f8931f]">Filtered by profile — showing only this person's active issuances</span>
           <a href="/issuances" className="text-xs font-semibold text-[#012061] hover:underline">Clear filter</a>
         </div>
       )}
 
-      {/* Filter Bar */}
-      <div className="bg-white/95 backdrop-blur-md px-6 py-4 border-b border-slate-200">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative max-w-md flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
+      {/* ═══ HORIZONTAL FILTER BAR ══════════════════════════ */}
+      <section className="px-6 pt-3 pb-2 shrink-0">
+        <div className="flex flex-row items-center gap-4 flex-wrap bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2.5">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
               placeholder="Search asset, serial, personnel..."
-              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent shadow-sm" />
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 pl-9 pr-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none transition-colors"
+            />
           </div>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}
-            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent shadow-sm">
-            <option value="all">All</option>
-            <option value="active">Active</option>
-            <option value="returned">Returned</option>
+
+          {/* Status filter */}
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value as any)}
+            className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+          >
+            <option value="all">Status: All</option>
+            <option value="active">Status: Active</option>
+            <option value="returned">Status: Returned</option>
           </select>
         </div>
-      </div>
+      </section>
 
-      {/* Issuance Table */}
-      <div className="px-6 py-4">
-        <div className="flex-1 overflow-auto">
-          {loading ? (
-            <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 text-slate-400 animate-spin" /></div>
-          ) : issuances.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-              <FileSignature className="h-10 w-10 mb-3 text-slate-300" />
-              <p className="text-sm">No issuances found</p>
-            </div>
-          ) : (
+      {/* ═══ BULK ACTION TOOLBAR ════════════════════════════ */}
+      {selectedIds.size > 0 && (
+        <div className="shrink-0 px-6 py-2 bg-[#012061]/5 dark:bg-slate-700/40 border-b border-[#012061]/10 flex items-center justify-between">
+          <span className="text-sm font-semibold text-[#012061] dark:text-slate-100">
+            ☑ {selectedIds.size} issuance{selectedIds.size !== 1 ? 's' : ''} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
+              <button onClick={handleBulkReturn} disabled={bulkReturning}
+                className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50">
+                {bulkReturning ? 'Returning...' : 'Bulk Return'}
+              </button>
+            </RoleGate>
+            <button onClick={deselectAll}
+              className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">
+              Deselect All
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className="shrink-0 px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 text-sm text-[#012061] dark:text-slate-100 text-center font-medium">
+          {toast}
+        </div>
+      )}
+
+      {/* ═══ TABLE or EMPTY STATE ═══════════════════════════ */}
+      <div className="flex-1 overflow-auto px-6 py-4">
+        {loading ? (
+          <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 text-slate-400 animate-spin" /></div>
+        ) : issuances.length === 0 ? (
+          <EmptyState onAdd={() => setShowWizard(true)} />
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-900 border-b sticky top-
-0 z-10">
-                <tr className="text-left text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
-                  <th className="px-6 py-3">Asset Details</th>
-                  <th className="px-6 py-3">Assigned Personnel</th>
-                  <th className="px-6 py-3">Issuance Date</th>
-                  <th className="px-6 py-3">Return Status</th>
-                  <th className="px-6 py-3 w-12 text-center">Action</th>
+              <thead>
+                <tr className="bg-[#012061] text-left">
+                  <th className="px-4 py-2.5 w-10">
+                    <span
+                      onClick={toggleSelectAll}
+                      className={`inline-flex items-center justify-center w-4 h-4 rounded border cursor-pointer ${
+                        selectedIds.size > 0 && selectedIds.size < issuances.length ? 'bg-[#f8931f]/20 border-[#f8931f]' :
+                        selectedIds.size === issuances.length && issuances.length > 0 ? 'bg-[#f8931f] border-[#f8931f]' :
+                        'border-white/30'
+                      }`}
+                    >
+                      {selectedIds.size === issuances.length && issuances.length > 0 && (
+                        <CheckCircle className="w-3 h-3 text-white" />
+                      )}
+                      {selectedIds.size > 0 && selectedIds.size < issuances.length && (
+                        <div className="w-2 h-0.5 rounded-full bg-[#f8931f]" />
+                      )}
+                    </span>
+                  </th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Asset Details</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Assigned Personnel</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Issuance Date</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Return Status</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase text-center w-24">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {issuances.map(iss => (
-                  <tr key={iss.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all group">
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <p className="font-bold text-sm" style={{ color: '#012061' }}>{iss.asset?.name || '—'}</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-[10px] font-medium text-slate-400 uppercase tracking-tight">S/N:</span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">{iss.asset?.serialNumber || '—'}</span>
-                        </div>
+                  <tr key={iss.id} className="bg-white dark:bg-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all group">
+                    <td className="px-4 py-4">
+                      <span
+                        onClick={() => toggleSelect(iss.id)}
+                        className={`inline-flex items-center justify-center w-4 h-4 rounded border cursor-pointer ${
+                          selectedIds.has(iss.id) ? 'bg-[#012061] border-[#012061]' : 'border-slate-300 dark:border-slate-600'
+                        }`}
+                      >
+                        {selectedIds.has(iss.id) && <CheckCircle className="w-3 h-3 text-white" />}
+                      </span>
+                    </td>
+                  <td className="px-4 py-4">
+                    <div className="flex flex-col">
+                      <p className="font-bold text-sm" style={{ color: '#012061' }}>{iss.asset?.name || '—'}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-tight">S/N:</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400">{iss.asset?.serialNumber || '—'}</span>
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">{iss.personnel?.fullName || iss.assignedTo || '—'}</p>
-                        {iss.personnel && (
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400 italic">
-                            {iss.personnel.designationLookup?.name || iss.personnel.designation || 'No designation'}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-xs font-medium text-slate-600 dark:text-slate-400">
-                      {new Date(iss.assignedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
-                    </td>
-                    <td className="px-6 py-4">
-                      {iss.returnedAt ? (
-                        <div className="flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                            Returned {new Date(iss.returnedAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                          <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Active</span>
-                        </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex flex-col">
+                      <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">{iss.personnel?.fullName || iss.assignedTo || '—'}</p>
+                      {iss.personnel && (
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 italic mt-0.5">
+                          {iss.personnel.designationLookup?.name || iss.personnel.designation || 'No designation'}
+                        </span>
                       )}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        {!iss.returnedAt && (
-                          <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
-                            <button
-                              onClick={async () => {
-                                try {
-                                  await apiFetch(`/issuances/${iss.id}/return`, { method: 'POST', body: { condition: 'Good' } });
-                                  fetchIssuances();
-                                } catch (e: any) { alert(e instanceof ApiError ? e.message : 'Return failed'); }
-                              }}
-                              className="p-2 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all group-hover:shadow-sm"
-                              title="Return Asset"
-                            >
-                              <RotateCcw className="w-4 h-4" />
-                            </button>
-                          </RoleGate>
-                        )}
-                        <button
-                          onClick={() => openAgreementPreview({
-                            personnelName: iss.personnel?.fullName,
-                            position: iss.personnel?.position || undefined,
-                            department: iss.personnel?.department || undefined,
-                            project: iss.personnel?.project || undefined,
-                            assetName: iss.asset?.name,
-                            serialNumber: iss.asset?.serialNumber || undefined,
-                            propertyNumber: iss.asset?.propertyNumber || undefined,
-                            condition: iss.condition,
-                            templateId: iss.agreementId || undefined,
-                            personnelId: iss.personnelId || undefined,
-                          })}
-                          className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#012061] dark:hover:text-white transition-all group-hover:shadow-sm"
-                          title="View Agreement"
-                        >
-                          <FileText className="w-4 h-4" />
-                        </button>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-xs font-medium text-slate-600 dark:text-slate-400 tabular-nums">
+                    {new Date(iss.assignedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                  </td>
+                  <td className="px-4 py-4">
+                    {iss.returnedAt ? (
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                          Returned {new Date(iss.returnedAt).toLocaleDateString()}
+                        </span>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Active</span>
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-4 text-center">
+                    <div className="flex items-center justify-center gap-1.5">
+                      {!iss.returnedAt && (
+                        <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
+                          <button
+                            onClick={async () => {
+                              try {
+                                await apiFetch(`/issuances/${iss.id}/return`, { method: 'POST', body: { condition: 'Good' } });
+                                showToast('Asset returned successfully');
+                                fetchIssuances();
+                              } catch (e: any) { showToast(e instanceof ApiError ? e.message : 'Return failed'); }
+                            }}
+                            className="p-2 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all group-hover:shadow-sm"
+                            title="Return Asset"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </button>
+                        </RoleGate>
+                      )}
+                      <button
+                        onClick={() => openAgreementPreview({
+                          personnelName: iss.personnel?.fullName,
+                          position: iss.personnel?.position || undefined,
+                          department: iss.personnel?.department || undefined,
+                          project: iss.personnel?.project || undefined,
+                          assetName: iss.asset?.name,
+                          serialNumber: iss.asset?.serialNumber || undefined,
+                          propertyNumber: iss.asset?.propertyNumber || undefined,
+                          condition: iss.condition,
+                          templateId: iss.agreementId || undefined,
+                          personnelId: iss.personnelId || undefined,
+                        })}
+                        className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#012061] dark:hover:text-white transition-all group-hover:shadow-sm"
+                        title="View Agreement"
+                      >
+                        <FileText className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </div>
+        )}
       </div>
 
-      {/* Pagination */}
+      {/* ═══ PAGINATION ════════════════════════════════════ */}
       {meta && meta.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 px-6 py-4 text-xs">
-          <span className="text-slate-500">Page {meta.page} of {meta.totalPages}</span>
+        <div className="flex items-center justify-center gap-2 border-t border-slate-200 dark:border-slate-700 px-6 py-2 shrink-0 bg-white dark:bg-slate-800">
+          <button className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
+            disabled={meta.page <= 1} onClick={() => {
+              // TODO: page navigation if supported by API
+            }}>Prev</button>
+          <span className="text-sm text-slate-500 dark:text-slate-400">Page {meta.page} of {meta.totalPages}</span>
+          <button className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
+            disabled={meta.page >= meta.totalPages} onClick={() => {
+              // TODO: page navigation if supported by API
+            }}>Next</button>
         </div>
       )}
 
-      {/* Modals */}
+      {/* ═══ MODALS ════════════════════════════════════════ */}
       {showWizard && <NewIssuanceWizard onClose={() => setShowWizard(false)} onSave={fetchIssuances} onPreviewPdf={openAgreementPreview} />}
       <ReturnStationModal open={showReturn} onClose={() => setShowReturn(false)} onSave={fetchIssuances} />
       <QRReturnScanner open={showQRReturn} onClose={() => setShowQRReturn(false)} onReturned={fetchIssuances} />
       {showBulkWizard && <BulkIssuanceWizard onClose={() => setShowBulkWizard(false)} onSave={fetchIssuances} onPreviewPdf={openAgreementPreview} />}
       <PDFPreviewModal open={!!(pdfPreview.blobUrl || pdfPreview.loading)} onClose={closePdfPreview} blobUrl={pdfPreview.blobUrl} loading={pdfPreview.loading} downloadFilename={pdfPreview.filename} personnelId={pdfPersonnelId} personnelName={pdfPersonnelName} />
+      </div>{/* close content area */}
     </div>
   );
 }

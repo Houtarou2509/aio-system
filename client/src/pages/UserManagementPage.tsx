@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { AddUserModal } from '../components/users/AddUserModal';
 import { EditUserModal } from '../components/users/EditUserModal';
-import { Users, Shield, Clock, Search, Edit3, UserX, UserCheck, UserPlus, Activity, Download } from 'lucide-react';
+import { Users, Shield, Search, Edit3, UserX, UserCheck, UserPlus, Activity, Download } from 'lucide-react';
 
 interface User {
   id: string;
@@ -37,13 +37,6 @@ export default function UserManagementPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
-
-  // ── Clock ──
-  const [now, setNow] = useState(new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -238,19 +231,6 @@ export default function UserManagementPage() {
     );
   };
 
-  const statusBadge = (status: string) =>
-    status === 'active' ? (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#012061]/5 dark:bg-slate-700/40 text-[#012061] dark:text-slate-100">
-        <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-emerald-50 dark:bg-emerald-9500" />
-        Active
-      </span>
-    ) : (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-        <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-slate-400" />
-        Inactive
-      </span>
-    );
-
   const formatDate = (iso: string | null) => {
     if (!iso) return <span className="italic text-slate-400">Never</span>;
     return (
@@ -291,229 +271,214 @@ export default function UserManagementPage() {
   }
 
   return (
-    <div className="min-h-screen bg-light-bg dark:bg-slate-900">
-      {/* Toast */}
-      {toast && (
-        <div
-          className="fixed top-4 right-4 z-50 text-white px-4 py-2 rounded-lg shadow-lg text-sm"
-          style={{ backgroundColor: '#012061' }}
-        >
-          {toast}
-        </div>
-      )}
+    <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
 
-      {/* ── Header ── */}
+      {/* ═══ STICKY NAVY HEADER ═════════════════════════════ */}
       <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-4">
+          {/* Left: Title */}
           <div className="flex items-center gap-3">
             <Users className="h-6 w-6 text-[#f8931f]" />
-            <h1 className="text-lg font-bold text-white tracking-tight">User Management</h1>
+            <h1 className="text-lg font-bold text-white tracking-tight">Users</h1>
           </div>
-          <span className="hidden sm:flex items-center gap-2 text-xs text-slate-700 dark:text-white/60 bg-white dark:bg-slate-800/10 rounded-lg px-3 py-2 tabular-nums">
-            <Activity className="w-3.5 h-3.5" />
-            {now.toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
-            {' · '}
-            {now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-          </span>
+
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2">
+            <button onClick={handleExportCSV} disabled={exportLoading || users.length === 0}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {exportLoading ? 'Exporting…' : 'Export CSV'}
+            </button>
+            <button
+              onClick={() => { setServerErrors({}); setShowAddModal(true); }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors"
+            >
+              <UserPlus className="h-3.5 w-3.5" /> Add User
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* ── KPI Bar ── */}
-      <div className="grid grid-cols-3 gap-4 px-6 pt-4 pb-2">
-        <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#012061]/5 dark:bg-slate-700/40">
-            <Users className="h-5 w-5 text-[#f8931f]" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-2xl font-bold leading-tight text-[#f8931f]">{kpis.totalUsers}</p>
-            <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Total Users</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#012061]/5 dark:bg-slate-700/40">
-            <Shield className="h-5 w-5 text-[#f8931f]" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-2xl font-bold leading-tight text-[#f8931f]">{kpis.activeAdmins}</p>
-            <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Active Admins</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#012061]/5 dark:bg-slate-700/40">
-            <Clock className="h-5 w-5 text-[#f8931f]" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-2xl font-bold leading-tight text-[#f8931f]">{kpis.recentlyLoggedIn}</p>
-            <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Active Users</p>
-          </div>
-        </div>
-      </div>
+      {/* ═══ CONTENT AREA ════════════════════════════════════ */}
+      <div className="flex-1 flex flex-col overflow-auto bg-light-bg dark:bg-slate-900">
 
-      {/* ── Action Toolbar ── */}
-      <div className="flex items-center justify-between gap-4 px-6 py-3 border-b border-slate-200 dark:border-slate-700">
-        <div className="flex items-center gap-3 flex-1">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+      {/* ═══ KPI TILES ═══════════════════════════════════════ */}
+      <section className="px-6 pt-4 shrink-0">
+        <div className="grid grid-cols-3 gap-3">
+          <div className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
+              <Users className="h-5 w-5 text-[#f8931f]" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xl font-bold leading-tight text-[#f8931f]">{kpis.totalUsers}</p>
+              <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Total Users</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
+              <Shield className="h-5 w-5 text-[#f8931f]" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xl font-bold leading-tight text-[#f8931f]">{kpis.activeAdmins}</p>
+              <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Admins</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
+              <Activity className="h-5 w-5 text-[#f8931f]" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xl font-bold leading-tight text-[#f8931f]">{kpis.recentlyLoggedIn}</p>
+              <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Active</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ HORIZONTAL FILTER BAR ══════════════════════════ */}
+      <section className="px-6 pt-3 pb-2 shrink-0">
+        <div className="flex flex-row items-center gap-4 flex-wrap bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2.5">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             <input
               type="text"
               placeholder="Search by name, username, or email..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent transition"
+              className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 pl-9 pr-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none transition-colors"
             />
           </div>
+
+          {/* Role filter */}
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent"
+            className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
           >
-            <option value="All">All Roles</option>
-            <option value="ADMIN">Admin</option>
-            <option value="STAFF_ADMIN">Staff-Admin</option>
-            <option value="STAFF">Staff</option>
-            <option value="GUEST">Guest</option>
+            <option value="All">Role: All</option>
+            <option value="ADMIN">Role: Admin</option>
+            <option value="STAFF_ADMIN">Role: Staff-Admin</option>
+            <option value="STAFF">Role: Staff</option>
+            <option value="GUEST">Role: Guest</option>
           </select>
+
+          {/* Status filter */}
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent"
+            className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
           >
-            <option value="All">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="All">Status: All</option>
+            <option value="active">Status: Active</option>
+            <option value="inactive">Status: Inactive</option>
           </select>
         </div>
-        <div className="flex items-center gap-3">
-          <button onClick={handleExportCSV} disabled={exportLoading || users.length === 0}
-            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold border border-[#012061]/20 text-[#012061] dark:text-slate-100 shadow-sm hover:shadow-md transition-all disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" />
-            {exportLoading ? 'Exporting…' : 'Export CSV'}
-          </button>
-          <button
-            onClick={() => {
-              setServerErrors({});
-              setShowAddModal(true);
-            }}
-            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-sm hover:shadow-md transition-all"
-            style={{ backgroundColor: '#f8931f' }}
-          >
-            <UserPlus className="w-4 h-4" />
-            Add User
-          </button>
-        </div>
-      </div>
+      </section>
 
-      {/* ── Table ── */}
-      <div className="px-6">
+      {/* Toast */}
+      {toast && (
+        <div className="shrink-0 px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 text-sm text-[#012061] dark:text-slate-100 text-center font-medium">
+          {toast}
+        </div>
+      )}
+
+      {/* ═══ TABLE or EMPTY STATE ═══════════════════════════ */}
+      <div className="flex-1 overflow-auto px-6 py-4">
         {users.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#012061]/5 dark:bg-slate-700/40 mb-3">
-              <Users className="h-6 w-6 text-[#f8931f]" />
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-[#f8931f]/10 mb-4">
+              <Users className="h-10 w-10 text-[#f8931f]" />
             </div>
-            <p className="text-sm font-medium text-[#012061] dark:text-slate-100">No Users Found</p>
-            <p className="text-xs text-slate-400 mt-1">Add your first user to get started</p>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">No users yet</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-5 max-w-xs">
+              Add users to grant access to the system.
+            </p>
+            <button onClick={() => { setServerErrors({}); setShowAddModal(true); }}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#f8931f] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors">
+              <UserPlus className="h-4 w-4" /> Add User
+            </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="bg-[#012061]">
-                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-white/80">
-                    User
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-white/80">
-                    Role
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-white/80">
-                    Status
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-white/80">
-                    Last Login
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-white/80">
-                    Actions
-                  </th>
+                <tr className="bg-[#012061] text-left">
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">User</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Role</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Status</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Last Login</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filtered.map((u) => {
                   const isSelf = currentUser?.id === u.id;
                   const busy = actionLoading === u.id;
                   return (
-                    <tr
-                      key={u.id}
-                      className="group hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                      style={{
-                        borderLeftWidth: '2px',
-                        borderLeftStyle: 'solid',
-                        borderLeftColor: 'transparent',
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLElement).style.borderLeftColor = '#f8931f';
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLElement).style.borderLeftColor = 'transparent';
-                      }}
-                    >
-                      {/* User (Avatar + Name + Email) */}
+                    <tr key={u.id} className="bg-white dark:bg-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all group">
+                      {/* User */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div
-                            className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                            style={{ backgroundColor: '#012061' }}
-                          >
+                          <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white bg-[#012061]">
                             {getInitials(u.fullName || u.username)}
                           </div>
                           <div>
                             <p className="text-sm font-semibold text-[#012061] dark:text-slate-100">
                               {u.fullName || u.username}
                             </p>
-                            <p className="text-xs text-slate-400">{u.email}</p>
+                            <p className="text-xs text-slate-400 dark:text-slate-500">{u.email}</p>
                           </div>
                         </div>
                       </td>
 
-                      {/* Role Badge */}
+                      {/* Role */}
                       <td className="px-4 py-3">{roleBadge(u.role)}</td>
 
-                      {/* Status Badge */}
-                      <td className="px-4 py-3">{statusBadge(u.status)}</td>
+                      {/* Status */}
+                      <td className="px-4 py-3">
+                        {u.status === 'active' ? (
+                          <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border border-emerald-200">
+                            Active
+                          </span>
+                        ) : (
+                          <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                            Inactive
+                          </span>
+                        )}
+                      </td>
 
                       {/* Last Login */}
                       <td className="px-4 py-3">{formatDate(u.lastLogin)}</td>
 
                       {/* Actions */}
                       <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1">
                           <button
-                            onClick={() => {
-                              setServerErrors({});
-                              setEditingUser(u);
-                            }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md text-[#f8931f] hover:bg-[#f8931f]/10 transition-colors"
+                            onClick={() => { setServerErrors({}); setEditingUser(u); }}
+                            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-[#f8931f] transition-colors"
+                            title="Edit"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
-                            Edit
                           </button>
                           {u.status === 'active' ? (
                             <button
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md border border-red-200 text-red-500 hover:bg-red-50 dark:bg-red-950 dark:hover:bg-red-950 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950 text-slate-400 hover:text-[#7B1113] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                               disabled={isSelf || busy}
                               onClick={() => handleStatusToggle(u)}
-                              title={isSelf ? 'Cannot deactivate your own account' : undefined}
+                              title={isSelf ? 'Cannot deactivate your own account' : 'Deactivate'}
                             >
                               <UserX className="w-3.5 h-3.5" />
-                              Deactivate
                             </button>
                           ) : (
                             <button
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-md border border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:bg-emerald-950 dark:hover:bg-emerald-950 transition-colors"
+                              className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950 text-slate-400 hover:text-emerald-600 transition-colors"
                               disabled={busy}
                               onClick={() => handleStatusToggle(u)}
+                              title="Activate"
                             >
                               <UserCheck className="w-3.5 h-3.5" />
-                              Activate
                             </button>
                           )}
                         </div>
@@ -523,10 +488,7 @@ export default function UserManagementPage() {
                 })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={5}
-                      className="px-4 py-12 text-center text-slate-400 text-sm"
-                    >
+                    <td colSpan={5} className="px-4 py-12 text-center text-slate-400 text-sm bg-white dark:bg-slate-800">
                       No users match your filters.
                     </td>
                   </tr>
@@ -537,27 +499,20 @@ export default function UserManagementPage() {
         )}
       </div>
 
-      {/* ── Add User Modal ── */}
+      {/* ═══ MODALS ════════════════════════════════════════ */}
       {showAddModal && (
-        <AddUserModal
-          onSubmit={handleAddUser}
-          onClose={() => setShowAddModal(false)}
-          serverErrors={serverErrors}
-        />
+        <AddUserModal onSubmit={handleAddUser} onClose={() => setShowAddModal(false)} serverErrors={serverErrors} />
       )}
-
-      {/* ── Edit User Modal ── */}
       {editingUser && (
         <EditUserModal
           user={editingUser}
           isSelf={currentUser?.id === editingUser.id}
-          onSubmit={async (data) => {
-            await handleEditUser(data);
-          }}
+          onSubmit={async (data) => { await handleEditUser(data); }}
           onClose={() => setEditingUser(null)}
           serverErrors={serverErrors}
         />
       )}
+      </div>{/* close content area */}
     </div>
   );
 }

@@ -27,6 +27,7 @@ import {
   Package,
   ImageIcon,
   ZoomIn,
+  Trash2,
 } from 'lucide-react';
 
 /** Resolve asset image URL — prepend base path if relative */
@@ -45,6 +46,7 @@ interface Props {
   asset: Asset;
   onClose: () => void;
   onEdit: (asset: Asset) => void;
+  onDispose?: (asset: Asset) => void;
 }
 
 /* ─── Status Badge Config ─── */
@@ -92,7 +94,7 @@ function InfoRow({ label, value, highlight }: { label: string; value: React.Reac
 /* ═════════════════════════════════════════════════════
    ASSET DETAIL MODAL
    ═════════════════════════════════════════════════════ */
-export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
+export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
   const [tab, setTab] = useState('overview');
   const [frequentRepair, setFrequentRepair] = useState(false);
   const [showLightbox, setShowLightbox] = useState(false);
@@ -120,7 +122,7 @@ export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
     <>
       <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
         <DialogContent
-          className="sm:max-w-4xl h-screen md:h-[700px] flex flex-col p-0 gap-0 overflow-hidden"
+          className="sm:max-w-6xl h-screen md:h-[700px] flex flex-col p-0 gap-0 overflow-hidden"
           showCloseButton={false}
         >
           {/* ─── Header Bar ─── */}
@@ -132,7 +134,7 @@ export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
                 </div>
                 <div>
                   <DialogTitle className="text-lg font-bold text-white">Asset Details</DialogTitle>
-                  <p className="text-xs text-slate-700 dark:text-white/60">{asset.name} · {asset.type}</p>
+                  <p className="text-xs text-white/60">{asset.name} · {asset.type}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -141,11 +143,23 @@ export function AssetDetailModal({ asset, onClose, onEdit }: Props) {
                 </span>
                 <button
                   onClick={() => onEdit(asset)}
-                  className="rounded-lg border border-white/20 bg-white dark:bg-slate-800/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20 transition-colors inline-flex items-center gap-1"
+                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-colors inline-flex items-center gap-1"
+                  style={{ backgroundColor: '#f8931f' }}
                 >
                   <Pencil className="w-3 h-3" />
                   Edit
                 </button>
+                {asset.status !== 'RETIRED' && onDispose && (
+                  <button
+                    onClick={() => { onDispose(asset); }}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-colors inline-flex items-center gap-1"
+                    style={{ backgroundColor: '#7B1113' }}
+                    title="Dispose this asset"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Dispose
+                  </button>
+                )}
                 <button
                   onClick={onClose}
                   className="rounded-lg border border-white/20 bg-white dark:bg-slate-800/10 p-1.5 text-slate-700 dark:text-white/60 hover:text-white hover:bg-white/20 transition-colors"

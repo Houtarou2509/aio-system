@@ -9,3 +9,4 @@ server/uploads/
 logs/
 server/prisma/dev.db
 *.db-journal
+.hermes/

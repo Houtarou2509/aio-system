@@ -350,9 +350,15 @@ export const auditApi = {
   },
   timeline: (entityId: string) => request<{ data: AuditLogEntry[] }>(`/audit/${entityId}`),
   revert: (id: string) => request<{ data: { reverted: boolean; field: string; revertedTo: string } }>(`/audit/${id}/revert`, { method: 'POST' }),
-  exportCsv: (filters: AuditFilters = {}) => {
+  exportCsv: async (filters: AuditFilters = {}) => {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== '') params.set(k, String(v)); });
-    window.open(`/api/audit/export?${params}`, '_blank');
+    const blob = await apiFetchBlob(`/audit/export?${params}`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-logs-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   },
 };

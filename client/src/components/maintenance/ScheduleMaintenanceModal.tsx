@@ -187,7 +187,8 @@ export function ScheduleMaintenanceModal({ isOpen, assetId, onClose, onSuccess }
             <button
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className="text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-colors disabled:opacity-50"
+              style={{ backgroundColor: '#f8931f' }}
             >
               {isSubmitting ? 'Scheduling...' : 'Schedule'}
             </button>

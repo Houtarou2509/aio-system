@@ -1,13 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import {
   Package, Users, Wrench, CheckCircle,
   Plus, ScanLine, ClipboardList, Settings,
-  PieChart, BarChart3, ShieldAlert, Activity, ArrowRight,
+  PieChart, BarChart3, ShieldAlert, Activity,
+  Clock, CalendarDays, Layers,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { RoleGate } from '../components/auth';
+import { CustomizePanel } from '../components/dashboard/CustomizePanel';
+import { loadWidgetPrefs, saveWidgetPrefs, type WidgetPref } from '../lib/widgetRegistry';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement);
 
@@ -33,14 +37,6 @@ function cleanActivityText(text: string): string {
         return `"${date.toLocaleDateString('en-PH', { year: 'numeric', month: '2-digit', day: '2-digit' })}"`;
       }
     );
-}
-
-function extractInitials(text: string): string {
-  const words = text
-    .replace(/["{}\[\]:,]/g, ' ')
-    .split(/\s+/)
-    .filter(w => w.length > 0 && !/^(the|a|an|of|to|in|for|by|on|at|from|was|is|with|and|or|not|no)$/i.test(w));
-  return (words[0]?.[0] || '?') + (words[1]?.[0] || '').toUpperCase();
 }
 
 function truncateFeed(text: string, max = 72): string {
@@ -84,6 +80,22 @@ function relativeDate(iso: string): string {
   const months = Math.floor(days / 30);
   return `${months}mo ago`;
 }
+
+/* ── Action badge style helper ───────────────────────────── */
+
+const ACTION_BADGE_STYLE: Record<string, string> = {
+  CREATED: 'bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-300 border-blue-200 dark:border-blue-800',
+  UPDATED: 'bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+  DELETED: 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-300 border-red-200 dark:border-red-800',
+  ASSIGNED: 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+  UNASSIGNED: 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700',
+  TRANSFERRED: 'bg-violet-50 dark:bg-violet-950 text-violet-600 dark:text-violet-300 border-violet-200 dark:border-violet-800',
+  RETIRE: 'bg-orange-50 dark:bg-orange-950 text-orange-600 dark:text-orange-300 border-orange-200 dark:border-orange-800',
+  MAINTENANCE: 'bg-cyan-50 dark:bg-cyan-950 text-cyan-600 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800',
+  AUDIT: 'bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-300 border-purple-200 dark:border-purple-800',
+  SCAN: 'bg-teal-50 dark:bg-teal-950 text-teal-600 dark:text-teal-300 border-teal-200 dark:border-teal-800',
+  LOG: 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700',
+};
 
 /* ── Data interfaces ──────────────────────────────────────── */
 
@@ -144,34 +156,33 @@ const STATUS_COLORS: Record<string, string> = {
 
 const TYPE_COLORS = ['#012061', '#f8931f', '#94a3b8', '#14b8a6', '#64748b', '#0ea5e9'];
 
-const KPI_CARDS: { key: keyof KpiData; label: string; icon: React.ElementType }[] = [
-  { key: 'totalAssets', label: 'TOTAL ASSETS', icon: Package },
-  { key: 'totalAssigned', label: 'ASSIGNED', icon: Users },
-  { key: 'underMaintenance', label: 'MAINTENANCE', icon: Wrench },
-  { key: 'available', label: 'AVAILABLE', icon: CheckCircle },
+const KPI_CARDS: { key: keyof KpiData; label: string; icon: React.ElementType; color: string }[] = [
+  { key: 'totalAssets', label: 'TOTAL ASSETS', icon: Package, color: '#012061' },
+  { key: 'totalAssigned', label: 'ASSIGNED', icon: Users, color: '#f8931f' },
+  { key: 'underMaintenance', label: 'MAINTENANCE', icon: Wrench, color: '#94a3b8' },
+  { key: 'available', label: 'AVAILABLE', icon: CheckCircle, color: '#14b8a6' },
 ];
 
 /* ── Shared primitives ───────────────────────────────────── */
 
-function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+function BentoCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <div
-      className={`rounded-lg border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden ${className}`}
-      style={{ borderTop: '2px solid #012061' }}
-    >
+    <div className={`rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] dark:shadow-none overflow-hidden ${className}`}>
       {children}
     </div>
   );
 }
 
-function CardTitle({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
+function BentoCardTitle({ icon: Icon, children, accent = '#f8931f' }: { icon: React.ElementType; children: React.ReactNode; accent?: string }) {
   return (
-    <div className="px-4 pt-3 pb-2">
-      <div className="flex items-center gap-2 mb-1">
-        <Icon className="h-4 w-4 text-[#f8931f]" />
-        <h3 className="text-sm font-semibold text-[#012061] dark:text-slate-100">{children}</h3>
+    <div className="px-5 pt-4 pb-3 flex items-center justify-between">
+      <div className="flex items-center gap-2.5">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: `${accent}15` }}>
+          <Icon className="h-4 w-4" style={{ color: accent }} />
+        </div>
+        <h3 className="text-xs font-bold tracking-widest uppercase text-slate-500 dark:text-slate-400">{children}</h3>
       </div>
-      <div className="h-[2px] w-8 rounded-full bg-[#f8931f]" />
+      <div className="h-[3px] w-8 rounded-full" style={{ backgroundColor: accent }} />
     </div>
   );
 }
@@ -200,13 +211,13 @@ function KpiBar() {
 
   if (!data) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 animate-pulse">
-            <div className="h-10 w-10 rounded-lg bg-slate-100 dark:bg-slate-800" />
-            <div className="space-y-1.5">
-              <div className="h-5 w-12 rounded bg-slate-100 dark:bg-slate-800" />
-              <div className="h-2.5 w-16 rounded bg-slate-100 dark:bg-slate-800" />
+          <div key={i} className="flex items-center gap-3 px-4 py-4 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-xl border border-slate-100 dark:border-slate-700 border-l-4 border-l-slate-200 dark:border-l-slate-600 animate-pulse">
+            <div className="h-10 w-10 rounded-lg bg-slate-100 dark:bg-slate-700" />
+            <div className="space-y-2">
+              <div className="h-6 w-14 rounded bg-slate-100 dark:bg-slate-700" />
+              <div className="h-2.5 w-16 rounded bg-slate-100 dark:bg-slate-700" />
             </div>
           </div>
         ))}
@@ -215,15 +226,22 @@ function KpiBar() {
   }
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {KPI_CARDS.map(({ key, label, icon: Icon }) => (
-        <div key={key} className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#012061]/5 dark:bg-slate-700/40">
-            <Icon className="h-5 w-5 text-[#f8931f]" />
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {KPI_CARDS.map(({ key, label, icon: Icon, color }) => (
+        <div
+          key={key}
+          className="group flex items-center gap-3 px-4 py-4 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-xl border border-slate-100 dark:border-slate-700 transition-all duration-200 hover:bg-white dark:hover:bg-slate-700/80 hover:shadow-lg hover:scale-[1.02]"
+          style={{ borderLeftWidth: '4px', borderLeftColor: color }}
+        >
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors duration-200"
+            style={{ backgroundColor: `${color}12` }}
+          >
+            <Icon className="h-5 w-5" style={{ color }} />
           </div>
           <div className="min-w-0">
-            <p className="text-2xl font-bold leading-tight text-[#f8931f]">{data[key]}</p>
-            <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">{label}</p>
+            <p className="text-2xl font-bold tabular-nums leading-tight text-slate-900 dark:text-slate-100">{data[key]}</p>
+            <p className="text-[10px] tracking-widest text-slate-400 dark:text-slate-500 uppercase font-medium">{label}</p>
           </div>
         </div>
       ))}
@@ -236,6 +254,8 @@ function KpiBar() {
 export default function DashboardPage() {
   const now = useClock();
   const navigate = useNavigate();
+  const [widgetPrefs, setWidgetPrefs] = useState<WidgetPref[]>(() => loadWidgetPrefs());
+  const [customizeOpen, setCustomizeOpen] = useState(false);
 
   /* ── All dashboard state ──────────────────────────────── */
   const [data, setData] = useState<DashboardData | null>(null);
@@ -288,6 +308,8 @@ export default function DashboardPage() {
       data: Object.values(data.byStatus),
       backgroundColor: Object.keys(data.byStatus).map(s => STATUS_COLORS[s] || '#94a3b8'),
       borderWidth: 0,
+      hoverBorderWidth: 2,
+      hoverBorderColor: '#ffffff',
     }],
   } : null;
 
@@ -297,298 +319,369 @@ export default function DashboardPage() {
       data: Object.values(data.byType),
       backgroundColor: TYPE_COLORS.slice(0, Object.keys(data.byType).length),
       borderWidth: 0,
+      borderRadius: 4,
     }],
   } : null;
 
   const legendOpts = {
     position: 'bottom' as const,
-    labels: { boxWidth: 10, padding: 12, font: { size: 11 }, color: '#64748b' },
+    labels: {
+      boxWidth: 10,
+      padding: 14,
+      font: { size: 10, family: "'Geist Variable', sans-serif" },
+      color: '#64748b',
+      usePointStyle: true,
+      pointStyleWidth: 8,
+    },
   };
 
-  const hiddenScrollbarStyle = { height: 400, scrollbarWidth: 'none' as const };
+  const chartCommonOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+  };
 
-  return (
-      <div className="min-h-screen bg-light-bg dark:bg-slate-900">
-{/* ── Header ─────────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <BarChart3 className="h-6 w-6 text-[#f8931f]" />
-            <h1 className="text-lg font-bold text-white tracking-tight">AIO System Dashboard</h1>
-          </div>
-          <span className="hidden sm:flex items-center gap-2 text-xs text-slate-700 dark:text-white/60 bg-white dark:bg-slate-800/10 rounded-lg px-3 py-2 tabular-nums">
-            <Activity className="w-3.5 h-3.5" />
-            {now.toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
-            {' · '}
-            {now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-          </span>
-        </div>
-      </header>
+  /* ── Widget renderer ───────────────────────────────────── */
 
-      {/* ── KPI Bar ────────────────────────────────────────── */}
-      <section className="px-6 pt-4 pb-2">
-        <KpiBar />
-      </section>
-
-      {/* ── Quick Actions ──────────────────────────────────── */}
-      <section className="px-6 pt-3 pb-2">
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => navigate('/assets')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-colors">
-            <Package className="h-3.5 w-3.5 text-[#f8931f]" /> View Assets
-          </button>
-          <button onClick={() => navigate('/assets?action=scan')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-colors">
-            <ScanLine className="h-3.5 w-3.5 text-[#f8931f]" /> Scan QR
-          </button>
-          <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
-            <button onClick={() => navigate('/assets?action=create')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-colors">
-              <Plus className="h-3.5 w-3.5 text-[#f8931f]" /> Add Asset
-            </button>
-          </RoleGate>
-          <button onClick={() => navigate('/audit')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-colors">
-            <ClipboardList className="h-3.5 w-3.5 text-[#f8931f]" /> Audit Trail
-          </button>
-          <RoleGate roles={['ADMIN']}>
-            <button onClick={() => navigate('/settings')} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-colors">
-              <Settings className="h-3.5 w-3.5 text-[#f8931f]" /> Settings
-            </button>
-          </RoleGate>
-        </div>
-      </section>
-
-      {/* ── Dashboard content ───────────────────────────────── */}
-      <div className="px-6 pb-6">
-        {loading || !data ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">Loading dashboard…</p>
-        ) : (
-          <div className="space-y-4">
-
-            {/* ═══ ANALYTICS GRID — 3 columns ═══ */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-              {/* Status Distribution */}
-              <Card>
-                <CardTitle icon={PieChart}>Status Distribution</CardTitle>
-                <div className="px-4 pb-3 h-52 flex items-center justify-center">
-                  <Doughnut
-                    data={statusData!}
-                    options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: legendOpts, tooltip: { enabled: true } } }}
-                  />
-                </div>
-              </Card>
-
-              {/* Assets by Type */}
-              <Card>
-                <CardTitle icon={BarChart3}>Assets by Type</CardTitle>
-                <div className="px-4 pb-3 h-52 flex items-center justify-center">
-                  <Bar
-                    data={typeData!}
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: { legend: { display: false } },
-                      scales: {
-                        y: { beginAtZero: true, ticks: { stepSize: 1, color: '#64748b', font: { size: 10 } }, grid: { color: '#cbd5e1' } },
-                        x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { display: false } },
-                      },
-                    }}
-                  />
-                </div>
-              </Card>
-
-              {/* Warranty / Maintenance Overview */}
-              <Card className="flex flex-col">
-                <CardTitle icon={ShieldAlert}>Warranty &amp; Maintenance</CardTitle>
-                <div className="flex-1 px-4 pb-3 overflow-y-auto max-h-52 space-y-0">
-                  <div className="flex items-center gap-1.5 py-1">
-                    <Wrench className="h-3 w-3 shrink-0 text-[#f8931f]" />
-                    <span className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Maintenance</span>
-                  </div>
-                  {maintenanceLoading && <p className="text-xs text-slate-400 pl-5">Loading…</p>}
-                  {!maintenanceLoading && upcomingMaintenance.length === 0 && (
-                    <p className="text-xs text-slate-400 italic pl-5">No upcoming</p>
-                  )}
-                  {!maintenanceLoading && upcomingMaintenance.slice(0, 3).map(s => (
-                    <div key={s.id} className="flex items-center justify-between py-1.5 pl-5 border-b border-slate-50 dark:border-slate-700 last:border-b-0">
-                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{s.asset.name}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ml-2 ${
-                        s.status === 'overdue' ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-200' : 'bg-[#012061]/5 dark:bg-slate-700/40 text-[#f8931f]'
-                      }`}>
-                        {s.status.toUpperCase()}
-                      </span>
-                    </div>
-                  ))}
-
-                  <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
-
-                  <div className="flex items-center gap-1.5 py-1">
-                    <ShieldAlert className="h-3 w-3 shrink-0 text-[#f8931f]" />
-                    <span className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Warranties</span>
-                  </div>
-                  {warrantiesLoading && <p className="text-xs text-slate-400 pl-5">Loading…</p>}
-                  {!warrantiesLoading && warrantiesExpiring.length === 0 && (
-                    <p className="text-xs text-slate-400 italic pl-5">No expiring warranties</p>
-                  )}
-                  {!warrantiesLoading && warrantiesExpiring.slice(0, 3).map(a => (
-                    <div key={a.id} className="flex items-center justify-between py-1.5 pl-5 border-b border-slate-50 dark:border-slate-700 last:border-b-0">
-                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{a.name}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ml-2 ${
-                        a.warrantyStatus === 'expired' ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-200' : 'bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-200'
-                      }`}>
-                        {a.daysUntilExpiry < 0 ? `${Math.abs(a.daysUntilExpiry)}d overdue` : `${a.daysUntilExpiry}d left`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </Card>
+  function renderWidget(id: string): React.ReactNode {
+    switch (id) {
+      case 'status-distribution':
+        return (
+          <BentoCard>
+            <BentoCardTitle icon={PieChart} accent="#014da3">Status Distribution</BentoCardTitle>
+            <div className="px-5 pb-5 h-56 flex items-center justify-center">
+              {statusData && Object.keys(data!.byStatus).length > 0 ? (
+                <Doughnut
+                  data={statusData}
+                  options={{ ...chartCommonOpts, plugins: { legend: legendOpts, tooltip: { backgroundColor: '#012061', titleFont: { size: 11 }, bodyFont: { size: 11 }, padding: 10, cornerRadius: 8 } } }}
+                />
+              ) : (
+                <p className="text-xs text-slate-400 italic">No status data yet</p>
+              )}
             </div>
+          </BentoCard>
+        );
 
-            {/* ═══ LOCATION + AGE — 2 columns ═══ */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card>
-                <CardTitle icon={BarChart3}>Assets by Location</CardTitle>
-                <div className="px-4 pb-3 h-48 flex items-center justify-center">
-                  {locationStats.length === 0 ? (
-                    <p className="text-xs text-slate-400">No location data</p>
-                  ) : (
-                    <Bar
-                      data={{
-                        labels: locationStats.map(l => l.location),
-                        datasets: [{ data: locationStats.map(l => l.count), backgroundColor: '#012061', borderWidth: 0, borderRadius: 3 }],
-                      }}
-                      options={{
-                        indexAxis: 'y',
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                          x: { beginAtZero: true, ticks: { stepSize: 1, precision: 0, color: '#64748b', font: { size: 10 } }, grid: { color: '#cbd5e1' } },
-                          y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { display: false } },
-                        },
-                      }}
-                    />
-                  )}
-                </div>
-              </Card>
-              <Card>
-                <CardTitle icon={PieChart}>Assets by Age</CardTitle>
-                <div className="px-4 pb-3 h-48 flex items-center justify-center">
-                  {ageStats.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">No purchase date data</p>
-                  ) : (
-                    <Doughnut
-                      data={{
-                        labels: ageStats.map(a => a.label),
-                        datasets: [{ data: ageStats.map(a => a.count), backgroundColor: ['#012061', '#f8931f', '#94a3b8', '#14b8a6', '#64748b', '#0ea5e9'], borderWidth: 0 }],
-                      }}
-                      options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: legendOpts } }}
-                    />
-                  )}
-                </div>
-              </Card>
+      case 'assets-by-type':
+        return (
+          <BentoCard>
+            <BentoCardTitle icon={BarChart3} accent="#014da3">Assets by Type</BentoCardTitle>
+            <div className="px-5 pb-5 h-56 flex items-center justify-center">
+              {typeData && Object.keys(data!.byType).length > 0 ? (
+                <Bar
+                  data={typeData}
+                  options={{
+                    ...chartCommonOpts,
+                    plugins: { legend: { display: false }, tooltip: { backgroundColor: '#012061', titleFont: { size: 11 }, bodyFont: { size: 11 }, padding: 10, cornerRadius: 8 } },
+                    scales: {
+                      y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0, color: '#64748b', font: { size: 10 } }, grid: { color: '#e2e8f0' } },
+                      x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { display: false } },
+                    },
+                  }}
+                />
+              ) : (
+                <p className="text-xs text-slate-400 italic">No type data yet</p>
+              )}
             </div>
+          </BentoCard>
+        );
 
-            {/* ═══ FEEDS — Activity & Maintenance 50/50 ═══ */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      case 'warranty-maintenance':
+        return (
+          <BentoCard className="flex flex-col">
+            <BentoCardTitle icon={ShieldAlert} accent="#7B1113">Warranty & Maintenance</BentoCardTitle>
+            <div className="flex-1 px-5 pb-4 overflow-y-auto space-y-1 min-h-0 h-56" style={{ scrollbarWidth: 'thin' }}>
+              <div className="flex items-center gap-1.5 pt-0.5 pb-1">
+                <Wrench className="h-3 w-3 shrink-0 text-[#f8931f]" />
+                <span className="text-[10px] tracking-widest text-slate-400 dark:text-slate-500 uppercase font-medium">Maintenance</span>
+              </div>
+              {maintenanceLoading && <p className="text-xs text-slate-400 pl-4">Loading…</p>}
+              {!maintenanceLoading && upcomingMaintenance.length === 0 && (
+                <p className="text-xs text-slate-400 italic pl-4 py-1">All clear</p>
+              )}
+              {!maintenanceLoading && upcomingMaintenance.slice(0, 4).map(s => (
+                <div key={s.id} className={`flex items-center justify-between py-2 pl-4 border-b border-slate-50 dark:border-slate-700/50 last:border-b-0 transition-all duration-200 rounded-md px-2 -mx-1 hover:bg-slate-50 dark:hover:bg-slate-700/30 ${
+                  s.status === 'overdue' ? 'shadow-[0_0_10px_rgba(239,68,68,0.1)] bg-red-50/30 dark:bg-red-950/20' : ''
+                }`}>
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{s.asset.name}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ml-2 border ${
+                    s.status === 'overdue'
+                      ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-300 border-red-200 dark:border-red-800'
+                      : s.status === 'completed'
+                        ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                        : 'bg-[#012061]/5 dark:bg-slate-700/50 text-[#f8931f] border-[#f8931f]/20'
+                  }`}>
+                    {s.status.toUpperCase()}
+                  </span>
+                </div>
+              ))}
+              <div className="border-t border-slate-100 dark:border-slate-700 my-1.5" />
+              <div className="flex items-center gap-1.5 pt-0.5 pb-1">
+                <CalendarDays className="h-3 w-3 shrink-0 text-[#f8931f]" />
+                <span className="text-[10px] tracking-widest text-slate-400 dark:text-slate-500 uppercase font-medium">Warranties</span>
+              </div>
+              {warrantiesLoading && <p className="text-xs text-slate-400 pl-4">Loading…</p>}
+              {!warrantiesLoading && warrantiesExpiring.length === 0 && (
+                <p className="text-xs text-slate-400 italic pl-4 py-1">No expiring warranties</p>
+              )}
+              {!warrantiesLoading && warrantiesExpiring.slice(0, 4).map(a => (
+                <div key={a.id} className={`flex items-center justify-between py-2 pl-4 border-b border-slate-50 dark:border-slate-700/50 last:border-b-0 transition-all duration-200 rounded-md px-2 -mx-1 hover:bg-slate-50 dark:hover:bg-slate-700/30 ${
+                  a.warrantyStatus === 'expired' ? 'shadow-[0_0_10px_rgba(239,68,68,0.12)] bg-red-50/30 dark:bg-red-950/20' : ''
+                }`}>
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{a.name}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ml-2 border ${
+                    a.warrantyStatus === 'expired'
+                      ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-300 border-red-200 dark:border-red-800'
+                      : 'bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                  }`}>
+                    {a.daysUntilExpiry < 0 ? `${Math.abs(a.daysUntilExpiry)}d overdue` : `${a.daysUntilExpiry}d left`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </BentoCard>
+        );
 
-              {/* Recent Activity */}
-              <Card className="flex flex-col">
-                <CardTitle icon={Activity}>Recent Activity</CardTitle>
-                <div className="flex-1 px-4 pb-3 overflow-y-auto" style={hiddenScrollbarStyle}>
-                  {data.activityFeed.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#012061]/5 dark:bg-slate-700/40 mb-2">
-                        <Activity className="h-5 w-5 text-[#f8931f]" />
-                      </div>
-                      <p className="text-sm font-medium text-[#012061] dark:text-slate-100">All Quiet</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">No recent activity to show</p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                      {data.activityFeed.map((item, i) => {
-                        const initials = extractInitials(cleanActivityText(item));
-                        const actionType = extractActionType(cleanActivityText(item));
-                        return (
-                          <div
-                            key={i}
-                            className="flex items-center gap-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-default"
-                            style={{ borderLeft: '2px solid transparent' }}
-                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderLeftColor = '#f8931f'; }}
-                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderLeftColor = 'transparent'; }}
-                          >
-                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#012061] text-[10px] font-semibold text-white">
-                              {initials}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs text-[#012061] dark:text-slate-100 font-medium truncate">{truncateFeed(cleanActivityText(item))}</p>
-                              <p className="text-[10px] text-slate-400 mt-0.5">{extractRelativeTime(cleanActivityText(item))}</p>
-                            </div>
-                            <span className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#f8931f]/10 text-[#f8931f]">
+      case 'assets-by-location':
+        return (
+          <BentoCard>
+            <BentoCardTitle icon={Layers} accent="#014da3">Assets by Location</BentoCardTitle>
+            <div className="px-5 pb-5 h-52 flex items-center justify-center">
+              {locationStats.length === 0 ? (
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700">
+                    <Layers className="h-5 w-5 text-slate-300 dark:text-slate-500" />
+                  </div>
+                  <p className="text-xs text-slate-400">No location data</p>
+                </div>
+              ) : (
+                <Bar
+                  data={{
+                    labels: locationStats.map(l => l.location),
+                    datasets: [{
+                      data: locationStats.map(l => l.count),
+                      backgroundColor: ['#012061', '#f8931f', '#94a3b8', '#14b8a6', '#64748b', '#0ea5e9'],
+                      borderWidth: 0,
+                      borderRadius: 3,
+                    }],
+                  }}
+                  options={{
+                    indexAxis: 'y',
+                    ...chartCommonOpts,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                      x: { beginAtZero: true, ticks: { stepSize: 1, precision: 0, color: '#64748b', font: { size: 10 } }, grid: { color: '#e2e8f0' } },
+                      y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { display: false } },
+                    },
+                  }}
+                />
+              )}
+            </div>
+          </BentoCard>
+        );
+
+      case 'assets-by-age':
+        return (
+          <BentoCard>
+            <BentoCardTitle icon={PieChart} accent="#014da3">Assets by Age</BentoCardTitle>
+            <div className="px-5 pb-5 h-52 flex items-center justify-center">
+              {ageStats.length === 0 ? (
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700">
+                    <PieChart className="h-5 w-5 text-slate-300 dark:text-slate-500" />
+                  </div>
+                  <p className="text-xs text-slate-400 italic">No purchase date data</p>
+                </div>
+              ) : (
+                <Doughnut
+                  data={{
+                    labels: ageStats.map(a => a.label),
+                    datasets: [{
+                      data: ageStats.map(a => a.count),
+                      backgroundColor: ['#012061', '#f8931f', '#94a3b8', '#14b8a6', '#64748b', '#0ea5e9'],
+                      borderWidth: 0,
+                    }],
+                  }}
+                  options={{ ...chartCommonOpts, plugins: { legend: legendOpts } }}
+                />
+              )}
+            </div>
+          </BentoCard>
+        );
+
+      case 'activity-timeline':
+        return (
+          <BentoCard className="flex flex-col">
+            <BentoCardTitle icon={Activity} accent="#014da3">Activity Timeline</BentoCardTitle>
+            <div className="flex-1 px-5 pb-4 overflow-y-auto" style={{ scrollbarWidth: 'thin', maxHeight: 400 }}>
+              {data!.activityFeed.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 mb-3">
+                    <Activity className="h-6 w-6 text-slate-300 dark:text-slate-500" />
+                  </div>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">All Quiet</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">No recent activity to show</p>
+                </div>
+              ) : (
+                <div className="relative pl-6">
+                  <div className="absolute left-[7px] top-2 bottom-2 w-[2px] rounded-full bg-slate-200 dark:bg-slate-700" />
+                  {data!.activityFeed.map((item, i) => {
+                    const actionType = extractActionType(cleanActivityText(item));
+                    const badgeStyle = ACTION_BADGE_STYLE[actionType] || ACTION_BADGE_STYLE.LOG;
+                    return (
+                      <div
+                        key={i}
+                        className="relative flex items-start gap-3 py-3 group transition-all duration-200 hover:translate-x-1 cursor-default"
+                      >
+                        <div className={`absolute left-[-23px] top-4 h-[8px] w-[8px] rounded-full border-2 border-white dark:border-slate-800 ${
+                          actionType === 'DELETED' ? 'bg-red-500' :
+                          actionType === 'CREATED' ? 'bg-blue-500' :
+                          actionType === 'UPDATED' ? 'bg-amber-500' :
+                          actionType === 'ASSIGNED' ? 'bg-emerald-500' : 'bg-[#f8931f]'
+                        }`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-slate-700 dark:text-slate-300 font-medium leading-relaxed line-clamp-2">
+                            {truncateFeed(cleanActivityText(item))}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <span className="text-[10px] text-slate-400 tabular-nums">
+                              {extractRelativeTime(cleanActivityText(item))}
+                            </span>
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${badgeStyle}`}>
                               {actionType}
                             </span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </Card>
-
-              {/* Upcoming Maintenance */}
-              <Card className="flex flex-col">
-                <CardTitle icon={Wrench}>Upcoming Maintenance</CardTitle>
-                <div className="flex-1 px-4 pb-3 overflow-y-auto" style={hiddenScrollbarStyle}>
-                  {maintenanceLoading ? (
-                    <div className="flex items-center justify-center h-full">
-                      <p className="text-xs text-slate-400">Loading…</p>
-                    </div>
-                  ) : upcomingMaintenance.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#012061]/5 dark:bg-slate-700/40 mb-2">
-                        <CheckCircle className="h-5 w-5 text-[#f8931f]" />
-                      </div>
-                      <p className="text-sm font-medium text-[#012061] dark:text-slate-100">All Clear</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">No upcoming maintenance</p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                      {upcomingMaintenance.map(s => (
-                        <div
-                          key={s.id}
-                          className="flex items-center gap-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-default"
-                          style={{ borderLeft: '2px solid transparent' }}
-                          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderLeftColor = '#f8931f'; }}
-                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderLeftColor = 'transparent'; }}
-                        >
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#012061]">
-                            <Wrench className="h-3.5 w-3.5 text-[#f8931f]" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs text-[#012061] dark:text-slate-100 font-medium truncate">{s.asset.name}</p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">{s.title} · {relativeDate(s.scheduledDate)}</p>
-                          </div>
-                          <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                            s.status === 'overdue' ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-200'
-                              : s.status === 'completed' ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200'
-                                : 'bg-[#012061]/5 dark:bg-slate-700/40 text-[#012061] dark:text-slate-100'
-                          }`}>
-                            {s.status.toUpperCase()}
-                          </span>
                         </div>
-                      ))}
-                      <button
-                        onClick={() => navigate('/assets')}
-                        className="flex items-center gap-1 text-[10px] text-[#f8931f] hover:underline pt-2 w-full justify-end"
-                      >
-                        View All <ArrowRight className="h-3 w-3" />
-                      </button>
-                    </div>
-                  )}
+                      </div>
+                    );
+                  })}
                 </div>
-              </Card>
+              )}
             </div>
+          </BentoCard>
+        );
+
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <div className="min-h-dvh bg-[#f1f3f5] dark:bg-slate-900">
+
+      {/* ═══════════════════════════════════════════════════════
+          COMMAND CENTER HEADER
+          ═══════════════════════════════════════════════════════ */}
+      <header className="sticky top-0 z-30 bg-[#012061] shadow-[0_1px_0_#f8931f,0_4px_16px_rgba(1,32,97,0.3)]">
+        <div className="flex items-center justify-between px-6 py-3">
+          {/* Left: brand + title */}
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/15">
+              <BarChart3 className="h-5 w-5 text-[#f8931f]" />
+            </div>
+            <div className="min-w-0 hidden sm:block">
+              <h1 className="text-base font-bold text-white tracking-tight leading-none">Command Center</h1>
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5">AIO System Dashboard</p>
+            </div>
+          </div>
+
+          {/* Center: live clock */}
+          <div className="hidden md:flex items-center gap-2 text-xs text-white/60 bg-white/8 rounded-lg px-3 py-2 tabular-nums font-medium">
+            <Clock className="w-3.5 h-3.5 text-[#f8931f]" />
+            {now.toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+            <span className="text-[#f8931f] font-bold">{now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+          </div>
+
+          {/* Right: quick actions */}
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => navigate('/assets')} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200">
+              <Package className="h-3.5 w-3.5 text-[#f8931f]" />
+              <span className="hidden sm:inline">Assets</span>
+            </button>
+            <button onClick={() => navigate('/assets?action=scan')} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200">
+              <ScanLine className="h-3.5 w-3.5 text-[#f8931f]" />
+              <span className="hidden sm:inline">Scan</span>
+            </button>
+            <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
+              <button onClick={() => navigate('/assets?action=create')} className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold bg-[#f8931f] text-white hover:bg-[#e0841a] transition-all duration-200 shadow-lg shadow-[#f8931f]/25 hover:shadow-xl hover:shadow-[#f8931f]/30 active:scale-95">
+                <Plus className="h-3.5 w-3.5" /> Add
+              </button>
+            </RoleGate>
+            <button onClick={() => navigate('/audit')} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 hidden sm:inline-flex">
+              <ClipboardList className="h-3.5 w-3.5 text-[#f8931f]" />
+              Audit
+            </button>
+            <button onClick={() => setCustomizeOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-[#f8931f]" />
+              <span className="hidden sm:inline">Customize</span>
+            </button>
+            <RoleGate roles={['ADMIN']}>
+              <button onClick={() => navigate('/settings')} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 hidden sm:inline-flex">
+                <Settings className="h-3.5 w-3.5 text-[#f8931f]" />
+              </button>
+            </RoleGate>
+          </div>
+        </div>
+      </header>
+
+      {/* ═══════════════════════════════════════════════════════
+          KPI POWER TILES
+          ═══════════════════════════════════════════════════════ */}
+      <section className="px-6 pt-4 pb-1">
+        <KpiBar />
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════
+          DASHBOARD CONTENT
+          ═══════════════════════════════════════════════════════ */}
+      <div className="px-6 pb-8">
+        {loading || !data ? (
+          <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-64 rounded-xl bg-white dark:bg-slate-800 animate-pulse border border-slate-100 dark:border-slate-700" />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-4 mt-1">
+            {/* Filter visible widgets in preference order */}
+            {(() => {
+              const visible = widgetPrefs.filter(p => p.visible);
+              if (visible.length === 0) {
+                return (
+                  <BentoCard className="flex flex-col items-center justify-center py-16">
+                    <SlidersHorizontal className="h-10 w-10 text-slate-300 dark:text-slate-600 mb-3" />
+                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">No widgets enabled</p>
+                    <p className="text-xs text-slate-400 mt-1">Click "Customize" to add widgets</p>
+                  </BentoCard>
+                );
+              }
+              // Chunk into rows of 3
+              const rows: WidgetPref[][] = [];
+              for (let i = 0; i < visible.length; i += 3) {
+                rows.push(visible.slice(i, i + 3));
+              }
+              return rows.map((row, rowIdx) => (
+                <div key={rowIdx} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  {row.map(pref => (
+                    <Fragment key={pref.id}>{renderWidget(pref.id)}</Fragment>
+                  ))}
+                </div>
+              ));
+            })()}
           </div>
         )}
       </div>
+
+      {/* Customize Panel */}
+      {customizeOpen && (
+        <CustomizePanel
+          prefs={widgetPrefs}
+          onSave={(newPrefs) => {
+            saveWidgetPrefs(newPrefs);
+            setWidgetPrefs(newPrefs);
+          }}
+          onClose={() => setCustomizeOpen(false)}
+        />
+      )}
     </div>
   );
 }

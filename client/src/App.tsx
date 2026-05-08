@@ -15,6 +15,9 @@ import AccountabilityLookupPage from './pages/AccountabilityLookupPage';
 import AccountabilityTemplatesPage from './pages/AccountabilityTemplatesPage';
 import ProfilesPage from './pages/ProfilesPage';
 import IssuancesPage from './pages/IssuancesPage';
+import ReportsPage from './pages/ReportsPage';
+import PurchaseRequestsPage from './pages/PurchaseRequestsPage';
+import SuppliersPage from './pages/SuppliersPage';
 import './index.css';
 
 function App() {
@@ -30,6 +33,9 @@ function App() {
           <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route index element={<DashboardPage />} />
             <Route path="assets" element={<AssetsPage />} />
+            <Route path="reports" element={<ReportsPage />} />
+            <Route path="suppliers" element={<SuppliersPage />} />
+            <Route path="purchase-requests" element={<PurchaseRequestsPage />} />
             <Route path="labels" element={<Navigate to="/assets" replace />} />
             <Route path="users" element={<ProtectedRoute requiredRole="ADMIN"><UserManagementPage /></ProtectedRoute>} />
             <Route path="audit" element={<AuditPage />} />

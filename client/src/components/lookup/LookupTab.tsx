@@ -146,12 +146,12 @@ export default function LookupTab({
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
           <table className="w-full text-sm">
-            {/* ── Header: Navy tint ────────────────────────── */}
+            {/* ── Header: Navy ────────────────────────────── */}
             <thead>
-              <tr className="bg-[#012061]/5 dark:bg-slate-700/40">
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase">Value</th>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase w-32">Status</th>
-                <th className="px-4 py-2.5 text-right text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase w-48">Actions</th>
+              <tr className="bg-[#012061]">
+                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-white/70 uppercase">Value</th>
+                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-white/70 uppercase w-32">Status</th>
+                <th className="px-4 py-2.5 text-right text-[10px] font-semibold tracking-widest text-white/70 uppercase w-48">Actions</th>
               </tr>
             </thead>
 

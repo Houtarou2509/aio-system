@@ -13,7 +13,7 @@ import { Checkbox } from '../components/ui/checkbox';
    ═════════════════════════════════════════════════════ */
 function LayoutShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen w-full flex">
+    <div className="min-h-dvh w-full flex">
       {/* ─── Left Panel — Brand (40%, hidden on mobile) ─── */}
       <div className="hidden md:flex w-[40%] relative overflow-hidden bg-[#012061] flex-col items-center justify-center p-12">
         {/* Data Mesh overlay */}

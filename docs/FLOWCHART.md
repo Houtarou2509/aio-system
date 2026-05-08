@@ -1,21 +1,25 @@
 # AIO-System — Full System Map & AI Agent Reference
 
 > **PURPOSE:** Feed this file into any AI coding agent to give it complete understanding of the application — every file, every endpoint, every page, every database model, and how they connect.
-> Last updated: 2026-05-01
+> Last updated: 2026-05-05
 
 ---
 
 ## 1. What Is This Application?
 
-**AIO-System** is a full-stack asset management and accountability tracking web application. It manages physical assets (hardware, equipment, furniture, etc.), tracks who they're issued to, handles maintenance schedules, generates barcode labels, creates legal accountability agreements (PDFs), and maintains a full audit trail of every change.
+**AIO-System** is a full-stack Office Asset Inventory and Accountability Tracking System. It manages physical assets (hardware, equipment, furniture, peripherals), tracks who they're issued to, handles maintenance schedules, generates barcode labels, creates legal accountability agreements (PDFs), and maintains a full audit trail of every change.
+
+**Primary use case:** A university research office (UPPI / DRDF) managing loaned-out equipment, tracking which personnel has what, with formal signed-accountability agreements.
 
 **Key workflows:**
-- **Asset lifecycle:** Create → assign/issue to personnel → maintain → retire/delete
-- **Accountability:** Issue assets to personnel, generate legal agreement PDFs they sign, QR-code return scanning
-- **Inventory management:** Dropdown lookups for types/manufacturers/locations/personnel/projects/institutions
-- **Audit trail:** Every CUD operation is logged with who did it, old/new values, and IP address
-- **Label generation:** PDF barcode labels with custom templates via a visual designer
-- **Automation:** Cron jobs for daily backups (02:00 SGT) and notifications (09:00 SGT)
+- **Asset lifecycle:** Create → status tracking (Available/Assigned/Maintenance/Retired/Lost) → soft-delete with `deletedAt`
+- **Accountability:** Issue assets to personnel → generate signed agreement PDFs → QR-code return scanning → full history
+- **Inventory Management:** Dropdown lookups for asset types, manufacturers, locations, assigned-to entities
+- **Personnel Management:** Track staff (employee/contractor), their designations, institutions, projects, and active items
+- **Audit Trail:** Every CUD operation is logged with who did it, old/new values, IP address, browser/OS/device info, and severity
+- **Label Generation:** PDF barcode labels (Code128/QR/DataMatrix) for asset tagging
+- **Automation:** Cron jobs for daily backups (02:00 SGT), depreciation, and notifications (09:00 SGT)
+- **Guest Sharing:** Time-limited, access-count-limited, read-only public asset links via tokens
 
 ---
 
@@ -24,28 +28,64 @@
 | Layer | Technology | Notes |
 |-------|-----------|-------|
 | **Runtime** | Node.js v22+ | — |
-| **Server** | Express.js 4.x | REST API, serves frontend in production |
-| **Database** | PostgreSQL | Via Prisma ORM 6.x |
-| **Auth** | JWT (jsonwebtoken) + bcryptjs + TOTP 2FA | Refresh token rotation |
-| **Frontend** | React 18 + Vite 6 + TypeScript | shadcn/ui + Tailwind CSS |
-| **Charts** | Chart.js + react-chartjs-2 | Dashboard widgets |
+| **Package Manager** | npm 10.x | npm workspaces monorepo |
+| **Server** | Express.js 4.x | REST API, serves built frontend in production |
+| **Database** | PostgreSQL 16 | Via Prisma ORM 6.19.x |
+| **Auth** | JWT (access + refresh token rotation) + bcryptjs + TOTP 2FA (speakeasy) | Access: 15min, Refresh: 7 days |
+| **Frontend** | React 18 + Vite 6 + TypeScript 5 | shadcn/ui + Radix UI + Tailwind CSS 3 |
+| **Charts** | Chart.js 4 + react-chartjs-2 | Dashboard donut/bar charts |
 | **PDF Generation** | PDFKit | Labels (bwip-js barcodes) + Accountability agreements |
 | **Image Processing** | Sharp | Resize on upload (800px max) |
-| **File Upload** | Multer | 5MB limit, images only |
-| **CSV Import** | csv-parse | Bulk asset import |
-| **Cron Jobs** | node-cron | Backup 02:00 SGT, notifications 09:00 SGT |
-| **Backup** | archiver (zip) + AWS S3 SDK | Encrypted backup archives |
-| **AI** | Google Gemini API | Asset detail auto-suggestion |
-| **Email** | Google Gmail API | Notification emails |
+| **File Upload** | Multer 2.x | 5MB limit, images only |
+| **CSV Import** | csv-parse | Bulk asset import with template download |
+| **Cron Jobs** | node-cron | Backup 02:00 SGT, depreciation daily, notifications 09:00 SGT |
+| **Backup** | archiver (zip) + AWS S3 SDK | pg_dump → zip → AES-256-GCM encrypt → S3 upload |
+| **AI** | OpenAI-compatible API | Asset name → type/manufacturer auto-suggestion |
+| **Email** | Google Gmail API | Notification/warranty emails |
 | **QR Codes** | html5-qrcode (scan) + bwip-js (generate) | Asset labels + return scanning |
-| **Rate Limiting** | express-rate-limit | Login 5/15min, guest tokens |
-| **Security** | helmet, cors, morgan | — |
+| **Rate Limiting** | express-rate-limit | Login: 5/15min per IP, guest tokens |
+| **Security** | helmet 8.x, cors, morgan | CSP/STS/X-Frame relaxed for dev |
 | **Process Manager** | PM2 | ecosystem.config.js |
-| **Testing** | Vitest (unit/integration/security) + Playwright (E2E) | — |
+| **Styling** | Tailwind CSS 3 + tw-animate-css + Geist Variable font | Custom navy/orange brand palette |
+| **Testing** | Vitest 4.x (unit/integration/security) + Playwright 1.x (E2E) | — |
+| **Dev Hot Reload** | ts-node-dev (server) + Vite HMR (client) | concurrently orchestrates both |
 
 ---
 
-## 3. Complete Project File Tree
+## 3. Brand & Design System
+
+### Color Palette
+| Color | Hex | Usage |
+|-------|-----|-------|
+| Navy Blue | `#012061` | Headers, primary accents, table headers, sidebar |
+| Orange | `#f8931f` | Primary action buttons, highlights, icon accents, KPI values |
+| Deep Red | `#7B1113` | Destructive actions, critical alerts, overdue badges |
+| Light BG | `#f1f3f5` / `#DEDEDE` | Page background |
+| Slate scale | `slate-50` through `slate-900` | Text, borders, secondary surfaces |
+
+### Design Patterns (applied to ALL pages)
+Every entity page follows the same component hierarchy:
+1. **Sticky Navy Header** — icon + title (left), action buttons (right), orange primary button, bordered secondary buttons
+2. **KPI Tiles Row** — 3-column grid of stat cards (icon in orange-tinted circle, orange number, uppercase label)
+3. **Horizontal Filter Bar** — white card with search input + dropdown filters in compact `h-8` selects
+4. **Bulk Action Toolbar** — appears when items selected, navy-tinted bar with action buttons
+5. **White Card Table** — `rounded-lg border` container with navy `bg-[#012061]` header row, white `bg-white` data rows, hover highlight
+6. **Empty State** — centered icon in orange-tinted rounded square + CTA button
+7. **Pagination** — Prev/Next in white footer bar with border-top
+
+### Typography
+- **Font:** Geist Variable (Sans) via `@fontsource-variable/geist`
+- **Headings:** `text-lg font-bold tracking-tight` in navy sections
+- **Table Headers:** `text-[10px] font-semibold tracking-widest text-white/70 uppercase`
+- **KPI Values:** `text-xl font-bold leading-tight text-[#f8931f]`
+- **Body:** `text-xs` / `text-sm` in `text-slate-600/700`
+
+### Dark Mode
+Controlled by `ThemeContext.tsx` — toggles `.dark` class on `<html>`. All components use `dark:` variants.
+
+---
+
+## 4. Complete Project File Tree
 
 This is the authoritative file listing. **Every file exists at the path shown.** Sub-agent: if you need to modify something, use the path from this tree.
 
@@ -54,23 +94,27 @@ aio-system/
 ├── package.json                          # Monorepo root (workspaces: server, client, shared)
 ├── ecosystem.config.js                   # PM2 config (port 3001 dev / 3000 prod)
 ├── playwright.config.ts                  # Playwright E2E config
+├── start-dev.sh                          # Auto-start script (background)
 │
 ├── 📁 server/                            # ═══ BACKEND ═══
 │   ├── package.json
 │   ├── tsconfig.json
-│   ├── .env                              # Environment variables (DATABASE_URL, JWT_SECRET, etc.)
+│   ├── .env                              # ★ Environment variables (DATABASE_URL, JWT_SECRET, PORT=3001, etc.)
 │   ├── vitest.config.ts
 │   ├── prisma/
-│   │   ├── schema.prisma                 # ★ DATABASE: All models, enums, relations
-│   │   ├── seed.ts                       # DB seed script
-│   │   └── seed-lookups.ts              # Lookup value seed
-│   ├── uploads/                          # User-uploaded asset images (served at /aio-system/uploads)
+│   │   ├── schema.prisma                 # ★ DATABASE: All models, enums, relations (PostgreSQL)
+│   │   ├── seed.ts                       # DB seed script (creates admin user)
+│   │   ├── seed-lookups.ts               # Lookup value seed
+│   │   └── migrations/                   # Prisma migration history
+│   ├── scripts/
+│   │   └── seed-dashboard.ts             # Dashboard demo data seeder (10 assets + assignments + maintenance)
+│   ├── uploads/                          # User-uploaded asset images (served at /uploads and /aio-system/uploads)
 │   ├── backups/                          # Local backup .enc files before S3 upload
 │   ├── public/                           # Built frontend (Vite output) + static assets
 │   │   ├── index.html                    # SPA entry
 │   │   ├── manifest.json                 # PWA manifest
 │   │   ├── favicon.svg, pwa-*.png        # PWA icons
-│   │   ├── logo-uppi.png, logo-drdf.png  # Org logos
+│   │   ├── logo-uppi.png, logo-drdf.png  # Org logos (shown on login page)
 │   │   ├── icons.svg                     # SVG sprite
 │   │   ├── uploads/logos/                # Agreement template header logos
 │   │   └── assets/                       # Vite-built JS/CSS bundles
@@ -84,7 +128,7 @@ aio-system/
 │       ├── middleware/
 │       │   ├── auth.ts                   # JWT verification, role authorization (authenticate, requireRole, authorize)
 │       │   ├── audit.ts                  # Auto-audit middleware (logs changes on write ops)
-│       │   ├── validate.ts              # Zod schema validation middleware
+│       │   ├── validate.ts               # Zod schema validation middleware
 │       │   ├── errorHandler.ts           # Global Express error handler
 │       │   └── index.ts                  # Re-exports all middleware
 │       ├── routes/                       # ★ ALL API ENDPOINTS (one file per resource)
@@ -96,140 +140,149 @@ aio-system/
 │       │   ├── audit.schema.ts           # Zod schemas for audit queries
 │       │   ├── maintenance.routes.ts     # CRUD /api/assets/:id/maintenance
 │       │   ├── maintenance.schema.ts     # Zod schemas for maintenance payloads
-│       │   ├── maintenanceSchedules.ts   # CRUD /api/assets/maintenance-schedules
-│       │   ├── maintenanceUpcoming.ts    # GET /api/maintenance/upcoming
 │       │   ├── label.routes.ts           # PDF label generation, template CRUD
 │       │   ├── label.schema.ts           # Zod schemas for label payloads
 │       │   ├── dashboard.routes.ts       # GET /api/dashboard (stats, warranties, locations, age)
 │       │   ├── guest.routes.ts           # Public /api/guest/a/:token, token CRUD
-│       │   ├── ai.routes.ts              # POST /api/ai/suggest (Gemini)
+│       │   ├── ai.routes.ts              # POST /api/ai/suggest (OpenAI)
 │       │   ├── ai.schema.ts              # Zod schema for AI payload
 │       │   ├── backup.routes.ts          # POST /api/backups/now, GET list
 │       │   ├── backup.schema.ts          # Zod schema for backup requests
 │       │   ├── notification.routes.ts    # GET /api/notifications, PATCH mark-read
 │       │   ├── user.routes.ts            # CRUD /api/users (Admin only)
-│       │   ├── lookup.routes.ts          # CRUD /api/lookups/:category (asset types, mfrs, locations, assigned-to)
+│       │   ├── user.schema.ts            # Zod schemas for user payloads
+│       │   ├── lookup.routes.ts          # CRUD /api/lookups/:category
 │       │   ├── personnel.routes.ts       # CRUD /api/personnel
-│       │   ├── issuance.routes.ts        # CRUD /api/issuances (issue/return assets to personnel)
+│       │   ├── personnel.schema.ts       # Zod schemas for personnel payloads
+│       │   ├── issuance.routes.ts        # CRUD /api/issuances (issue/return, available assets, active personnel, bulk)
+│       │   ├── issuance.schema.ts        # Zod schemas for issuance payloads
 │       │   ├── agreement.routes.ts       # CRUD /api/agreement/templates, logo upload, PDF generation
+│       │   ├── agreement.schema.ts       # Zod schemas for agreement payloads
 │       │   ├── institution.routes.ts     # GET /api/institutions (list)
 │       │   ├── project.routes.ts         # GET /api/projects (list)
-│       │   └── accountabilityLookup.routes.ts  # CRUD /api/lookup/accountability (designations, institutions, projects)
+│       │   └── accountabilityLookup.routes.ts  # CRUD /api/lookup/accountability/* (designations, institutions, projects)
 │       ├── services/                     # ★ BUSINESS LOGIC (one per resource)
 │       │   ├── auth.service.ts           # Login, JWT signing, 2FA setup, refresh tokens
-│       │   ├── asset.service.ts          # Asset CRUD, CSV import, bulk ops, assignment history
+│       │   ├── asset.service.ts          # Asset CRUD, CSV import, bulk ops, image processing, assignment history
 │       │   ├── audit.service.ts          # Query, export CSV, revert field changes, cleanup old logs
 │       │   ├── maintenance.service.ts    # Maintenance log CRUD
-│       │   ├── dashboard.service.ts      # Aggregated stats, warranty checks, age distribution
+│       │   ├── dashboard.service.ts      # Aggregated stats, warranty checks, age distribution, location breakdown
 │       │   ├── label.service.ts          # PDF generation (PDFKit + bwip-js), template CRUD
 │       │   ├── guest.service.ts          # Guest token management, rate-limited public access
-│       │   ├── depreciation.service.ts   # Straight-line depreciation calculations
+│       │   ├── depreciation.service.ts   # Straight-line depreciation with salvage floor
 │       │   ├── notification.service.ts   # Warranty/maintenance alert generation
-│       │   ├── backup.service.ts         # pg_dump + zip + encrypt + S3 upload
-│       │   ├── ai.service.ts             # Gemini API integration for asset suggestions
-│       │   ├── personnel.service.ts      # Personnel CRUD + audit logging
-│       │   ├── issuance.service.ts       # Issue assets, return assets, QR return, agreement text generation
+│       │   ├── backup.service.ts         # pg_dump + zip + encrypt (AES-256-GCM) + S3 upload
+│       │   ├── ai.service.ts             # OpenAI API integration for asset suggestions
+│       │   ├── personnel.service.ts      # Personnel CRUD + audit logging + profile history tracking
+│       │   ├── issuance.service.ts       # Issue assets, return assets, QR return, resolve agreement text, bulk issuance
 │       │   └── agreement.service.ts      # Template CRUD, agreement PDF generation (PDFKit)
 │       └── utils/
-│           ├── response.ts              # success(data, meta) / error(message, code) helpers
-│           ├── env.ts                    # ENV validation (DATABASE_URL, JWT_SECRET, etc.)
-│           ├── guestFilter.ts           # Strips sensitive fields (price, serial#) for GUEST role
-│           ├── auditHelpers.ts          # Shared audit logging utilities
-│           └── templateParser.ts        # Agreement template placeholder reference
+│           ├── response.ts               # success(data, meta) / error(message, code) JSON helpers
+│           ├── env.ts                     # ENV validation (DATABASE_URL, JWT_SECRET, etc.)
+│           ├── guestFilter.ts             # Strips sensitive fields for GUEST role (price, serial#, warranty)
+│           ├── auditHelpers.ts            # Shared audit logging utilities
+│           └── templateParser.ts          # Agreement template placeholder reference ({{fullName}}, {{assetName}}, etc.)
 │
 ├── 📁 client/                            # ═══ FRONTEND ═══
 │   ├── package.json
 │   ├── vite.config.ts                    # Vite config (base: /aio-system, proxy /api → :3001)
+│   ├── tailwind.config.cjs               # Tailwind CSS config
+│   ├── postcss.config.cjs                # PostCSS config
 │   ├── components.json                   # shadcn/ui configuration
+│   ├── vitest.config.ts
 │   └── src/
-│       ├── main.tsx                      # React entry point
-│       ├── App.tsx                       # ★ ROUTER — all frontend routes defined here (BrowserRouter basename=/aio-system)
-│       ├── App.css                       # Root-level styles
-│       ├── index.css                     # Global styles + Tailwind directives
-│       ├── vite-env.d.ts                # Vite type declarations
-│       ├── assets/                       # Static assets
-│       │   ├── hero.png, react.svg, vite.svg
+│       ├── main.tsx                      # React entry point (StrictMode + ErrorBoundary + ThemeProvider)
+│       ├── App.tsx                       # ★ ROUTER — all frontend routes (BrowserRouter basename=/aio-system)
+│       ├── index.css                     # Global styles + Tailwind directives + shadcn theming + Geist font
+│       ├── vite-env.d.ts                 # Vite type declarations
 │       ├── context/
-│       │   └── AuthContext.tsx           # ★ Auth state, login/logout, token refresh, user info, role
+│       │   ├── AuthContext.tsx            # ★ Auth state (login, logout, token refresh, cached user, 2FA)
+│       │   └── ThemeContext.tsx           # ★ Dark/light mode toggle (adds .dark class on <html>)
 │       ├── pages/                        # ★ ALL PAGE COMPONENTS (one per route)
-│       │   ├── LoginPage.tsx             # /login
-│       │   ├── Setup2FaPage.tsx          # /setup-2fa
-│       │   ├── GuestAssetPage.tsx        # /guest/:token (public)
-│       │   ├── DashboardPage.tsx         # / (home)
-│       │   ├── AssetsPage.tsx            # /assets
-│       │   ├── AuditPage.tsx             # /audit
-│       │   ├── SettingsPage.tsx          # /settings
-│       │   ├── UserManagementPage.tsx    # /users (Admin)
+│       │   ├── LoginPage.tsx             # /login — split-screen, navy brand panel, orange accents
+│       │   ├── Setup2FaPage.tsx          # /setup-2fa — QR scan or manual code TOTP setup
+│       │   ├── GuestAssetPage.tsx        # /guest/:token — public read-only asset view
+│       │   ├── DashboardPage.tsx         # ★ / (home) — Command Center with bento analytics grid
+│       │   ├── AssetsPage.tsx            # /assets — table + CRUD + import + bulk ops + QR scan
+│       │   ├── AuditPage.tsx             # /audit — full audit trail with filters, export, revert
+│       │   ├── SettingsPage.tsx          # /settings — backup trigger, guest tokens, preferences
+│       │   ├── UserManagementPage.tsx    # /users (Admin) — user CRUD + activate/deactivate
 │       │   ├── InventoryLookupPage.tsx   # /lookup (Admin/StaffAdmin) — asset dropdown values
-│       │   ├── AccountabilityLookupPage.tsx  # /accountability-lookup (Admin/StaffAdmin) — designations, institutions, projects
-│       │   ├── AccountabilityTemplatesPage.tsx # /accountability/templates (Admin) — agreement template editor
-│       │   ├── ProfilesPage.tsx          # /profiles (Admin/StaffAdmin) — personnel management
-│       │   └── IssuancesPage.tsx         # /issuances (Admin/StaffAdmin) — issue/return tracking
+│       │   ├── AccountabilityLookupPage.tsx  # /accountability-lookup — designations, institutions, projects
+│       │   ├── AccountabilityTemplatesPage.tsx # /accountability/templates — agreement template editor
+│       │   ├── ProfilesPage.tsx          # /profiles — personnel management + active items count
+│       │   └── IssuancesPage.tsx         # /issuances — issue/return wizards, QR return, bulk issuance
 │       ├── components/
 │       │   ├── AppLayout.tsx            # Sidebar + top nav shell (wraps all authenticated routes)
+│       │   ├── ErrorBoundary.tsx        # React error boundary
 │       │   ├── assets/                  # Asset table, forms, modals
-│       │   │   ├── AssetTable.tsx       # Sortable/filterable asset list table
-│       │   │   ├── AssetFormModal.tsx   # Create/edit asset modal form
-│       │   │   ├── AssetDetailModal.tsx # Full asset detail view with tabs
-│       │   │   ├── AssetFilterSidebar.tsx # Filter panel (type, status, location, search)
-│       │   │   ├── ImportAssetsModal.tsx # CSV bulk import modal
-│       │   │   ├── QRScannerModal.tsx   # Camera-based QR code scanner
+│       │   │   ├── AssetTable.tsx       # ★ Sortable asset table with navy header, checkboxes, image thumbnails
+│       │   │   ├── AssetFormModal.tsx   # Create/edit asset modal (JSON + multipart image)
+│       │   │   ├── AssetDetailModal.tsx # Full asset view with tabs (details, assignments, maintenance, depreciation)
+│       │   │   ├── AssetFilterSidebar.tsx # Filter panel
+│       │   │   ├── ImportAssetsModal.tsx # CSV bulk import modal with template download
+│       │   │   ├── QRScannerModal.tsx   # html5-qrcode camera-based scanner
+│       │   │   ├── BulkActionModal.tsx  # Bulk assign/update modal
 │       │   │   └── index.ts
-│       │   ├── audit/
-│       │   │   ├── AuditTimeline.tsx    # Per-entity audit history timeline
+│       │   ├── audit/                   # Audit timeline for entity detail views
+│       │   │   ├── AuditTimeline.tsx
 │       │   │   └── index.ts
-│       │   ├── auth/
-│       │   │   ├── ProtectedRoute.tsx   # Route guard (redirects to /login if unauthenticated)
-│       │   │   ├── RoleGate.tsx         # Conditional render by user role
+│       │   ├── auth/                    # Auth guards
+│       │   │   ├── ProtectedRoute.tsx   # Route guard (redirects to /login)
+│       │   │   ├── RoleGate.tsx         # Conditional render by role (Admin/StaffAdmin/Staff/Guest)
 │       │   │   └── index.ts
 │       │   ├── dashboard/
-│       │   │   ├── DashboardWidgets.tsx # KPI cards + charts
+│       │   │   ├── DashboardWidgets.tsx # KPI cards + chart widgets
 │       │   │   └── index.ts
 │       │   ├── depreciation/
-│       │   │   ├── FinancialsTab.tsx    # Depreciation calculator + schedule
-│       │   │   ├── DepreciationBar.tsx  # Visual depreciation progress bar
+│       │   │   ├── FinancialsTab.tsx    # Depreciation calculator + schedule table
+│       │   │   ├── DepreciationBar.tsx  # Visual progress bar
 │       │   │   └── index.ts
 │       │   ├── guest/
 │       │   │   ├── GuestTokenManager.tsx # Create/revoke guest share tokens
 │       │   │   └── index.ts
-│       │   ├── issuances/              # Issuance workflow components
-│       │   │   ├── QRReturnScanner.tsx  # QR scanner for returning assets
-│       │   │   └── PDFPreviewModal.tsx  # Embedded PDF preview for agreement + labels
+│       │   ├── issuances/               # ★ Issuance workflow components
+│       │   │   ├── NewIssuanceWizard.tsx # NOT USED — wizard is inline in IssuancesPage.tsx
+│       │   │   ├── BulkIssuanceWizard.tsx # ★ Multi-asset issue wizard (preselected personnel support)
+│       │   │   ├── QRReturnScanner.tsx  # QR scan → find active issuance → return
+│       │   │   └── PDFPreviewModal.tsx  # Embedded PDF iframe preview (agreements + labels)
 │       │   ├── labels/
-│       │   │   ├── TemplateDesigner.tsx # Visual label template editor (drag fields)
+│       │   │   ├── TemplateDesigner.tsx # Visual label template editor
 │       │   │   └── index.ts
 │       │   ├── lookup/
-│       │   │   └── LookupTab.tsx        # Lookup value CRUD table
+│       │   │   └── LookupTab.tsx        # Lookup value CRUD table (emerald ACTIVE badges)
 │       │   ├── maintenance/
-│       │   │   ├── MaintenanceTab.tsx   # Maintenance log list + CRUD
+│       │   │   ├── MaintenanceTab.tsx   # Maintenance log CRUD list
 │       │   │   ├── ScheduleMaintenanceModal.tsx # Schedule creation modal
 │       │   │   └── index.ts
 │       │   ├── notifications/
-│       │   │   └── NotificationBell.tsx # Unread notification count badge
+│       │   │   └── NotificationBell.tsx # Unread count badge in header
 │       │   ├── users/
-│       │   │   ├── AddUserModal.tsx     # Create user modal
-│       │   │   ├── EditUserModal.tsx    # Edit user modal
+│       │   │   ├── AddUserModal.tsx     # Create user modal form
+│       │   │   ├── EditUserModal.tsx    # Edit user modal form
 │       │   │   └── index.ts
-│       │   └── ui/                     # shadcn/ui primitives (Radix-based)
+│       │   └── ui/                     # shadcn/ui primitives (Radix-based, ~12 components)
 │       │       ├── badge.tsx, button.tsx, checkbox.tsx, dialog.tsx,
 │       │       │   input.tsx, label.tsx, popover.tsx, scroll-area.tsx,
 │       │       │   select.tsx, table.tsx, tabs.tsx
 │       ├── hooks/                      # Custom React hooks
-│       │   ├── useAssets.ts            # Asset data fetching + caching
-│       │   ├── useLookup.ts            # Lookup data fetching
+│       │   ├── useAssets.ts            # Asset data fetching + filters
+│       │   ├── useLookup.ts            # Lookup value CRUD operations
 │       │   ├── useLookupOptions.ts     # Dropdown option formatting
-│       │   └── useSavedFilters.ts      # Persisted filter state (localStorage)
-│       ├── lib/                        # Shared library code
-│       │   ├── api.ts                  # ★ CENTRAL API CLIENT — apiFetch() wrapper, all endpoints, AUTH_EXPIRED_EVENT
+│       │   ├── useDebounce.ts          # Debounced value hook (300ms default)
+│       │   ├── useSavedFilters.ts      # Persisted filter state (localStorage)
+│       │   └── useKeyboardShortcuts.ts # Global keyboard shortcuts
+│       ├── lib/                        # Frontend shared code
+│       │   ├── api.ts                  # ★ CENTRAL API CLIENT + all endpoint wrappers + AUTH_EXPIRED_EVENT
 │       │   ├── labels-api.ts           # Label-specific API calls
-│       │   ├── utils.ts                # cn() classname helper + misc utilities
+│       │   ├── utils.ts                # cn() classname helper + misc
 │       │   └── warranty.ts             # Warranty status calculator
 │       ├── utils/                      # Frontend business logic
-│       │   ├── csvTemplate.ts          # CSV template generator for bulk import
+│       │   ├── csvTemplate.ts          # CSV template generator
 │       │   ├── depreciation.ts         # Depreciation math functions
 │       │   └── maintenanceUtils.ts     # Maintenance helper functions
 │       ├── types/
-│       │   └── lookup.ts              # Lookup-related TypeScript types
+│       │   └── lookup.ts              # Lookup TypeScript types
 │       └── __tests__/
 │           └── Login.test.tsx          # Login page unit test
 │
@@ -239,42 +292,17 @@ aio-system/
 │       └── index.ts                     # TypeScript types shared between server & client
 │
 ├── 📁 tests/                            # ═══ TEST SUITES ═══
-│   ├── smoke/
-│   │   └── smoke.test.ts               # Basic app health
-│   ├── functional/                      # Functionality tests
-│   │   ├── assets.test.ts
-│   │   ├── audit.test.ts
-│   │   ├── auth.test.ts
-│   │   ├── depreciation.test.ts
-│   │   ├── guest-tokens.test.ts
-│   │   ├── labels.test.ts
-│   │   └── maintenance.test.ts
-│   ├── integration/                     # Integration tests
-│   │   ├── ai-suggest.test.ts
-│   │   ├── assets-db.test.ts
-│   │   ├── audit-integrity.test.ts
-│   │   ├── cron-backup.test.ts
-│   │   └── cron-depreciation.test.ts
-│   ├── security/                        # Security tests
-│   │   ├── auth-bypass.test.ts
-│   │   ├── data-exposure.test.ts
-│   │   ├── input-validation.test.ts
-│   │   └── role-escalation.test.ts
-│   ├── ui/                             # Playwright E2E tests
-│   │   ├── assets.spec.ts
-│   │   ├── audit.spec.ts
-│   │   ├── global-setup.ts
-│   │   ├── labels.spec.ts
-│   │   ├── login.spec.ts
-│   │   └── role-gates.spec.ts
-│   ├── helpers/
-│   │   └── mocks.ts
-│   └── fixtures/
-│       └── assets.ts
+│   ├── smoke/                           # Basic app health
+│   ├── functional/                      # Feature tests (assets, audit, auth, depreciation, guest, labels, maintenance)
+│   ├── integration/                     # Integration tests (AI, DB, audit integrity, cron)
+│   ├── security/                        # Security tests (auth bypass, data exposure, input validation, role escalation)
+│   ├── ui/                              # Playwright E2E tests (assets, audit, labels, login, role gates)
+│   ├── helpers/mocks.ts                 # Test mocks
+│   └── fixtures/assets.ts              # Test data fixtures
 │
 └── 📁 docs/                             # ═══ DOCUMENTATION ═══
     ├── FLOWCHART.md                     # ★ THIS FILE — complete system reference for AI agents
-    ├── ASSIGNEDTO_FLOW.md              # Analysis of assignedTo field (free-text vs FK)
+    ├── ASSIGNEDTO_FLOW.md               # Analysis of assignedTo field
     ├── login-redesign-recommendations.md
     ├── security-checklist.md
     └── test-strategy.md
@@ -282,356 +310,304 @@ aio-system/
 
 ---
 
-## 4. Database Schema (Prisma — complete, authoritative)
+## 5. Database Schema (Prisma — complete, authoritative)
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                          PostgreSQL                                   │
-│                                                                      │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐        │
-│  │    User       │     │  Personnel   │     │    Asset      │        │
-│  ├──────────────┤     ├──────────────┤     ├──────────────┤        │
-│  │ id ⭑ (uuid)  │     │ id ⭑ (uuid)  │     │ id ⭑ (uuid)  │        │
-│  │ username     │     │ fullName      │     │ name         │        │
-│  │ email        │     │ designation   │     │ type         │        │
-│  │ passwordHash │     │ project       │     │ manufacturer │        │
-│  │ role (enum)  │     │ projectYear   │     │ serialNumber (uniq)   │
-│  │ fullName     │     │ email (uniq)  │     │ purchasePrice│        │
-│  │ status       │     │ phone         │     │ purchaseDate │        │
-│  │ twoFactorSec │     │ hiredDate     │     │ status (enum)│        │
-│  │ twoFactorEn  │     │ employHistory │     │ location     │        │
-│  │ backupCodes  │     │ status        │     │ imageUrl     │        │
-│  │ lastLogin    │     │ institutionId │     │ propertyNumber│       │
-│  │ createdAt     │     │ projectId     │     │ remarks      │        │
-│  │ updatedAt     │     │ designationId │     │ assignedTo   │        │
-│  └──────┬───────┘     │ createdAt     │     │ warrantyExpiry│       │
-│         │             │ updatedAt     │     │ warrantyNotes│        │
-│         │             └──────┬────────┘     │ deletedAt    │        │
-│         │                    │              │ createdAt    │        │
-│         ▼                    │              │ updatedAt    │        │
-│  ┌──────────────┐           │              └──────┬───────┘        │
-│  │  AuditLog    │           │                     │                │
-│  ├──────────────┤           │                     │                │
-│  │ id ⭑ (uuid)  │           │                     │                │
-│  │ entityType   │           │                     │                │
-│  │ entityId     │           │                     │                │
-│  │ action       │           │         ┌───────────▼───────────┐    │
-│  │ field        │           │         │     Assignment        │    │
-│  │ oldValue     │           │         ├───────────────────────┤    │
-│  │ newValue     │           │         │ id ⭑ (uuid)           │    │
-│  │ summary      │           │         │ assetId (FK→Asset)    │    │
-│  │ severity     │  (enum)   │         │ userId (FK→User)      │    │
-│  │ userAgent    │           │         │ personnelId (FK→Personnel)│
-│  │ oldImageUrl  │           │         │ assignedTo            │    │
-│  │ performedById├──► User   │         │ assignedAt            │    │
-│  │ performedAt  │           │         │ returnedAt            │    │
-│  │ ipAddress    │           │         │ condition             │    │
-│  └──────────────┘           │         │ notes                 │    │
-│                             │         └───────────────────────┘    │
-│  ┌──────────────┐           │                                      │
-│  │  GuestToken  │           │         ┌───────────────────────┐    │
-│  ├──────────────┤           │         │  MaintenanceSchedule  │    │
-│  │ id ⭑ (uuid)  │           │         ├───────────────────────┤    │
-│  │ assetId ─────┼──► Asset  │         │ id ⭑ (uuid)           │    │
-│  │ token (uniq) │           │         │ assetId (FK→Asset)    │    │
-│  │ expiresAt    │           │         │ title                 │    │
-│  │ maxAccess    │           │         │ scheduledDate         │    │
-│  │ accessCount  │           │         │ notes                 │    │
-│  │ createdAt    │           │         │ status (pending/done)  │    │
-│  └──────────────┘           │         │ completedAt           │    │
-│                             │         │ frequency (none/daily/ │    │
-│  ┌──────────────┐           │         │   weekly/monthly/yearly│   │
-│  │ LookupValue  │           │         │ createdById           │    │
-│  ├──────────────┤           │         │ createdAt             │    │
-│  │ id ⭑ (int)   │           │         │ updatedAt             │    │
-│  │ category     │ (enum)    │         └───────────────────────┘    │
-│  │ value        │           │                                      │
-│  │ isActive     │           │         ┌───────────────────────┐    │
-│  │ createdAt    │           │         │  MaintenanceLog       │    │
-│  │ updatedAt    │           │         ├───────────────────────┤    │
-│  └──────────────┘           │         │ id ⭑ (uuid)           │    │
-│                             │         │ assetId (FK→Asset)    │    │
-│  ┌──────────────┐           │         │ technicianName        │    │
-│  │  Notification│           │         │ description           │    │
-│  ├──────────────┤           │         │ cost (Decimal)        │    │
-│  │ id ⭑ (uuid)  │           │         │ date                  │    │
-│  │ type         │ (enum)    │         │ createdAt             │    │
-│  │ message      │           │         └───────────────────────┘    │
-│  │ assetId ─────┼──► Asset  │                                      │
-│  │ isRead       │           │         ┌───────────────────────┐    │
-│  │ createdAt    │           │         │  BackupLog            │    │
-│  └──────────────┘           │         ├───────────────────────┤    │
-│                             │         │ id ⭑ (uuid)           │    │
-│  ┌──────────────┐           │         │ status (enum)         │    │
-│  │LabelTemplate │           │         │ destination           │    │
-│  ├──────────────┤           │         │ filePath              │    │
-│  │ id ⭑ (uuid)  │           │         │ encryptedSize         │    │
-│  │ name         │           │         │ createdAt             │    │
-│  │ format       │           │         └───────────────────────┘    │
-│  │ config (JSON)│           │                                      │
-│  │ createdById ─┼──► User   │         ┌───────────────────────┐    │
-│  │ createdAt    │           │         │  AgreementTemplate    │    │
-│  └──────────────┘           │         ├───────────────────────┤    │
-│                             │         │ id ⭑ (uuid)           │    │
-│  ┌──────────────────┐       │         │ name                  │    │
-│  │ InstitutionLookup│       │         │ title                 │    │
-│  ├──────────────────┤       │         │ content (HTML)        │    │
-│  │ id ⭑ (int)       │       │         │ headerLogo (path)     │    │
-│  │ name (uniq)      │       │         │ defaultLogo (path)    │    │
-│  │ status            │       │         │ isDefault (bool)     │    │
-│  │ createdAt        │       │         │ defaultPropertyOfficer│   │
-│  └───────┬──────────┘       │         │ defaultAuthorizedRep  │    │
-│          │ FK→Personnel     │         │ createdAt             │    │
-│          ▼                  │         │ updatedAt             │    │
-│  ┌──────────────────┐       │         └───────────────────────┘    │
-│  │   ProjectLookup  │       │                                      │
-│  ├──────────────────┤       │         ┌───────────────────────┐    │
-│  │ id ⭑ (int)       │       │         │  ProfileHistory       │    │
-│  │ name (uniq)      │       │         ├───────────────────────┤    │
-│  │ status            │       │         │ id ⭑ (int, autoinc)   │    │
-│  │ createdAt        │       │         │ profileId (FK→Personnel) │  │
-│  └───────┬──────────┘       │         │ designation           │    │
-│          │ FK→Personnel     │         │ institutionName       │    │
-│          ▼                  │         │ projectName           │    │
-│  ┌──────────────────┐       │         │ projectYear           │    │
-│  │ DesignationLookup│       │         │ hiredDate             │    │
-│  ├──────────────────┤       │         │ loggedAt              │    │
-│  │ id ⭑ (int)       │       │         └───────────────────────┘    │
-│  │ name (uniq)      │       │                                      │
-│  │ status            │       │                                      │
-│  │ createdAt        │       │                                      │
-│  └──────────────────┘       │                                      │
-│                                                                      │
-│  ── ENUMS ────────────────────────────────────────────────────────  │
-│  Role:          ADMIN | STAFF_ADMIN | STAFF | GUEST                 │
-│  AssetStatus:   AVAILABLE | ASSIGNED | MAINTENANCE | RETIRED | LOST │
-│  LookupCategory: ASSET_TYPE | MANUFACTURER | LOCATION | ASSIGNED_TO │
-│  BackupStatus:  PENDING | IN_PROGRESS | COMPLETED | FAILED          │
-│  NotificationType: WARRANTY_EXPIRING | MAINTENANCE_OVERDUE          │
-│  AuditSeverity: LOW | MEDIUM | HIGH                                 │
-└──────────────────────────────────────────────────────────────────────┘
-```
+### Entity Models
 
-### Key relationships:
-- **Asset → Assignment:** One-to-many (an asset can be issued/returned multiple times)
-- **User → Assignment:** One-to-many (a user can request/hold multiple assets)
-- **Personnel → Assignment:** One-to-many (a personnel record can have multiple active issuances)
-- **Personnel → InstitutionLookup/ProjectLookup/DesignationLookup:** Optional FK (personnel can be linked to one of each)
-- **Asset → MaintenanceLog/MaintenanceSchedule/GuestToken/Notification:** One-to-many cascade delete
-- **Asset.assignedTo:** Free-text string field, NOT a foreign key — see `docs/ASSIGNEDTO_FLOW.md`
+**User** (table: `users`) — System login accounts
+- `id` (uuid PK), `username` (unique), `email` (unique), `passwordHash`
+- `role` (enum: ADMIN | STAFF_ADMIN | STAFF | GUEST)
+- `fullName`, `status` (active/inactive), `lastLogin`
+- `twoFactorSecret`, `twoFactorEnabled`, `backupCodes`
+- Relations: assignments[], auditLogs[], labelTemplates[]
+- `createdAt`, `updatedAt`
+
+**Asset** (table: `assets`) — Inventory items
+- `id` (uuid PK), `name`, `type` (enum: DESKTOP | LAPTOP | FURNITURE | EQUIPMENT | PERIPHERAL | OTHER), `manufacturer`
+- `serialNumber` (unique), `propertyNumber`, `purchasePrice` (Decimal), `purchaseDate`
+- `status` (enum: AVAILABLE | ASSIGNED | MAINTENANCE | RETIRED | LOST)
+- `location`, `imageUrl`, `assignedTo` (free-text string), `remarks`
+- `warrantyExpiry`, `warrantyNotes`, `deletedAt` (soft delete)
+- Relations: assignments[], maintenanceLogs[], maintenanceSchedules[], guestTokens[], notifications[]
+- `createdAt`, `updatedAt`
+
+**Personnel** (table: `personnel`) — People who can be issued assets
+- `id` (uuid PK), `fullName`, `designation`, `project`, `projectYear`
+- `email` (unique), `phone`, `hiredDate`, `employmentHistory`
+- `personnelType` (employee/contractor), `contractDurationMonths`, `contractStartDate`, `contractEndDate`
+- `signedAgreementPath` (uploaded PDF)
+- `status` (active/inactive/resigned)
+- `institutionId` → InstitutionLookup, `projectId` → ProjectLookup, `designationId` → DesignationLookup
+- Relations: assignments[], historyLogs[] (ProfileHistory)
+
+**Assignment** (table: `assignments`) — Issuance/return records (connects Asset ↔ Personnel)
+- `id` (uuid PK), `assetId` → Asset, `userId` → User (who performed), `personnelId` → Personnel (who received)
+- `assignedTo` (free-text fallback), `assignedAt`, `returnedAt`, `condition`, `notes`
+- `agreementText` (resolved agreement at time of issuance), `agreementId` → AgreementTemplate
+
+**AuditLog** (table: `audit_logs`) — Immutable change history
+- `id` (uuid PK), `entityType`, `entityId`, `action` (CREATE/UPDATE/DELETE/ISSUE/RETURN/REVERT/etc.)
+- `field`, `oldValue`, `newValue`, `summary` (human-readable), `severity` (LOW/MEDIUM/HIGH)
+- `userAgent`, `oldImageUrl`
+- `performedById` → User, `performedAt`, `ipAddress`
+
+**MaintenanceLog** (table: `maintenance_logs`) — Repair/service records
+- `id` (uuid PK), `assetId` → Asset, `technicianName`, `description`
+- `cost` (Decimal), `date`, `createdAt`
+
+**MaintenanceSchedule** (table: `maintenance_schedules`) — Planned maintenance
+- `id` (uuid PK), `assetId` → Asset, `title`, `scheduledDate`
+- `notes`, `status` (pending/completed/overdue), `completedAt`
+- `frequency` (none/daily/weekly/monthly/yearly), `createdById`
+- `createdAt`, `updatedAt`
+
+**GuestToken** (table: `guest_tokens`) — Public access links
+- `id` (uuid PK), `assetId` → Asset, `token` (unique)
+- `expiresAt`, `maxAccess`, `accessCount`
+
+**LookupValue** (table: `lookup_values`) — Dropdown options for asset attributes
+- `id` (int PK, autoinc), `category` (ASSET_TYPE | MANUFACTURER | LOCATION | ASSIGNED_TO)
+- `value` (string), `isActive`, `createdAt`, `updatedAt`
+- Unique constraint on (category, value)
+
+**InstitutionLookup** (table: `institution_lookup`) — Institutions for personnel
+- `id` (int PK, autoinc), `name` (unique), `status`, `createdAt`
+- FK from Personnel
+
+**ProjectLookup** (table: `project_lookup`) — Projects for personnel
+- `id` (int PK, autoinc), `name` (unique), `status` (active/inactive/completed/archived), `createdAt`
+- FK from Personnel
+
+**DesignationLookup** (table: `designation_lookup`) — Job titles for personnel
+- `id` (int PK, autoinc), `name` (unique), `status`, `createdAt`
+- FK from Personnel
+
+**AgreementTemplate** (table: `agreement_templates`) — Legal agreement templates
+- `id` (uuid PK), `name`, `title`, `content` (HTML with `{{placeholders}}`)
+- `headerLogo`, `defaultLogo`, `isDefault`
+- `defaultPropertyOfficer`, `defaultAuthorizedRep`
+- Relations: assignments[] (via AssignmentAgreement)
+
+**ProfileHistory** (table: `profile_history`) — Personnel change log
+- `id` (int PK, autoinc), `profileId` → Personnel
+- `designation`, `institutionName`, `projectName`, `projectYear`, `hiredDate`, `loggedAt`
+
+**Notification** (table: `notifications`) — System alerts
+- `id` (uuid PK), `type` (WARRANTY_EXPIRING | MAINTENANCE_OVERDUE)
+- `message`, `assetId` → Asset, `isRead`, `createdAt`
+
+**BackupLog** (table: `backup_logs`) — Backup history
+- `id` (uuid PK), `status` (PENDING | IN_PROGRESS | COMPLETED | FAILED)
+- `destination`, `filePath`, `encryptedSize`, `createdAt`
+
+**LabelTemplate** (table: `label_templates`) — Label format definitions
+- `id` (uuid PK), `name`, `format`, `config` (JSON), `createdById` → User, `createdAt`
+
+### Key Relationships
+- **Asset → Assignment:** 1-to-many (asset issued/returned multiple times)
+- **Personnel → Assignment:** 1-to-many (person can have multiple active issuances)
+- **Asset → MaintenanceLog/MaintenanceSchedule/GuestToken/Notification:** 1-to-many cascade delete
+- **Personnel → InstitutionLookup/ProjectLookup/DesignationLookup:** Optional FK (can be null)
+- **Assignment → AgreementTemplate:** Optional FK (which template was used)
+- **ProfileHistory → Personnel:** Cascade delete (history removed when personnel deleted)
+
+### Enums
+```
+Role:          ADMIN | STAFF_ADMIN | STAFF | GUEST
+AssetStatus:   AVAILABLE | ASSIGNED | MAINTENANCE | RETIRED | LOST
+AssetType:     DESKTOP | LAPTOP | FURNITURE | EQUIPMENT | PERIPHERAL | OTHER
+LookupCategory: ASSET_TYPE | MANUFACTURER | LOCATION | ASSIGNED_TO
+BackupStatus:  PENDING | IN_PROGRESS | COMPLETED | FAILED
+NotificationType: WARRANTY_EXPIRING | MAINTENANCE_OVERDUE
+AuditSeverity: LOW | MEDIUM | HIGH
+```
 
 ---
 
-## 5. Complete API Reference — Every Endpoint
+## 6. Complete API Reference
 
-### Authentication — `server/src/routes/auth.routes.ts`
+### Authentication
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/api/auth/login` | Public | Login (rate limited: 5/15min per IP) |
-| POST | `/api/auth/refresh` | Public | Refresh access token with refresh token |
+| POST | `/api/auth/login` | Public | Login (rate limited: 5/15min per IP). Returns `{accessToken, refreshToken, user, requiresTwoFactor?}` |
+| POST | `/api/auth/refresh` | Public | Refresh token rotation. Body: `{refreshToken}` |
 | POST | `/api/auth/logout` | Authenticated | Invalidate refresh token |
-| POST | `/api/auth/2fa/setup` | Authenticated | Generate TOTP secret + QR code |
-| POST | `/api/auth/2fa/verify` | Authenticated | Verify TOTP code & enable 2FA |
-| POST | `/api/auth/2fa/validate` | Public | Validate 2FA code during login flow |
-| GET | `/api/auth/me` | Authenticated | Get current user profile |
+| POST | `/api/auth/2fa/setup` | Authenticated | Generate TOTP secret + QR code URL |
+| POST | `/api/auth/2fa/verify` | Authenticated | Verify TOTP code → enable 2FA |
+| POST | `/api/auth/2fa/validate` | Public | Validate 2FA code during login |
+| GET | `/api/auth/me` | Authenticated | Current user profile |
 
-### Assets — `server/src/routes/asset.routes.ts`
+### Assets
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/assets` | Authenticated | List assets (filter by type/status/location/search, sort, paginate) |
-| GET | `/api/assets/stats` | Authenticated | Aggregated stats (by status, type, location) |
-| POST | `/api/assets` | Admin/StaffAdmin | Create asset (JSON or multipart with image) |
+| GET | `/api/assets` | Any | List (filter: type/status/location/search, sort, paginate, date ranges) |
+| GET | `/api/assets/stats` | Any | Aggregated stats by status/type/location |
+| GET | `/api/assets/depreciation-report` | Any | Depreciation data |
+| POST | `/api/assets` | Admin/StaffAdmin | Create (JSON or multipart with image via Multer) |
 | POST | `/api/assets/import` | Admin/StaffAdmin | Bulk CSV import |
-| GET | `/api/assets/bulk-status` | — | — |
 | PATCH | `/api/assets/bulk-status` | Admin/StaffAdmin | Change status for multiple assets |
-| DELETE | `/api/assets/bulk-delete` | Admin | Soft-delete (retire) multiple assets |
-| GET | `/api/assets/:id` | Authenticated | Get single asset (guest-filtered if GUEST role) |
+| DELETE | `/api/assets/bulk-delete` | Admin | Soft-delete multiple (sets status=RETIRED) |
+| POST | `/api/assets/bulk-assign` | Admin/StaffAdmin | Bulk assign to personnel |
+| POST | `/api/assets/bulk-return` | Admin/StaffAdmin | Bulk return by issuance IDs |
+| POST | `/api/assets/bulk-update` | Admin/StaffAdmin | Bulk location/status update |
+| GET | `/api/assets/:id` | Any | Single asset (guest-filtered if GUEST role) |
 | PUT | `/api/assets/:id` | Admin/StaffAdmin/Staff | Update asset (JSON or multipart) |
-| DELETE | `/api/assets/:id` | Admin | Soft-delete (set deletedAt) |
-| POST | `/api/assets/:id/image` | Admin/StaffAdmin/Staff | Upload + resize image (Sharp, 800px max) |
-| GET | `/api/assets/:id/history` | Authenticated | Full assignment history for this asset |
+| DELETE | `/api/assets/:id` | Admin | Soft-delete (sets deletedAt) |
+| POST | `/api/assets/:id/image` | Admin/StaffAdmin/Staff | Upload + resize (Sharp, 800px max) |
+| GET | `/api/assets/:id/history` | Any | Assignment history for this asset |
+| POST | `/api/assets/:id/checkout` | Admin/StaffAdmin | Legacy checkout |
+| POST | `/api/assets/:id/return` | Admin/StaffAdmin | Legacy return |
 
-### Maintenance Logs — `server/src/routes/maintenance.routes.ts`
+### Maintenance
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/assets/:id/maintenance` | Authenticated | List maintenance logs for asset |
+| GET | `/api/assets/:id/maintenance` | Any | List maintenance logs for asset |
 | POST | `/api/assets/:id/maintenance` | Admin/StaffAdmin | Create maintenance log |
-| PUT | `/api/assets/:id/maintenance/:logId` | Admin/StaffAdmin | Update maintenance log |
-| DELETE | `/api/assets/:id/maintenance/:logId` | Admin/StaffAdmin | Delete maintenance log |
+| PUT | `/api/assets/:id/maintenance/:logId` | Admin/StaffAdmin | Update log |
+| DELETE | `/api/assets/:id/maintenance/:logId` | Admin | Delete log |
+| GET | `/api/maintenance/upcoming` | Any | Upcoming maintenance (scheduled within N days) |
 
-### Maintenance Schedules — `server/src/routes/maintenanceSchedules.ts`
+### Audit Trail
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/assets/maintenance-schedules` | Authenticated | List all schedules |
-| POST | `/api/assets/maintenance-schedules` | Admin/StaffAdmin | Create schedule (title, date, frequency, notes) |
-| PUT | `/api/assets/maintenance-schedules/:id` | Admin/StaffAdmin | Update schedule |
-| DELETE | `/api/assets/maintenance-schedules/:id` | Admin | Delete schedule |
+| GET | `/api/audit` | Any | List (filter: entityType/action/severity/module/date, paginate) |
+| GET | `/api/audit/export` | Any | CSV download (opens in new tab) |
+| DELETE | `/api/audit/cleanup` | Admin | Purge logs older than N days |
+| GET | `/api/audit/:entityId` | Any | Timeline for specific entity |
+| POST | `/api/audit/:id/revert` | Admin | Field-level undo |
 
-### Upcoming Maintenance — `server/src/routes/maintenanceUpcoming.ts`
+### Dashboard
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/maintenance/upcoming` | Authenticated | Upcoming maintenance within next N days |
+| GET | `/api/dashboard/stats` | Any | KPI stats (total, assigned, maintenance, available) + activity feed |
+| GET | `/api/dashboard/warranties-expiring` | Any | Warranties expiring within 30 days (with warrantyStatus: expired/expiring/active) |
+| GET | `/api/dashboard/location-stats` | Any | Asset counts grouped by location |
+| GET | `/api/dashboard/age-stats` | Any | Asset age distribution (buckets) |
 
-### Audit Trail — `server/src/routes/audit.routes.ts`
+### Labels
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/audit` | Authenticated | List audit logs (filter by entityType/action/date, paginate) |
-| GET | `/api/audit/export` | Admin/StaffAdmin | Export filtered logs as CSV download |
-| DELETE | `/api/audit/cleanup` | Admin | Delete logs older than N days |
-| GET | `/api/audit/:entityId` | Authenticated | Timeline for specific entity |
-| POST | `/api/audit/:id/revert` | Admin | Revert a specific field change (undo) |
+| POST | `/api/labels/generate-pdf` | Admin/StaffAdmin/Staff | Generate barcode PDF for selected assets |
+| GET/POST/PUT/DELETE | `/api/labels/templates` | Admin/StaffAdmin | CRUD label templates |
+| POST | `/api/labels/batch` | Admin/StaffAdmin/Staff | Batch label ZIP generation |
 
-### Dashboard — `server/src/routes/dashboard.routes.ts`
+### Guest Access
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/dashboard/stats` | Authenticated | KPI stats (total assets, assigned, in maintenance, etc.) |
-| GET | `/api/dashboard/warranties-expiring` | Authenticated | Warranties expiring within 30 days |
-| GET | `/api/dashboard/location-stats` | Authenticated | Asset counts grouped by location |
-| GET | `/api/dashboard/age-stats` | Authenticated | Asset age distribution (buckets) |
+| GET | `/api/guest/a/:token` | **Public** | View asset (rate limited, access count tracked) |
+| POST | `/api/guest/tokens` | Admin/StaffAdmin | Create guest token |
+| GET | `/api/guest/tokens` | Admin/StaffAdmin | List all tokens |
+| DELETE | `/api/guest/tokens/:id` | Admin | Revoke token |
 
-### Labels — `server/src/routes/label.routes.ts`
+### AI
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/api/labels/generate-pdf` | Authenticated | Generate barcode/PDF labels for selected assets |
-| GET | `/api/labels/templates` | Admin/StaffAdmin | List label templates |
-| POST | `/api/labels/templates` | Admin/StaffAdmin | Create label template |
-| PUT | `/api/labels/templates/:id` | Admin/StaffAdmin | Update label template |
-| DELETE | `/api/labels/templates/:id` | Admin | Delete label template |
+| POST | `/api/ai/suggest` | Any | AI-suggest type + manufacturer from asset name |
 
-### Guest Access — `server/src/routes/guest.routes.ts`
+### Backups
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/guest/a/:token` | **Public** | View asset via guest token (rate limited) |
-| POST | `/api/guest/tokens` | Admin/StaffAdmin | Create guest share token |
-| GET | `/api/guest/tokens` | Admin/StaffAdmin | List all guest tokens |
-| DELETE | `/api/guest/tokens/:id` | Admin | Revoke a guest token |
+| POST | `/api/backups/now` | Admin | Trigger manual backup |
+| GET | `/api/backups` | Admin | Backup history |
 
-### AI — `server/src/routes/ai.routes.ts`
+### Notifications
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/api/ai/suggest` | Authenticated | AI-suggest asset details (name, type, manufacturer) via Gemini |
+| GET | `/api/notifications` | Any | Unread notifications |
+| PATCH | `/api/notifications/:id/read` | Any | Mark as read |
 
-### Backups — `server/src/routes/backup.routes.ts`
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/api/backups/now` | Admin | Trigger manual backup immediately |
-| GET | `/api/backups` | Admin | List backup history/status |
-
-### Notifications — `server/src/routes/notification.routes.ts`
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/notifications` | Authenticated | Get unread notifications for current user |
-| PATCH | `/api/notifications/:id/read` | Authenticated | Mark notification as read |
-
-### Users — `server/src/routes/user.routes.ts` (Admin only)
+### Users (Admin only)
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api/users` | Admin | List all users |
-| POST | `/api/users` | Admin | Create user (username, email, password, role) |
-| PUT | `/api/users/:id` | Admin | Update user details |
-| PATCH | `/api/users/:id/status` | Admin | Activate/deactivate user |
+| POST | `/api/users` | Admin | Create user |
+| PUT | `/api/users/:id` | Admin | Update user |
+| PATCH | `/api/users/:id/status` | Admin | Activate/deactivate |
 
-### Lookups (Asset-related) — `server/src/routes/lookup.routes.ts`
+### Lookups (Asset-related)
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/lookups/:category` | Authenticated | Active values for category (asset-types, manufacturers, locations, assigned-to) |
+| GET | `/api/lookups/:category` | Any | Active values (asset-types, manufacturers, locations, assigned-to) |
 | GET | `/api/lookups/:category/all` | Admin/StaffAdmin | All values including inactive |
-| POST | `/api/lookups/:category` | Admin/StaffAdmin | Add lookup value |
-| PATCH | `/api/lookups/:id` | Admin/StaffAdmin | Edit or toggle active/inactive |
-| POST | `/api/lookups/migrate` | Admin | Seed lookups from existing asset data |
+| POST | `/api/lookups/:category` | Admin/StaffAdmin | Add value |
+| PATCH | `/api/lookups/:id` | Admin/StaffAdmin | Toggle active/inactive |
+| POST | `/api/lookups/migrate` | Admin | Seed from existing asset data |
 
-### Personnel — `server/src/routes/personnel.routes.ts`
+### Personnel
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/personnel` | Authenticated | List personnel (search, filter by status/project, paginate) |
-| GET | `/api/personnel/:id` | Authenticated | Get single personnel record with assignments count |
-| POST | `/api/personnel` | Admin | Create personnel (fullName, email, phone, designationId, institutionId, projectId, hiredDate) |
-| PATCH | `/api/personnel/:id` | Admin | Update personnel record |
-| DELETE | `/api/personnel/:id` | Admin | Soft-delete (status=inactive) — blocked if still has active issuances |
+| GET | `/api/personnel` | Any | List (search, filter, paginate) |
+| GET | `/api/personnel/:id` | Any | Single record with detailed assignments |
+| POST | `/api/personnel` | Admin | Create |
+| PATCH | `/api/personnel/:id` | Admin | Update |
+| DELETE | `/api/personnel/:id` | Admin | Soft-delete (blocks if active issuances) |
 
-### Issuances — `server/src/routes/issuance.routes.ts`
+### Issuances
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/issuances/active/asset/:assetId` | Authenticated | Get active issuance for a specific asset (for QR return) |
-| GET | `/api/issuances` | Authenticated | List issuances (filter by status/search/personnelId, paginate) |
-| POST | `/api/issuances` | Admin/StaffAdmin | Create issuance (assign asset to personnel — creates Assignment + AuditLog) |
-| POST | `/api/issuances/:id/return` | Admin/StaffAdmin | Return asset (mark returnedAt, set condition, viaQR flag) |
-| GET | `/api/issuances/assets/available` | Authenticated | Available assets for issuance wizard |
-| GET | `/api/issuances/personnel/active` | Authenticated | Active personnel for issuance wizard |
-| POST | `/api/issuances/agreement` | Authenticated | Generate accountability agreement text for preview |
+| GET | `/api/issuances` | Any | List (filter: status/search/personnelId, paginate) |
+| POST | `/api/issuances` | Admin/StaffAdmin | Single issuance (assetId, personnelId, condition, agreementText) |
+| POST | `/api/issuances/bulk` | Admin/StaffAdmin | Bulk issuance (multiple assetIds → one personnel) |
+| POST | `/api/issuances/:id/return` | Admin/StaffAdmin | Return asset (sets returnedAt, condition) |
+| GET | `/api/issuances/assets/available` | Any | Available assets for wizard (status=AVAILABLE, no deletedAt) |
+| GET | `/api/issuances/personnel/active` | Any | Active personnel for wizard |
+| POST | `/api/issuances/resolve-template/bulk` | Any | Resolve agreement text for bulk issuance |
 
-### Agreement Templates — `server/src/routes/agreement.routes.ts`
+### Agreement Templates
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/agreement/templates` | Admin/StaffAdmin | List all agreement templates |
-| GET | `/api/agreement/templates/:id` | Admin/StaffAdmin | Get single template |
-| POST | `/api/agreement/templates` | Admin | Create template (multipart: name, title, content, isDefault, logo) |
-| PATCH | `/api/agreement/templates/:id` | Admin | Update template (multipart with optional logo) |
-| DELETE | `/api/agreement/templates/:id` | Admin | Delete template |
-| POST | `/api/agreement/upload-logo` | Admin | Upload standalone logo for reuse |
-| GET | `/api/agreement/placeholders` | Authenticated | Get available template placeholder reference |
-| POST | `/api/agreement/pdf` | Admin/StaffAdmin | Generate agreement PDF (returns PDF binary) |
+| GET | `/api/agreements/templates` | Admin/StaffAdmin | List templates |
+| GET | `/api/agreements/templates/:id` | Admin/StaffAdmin | Single template |
+| POST | `/api/agreements/templates` | Admin | Create (multipart with optional logo) |
+| PATCH | `/api/agreements/templates/:id` | Admin | Update |
+| DELETE | `/api/agreements/templates/:id` | Admin | Delete |
+| POST | `/api/agreements/upload-logo` | Admin | Upload logo for reuse |
+| GET | `/api/agreements/placeholders` | Any | Template placeholder reference |
+| POST | `/api/agreements/pdf` | Admin/StaffAdmin | Generate PDF (returns application/pdf binary) |
 
-### Institutions — `server/src/routes/institution.routes.ts`
+### Institutions / Projects
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/institutions` | Authenticated | List all institutions |
+| GET | `/api/institutions` | Any | List |
+| GET | `/api/projects` | Any | List |
 
-### Projects — `server/src/routes/project.routes.ts`
+### Accountability Lookups (`/api/lookup/accountability/*`)
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/projects` | Authenticated | List all projects |
-
-### Accountability Lookups — `server/src/routes/accountabilityLookup.routes.ts`
-Mounted at `/api/lookup/accountability/*`
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/designations` | Authenticated | List designations (optional ?activeOnly=true) |
-| GET | `/designations/active` | Authenticated | Active designations only |
-| POST | `/designations` | Admin/StaffAdmin | Create designation |
-| PATCH | `/designations/:id` | Admin/StaffAdmin | Toggle designation status (active/inactive) |
-| GET | `/institutions` | Authenticated | List institutions (optional ?activeOnly=true) |
-| GET | `/institutions/active` | Authenticated | Active institutions only |
-| POST | `/institutions` | Admin/StaffAdmin | Create institution |
-| PATCH | `/institutions/:id` | Admin/StaffAdmin | Toggle institution status (active/inactive) |
-| GET | `/projects` | Authenticated | List projects (optional ?activeOnly=true) |
-| GET | `/projects/active` | Authenticated | Active projects only |
-| POST | `/projects` | Admin/StaffAdmin | Create project |
-| PATCH | `/projects/:id` | Admin/StaffAdmin | Toggle project status (active/inactive/completed/archived) |
+| GET | `/designations`, `/institutions`, `/projects` | Any | List (optional `?activeOnly=true`) |
+| POST | Same paths | Admin/StaffAdmin | Create |
+| PATCH | `/:id` | Admin/StaffAdmin | Toggle status |
 
 ### Health
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/health` | Public | Health check (status ok + timestamp) |
+| GET | `/api/health` | Public | `{status: "ok", timestamp}` |
 
 ---
 
-## 6. Frontend Routes Map
+## 7. Frontend Routes Map
 
 | Path | Component | Access | Description |
 |------|-----------|--------|-------------|
-| `/login` | `LoginPage` | Public | Login form with email/password + optional 2FA |
-| `/setup-2fa` | `Setup2FaPage` | Authenticated | 2FA setup wizard (QR scan or manual code) |
+| `/login` | `LoginPage` | Public | Split-screen login (navy brand panel + form) with 2FA support |
+| `/setup-2fa` | `Setup2FaPage` | Authenticated | TOTP 2FA setup wizard |
 | `/guest/:token` | `GuestAssetPage` | Public | Read-only asset view for shared links |
-| `/` | `DashboardPage` | Authenticated | KPI dashboard with charts and widgets |
-| `/assets` | `AssetsPage` | Authenticated | Asset table, create/edit/import/delete, QR scan |
-| `/users` | `UserManagementPage` | Admin only | User CRUD, activate/deactivate |
-| `/audit` | `AuditPage` | Authenticated | Full audit trail with filters, export, revert |
-| `/lookup` | `InventoryLookupPage` | Admin/StaffAdmin | Asset-related lookup values (types, manufacturers, locations) |
+| `/` | `DashboardPage` | Authenticated | Command Center: KPI tiles, bento analytics, activity timeline |
+| `/assets` | `AssetsPage` | Authenticated | Asset table + CRUD + CSV import + bulk ops + QR scanner |
+| `/lookup` | `InventoryLookupPage` | Admin/StaffAdmin | Asset lookup values (types, mfrs, locations) |
 | `/accountability-lookup` | `AccountabilityLookupPage` | Admin/StaffAdmin | Accountability lookups (designations, institutions, projects) |
-| `/accountability/templates` | `AccountabilityTemplatesPage` | Admin | Agreement template editor (content + logo + PDF preview) |
-| `/profiles` | `ProfilesPage` | Admin/StaffAdmin | Personnel management (list, create, edit, delete, view assignments) |
-| `/issuances` | `IssuancesPage` | Admin/StaffAdmin | Issue/return wizard, QR return scanner, agreement PDF generation |
-| `/settings` | `SettingsPage` | Authenticated | App settings (backup trigger, guest tokens, notification prefs) |
+| `/profiles` | `ProfilesPage` | Admin/StaffAdmin | Personnel management + active items |
+| `/issuances` | `IssuancesPage` | Admin/StaffAdmin | Issue/return wizards + QR return + bulk issuance |
+| `/accountability/templates` | `AccountabilityTemplatesPage` | Admin | Agreement template editor |
+| `/users` | `UserManagementPage` | Admin | User CRUD + activate/deactivate |
+| `/audit` | `AuditPage` | Authenticated | Audit trail with filters, CSV export, revert |
+| `/settings` | `SettingsPage` | Authenticated | Backup triggers, guest tokens, preferences |
 
-All authenticated routes (everything except `/login`, `/guest/:token`) are wrapped in `AppLayout` which provides the sidebar + topbar shell.
-
-**Route file:** `client/src/App.tsx` — All routes defined with `<BrowserRouter basename="/aio-system">`
+**Route file:** `client/src/App.tsx` — `<BrowserRouter basename="/aio-system">`
 
 ---
 
-## 7. Data Flow Diagrams
+## 8. Data Flow Diagrams
 
 ### Authentication Flow
 ```
@@ -642,15 +618,16 @@ All authenticated routes (everything except `/login`, `/guest/:token`) are wrapp
 │          │     {accessToken, refreshToken}│          │
 └──────────┘                               └──────────┘
      │                                          │
-     │ Store tokens in AuthContext               │ Verify JWT on every request
+     │ Store in AuthContext + localStorage       │ Verify JWT on every request
      ▼                                          ▼
 ┌──────────┐     Authorization: Bearer <JWT>   ┌──────────┐
 │ AuthContext│───────────────────────────────►│  middleware│
 │          │                                  │  auth.ts   │
-│ • Auto-refresh before expiry               └──────────┘
-│ • Redirect to /login on 401                     │
-│ • RoleGate / ProtectedRoute                      ▼
-│ • Emits AUTH_EXPIRED_EVENT               req.user = {id, role, username}
+│ • Auto-refresh token (14 min interval)      └──────────┘
+│ • Cache user in localStorage for fast load        │
+│ • Decode JWT expiry to skip unnecessary refresh   ▼
+│ • Emit AUTH_EXPIRED_EVENT on hard 401       req.user = {id, role, username}
+│ • RoleGate / ProtectedRoute gate access
 └──────────┘
 ```
 
@@ -659,211 +636,200 @@ All authenticated routes (everything except `/login`, `/guest/:token`) are wrapp
 Admin                            Server                            Database
   │                                │                                │
   │ 1. Open IssuancesPage          │                                │
-  │──► GET available assets ──────►│──► SELECT assets WHERE        │
-  │──► GET active personnel ───────►│     status=AVAILABLE         │
-  │                                │──► SELECT personnel WHERE     │
-  │                                │     status=active             │
+  │──► GET /api/issuances ────────►│──► SELECT assignments WITH     │
+  │    ?status=all&limit=50        │     asset, personnel,          │
+  │                                │     designationLookup          │
   │                                │                                │
-  │ 2. Select asset + personnel +  │                                │
-  │    condition + notes           │                                │
-  │──► POST /api/issuances ───────►│                                │
-  │    {assetId, personnelId,      │──► CREATE Assignment           │
-  │     condition, notes}          │     (assetId, personnelId,     │
-  │                                │      assignedAt=now)           │
+  │ 2. "New Issuance" wizard:      │                                │
+  │──► GET available assets ──────►│──► SELECT assets WHERE         │
+  │    (useDebounce search)        │     status=AVAILABLE           │
+  │                                │     AND deletedAt IS NULL      │
+  │──► GET active personnel ──────►│──► SELECT personnel WHERE      │
+  │    (useDebounce search)        │     status=active              │
+  │                                │                                │
+  │ 3. Select asset + personnel    │                                │
+  │    + condition + template      │                                │
+  │──► POST /api/issuances ───────►│──► CREATE Assignment           │
+  │    {assetId, personnelId,      │     (assetId, personnelId,     │
+  │     condition, agreementText}  │      assignedAt=now)           │
   │                                │──► UPDATE Asset.status         │
   │                                │     = ASSIGNED                 │
-  │                                │──► CREATE AuditLog             │
-  │    ◄── 201 {assignment} ──────┤     (action: ISSUE)            │
+  │                                │──► CREATE AuditLog (ISSUE)     │
+  │    ◄── 201 {assignment} ──────┤                                │
   │                                │                                │
-  │ 3. Generate agreement PDF      │                                │
-  │──► POST /api/agreement/pdf ───►│──► agreement.service           │
-  │    {personnelName, assetName,  │──► PDFKit → PDF buffer        │
-  │     templateId, ...}           │                                │
-  │    ◄── PDF binary ────────────┤                                │
-  │    (display in PDFPreviewModal)│                                │
+  │ 4. "Bulk Issuance" wizard:     │                                │
+  │    Select MULTIPLE assets      │                                │
+  │──► POST /api/issuances/bulk ──►│──► Loop: create Assignment     │
+  │    {assetIds[], personnelId,   │     per asset → update status  │
+  │     condition}                 │──► Resolve agreement text       │
+  │                                │──► CREATE AuditLog per asset   │
+  │    ◄── {assigned, errors[]} ──┤                                │
   │                                │                                │
-  │ 4. Return via QR scan:         │                                │
+  │ 5. Return via QR scan:         │                                │
   │    Scan asset QR code          │                                │
-  │──► GET active issuance ───────►│──► Find Assignment WHERE      │
-  │    for asset                   │     returnedAt IS NULL         │
-  │──► POST /api/issuances/:id    │                                │
-  │    /return {condition, viaQR} ──► UPDATE Assignment            │
+  │──► Search active issuances ───►│──► Find Assignment WHERE      │
+  │──► POST /issuances/:id/return ►│     returnedAt IS NULL        │
+  │    {condition: "Good"}         │──► UPDATE Assignment           │
   │                                │     (returnedAt, condition)    │
   │                                │──► UPDATE Asset.status         │
   │                                │     = AVAILABLE                │
   │                                │──► CREATE AuditLog (RETURN)    │
 ```
 
+### Dashboard Data Flow
+```
+Dashboard Page                                Backend
+  │                                            │
+  ├── GET /api/dashboard/stats ───────────────►│ dashboard.service
+  │   Returns: {totalAssets, totalAssigned,    │  ├── prisma.asset.count()
+  │             underMaintenance, available,   │  ├── prisma.asset.groupBy(status)
+  │             byStatus{}, byType{},          │  ├── prisma.asset.groupBy(type)
+  │             activityFeed[]}                │  ├── AuditLog recent entries
+  │                                            │
+  ├── GET /api/maintenance/upcoming ──────────►│
+  │   Returns: [{id, title, scheduledDate,     │  Upcoming schedules
+  │             status, asset{id,name}}]        │  (status: pending/overdue/completed)
+  │                                            │
+  ├── GET /api/dashboard/warranties-expiring ──►│
+  │   Returns: [{id, name, warrantyExpiry,     │  Warranties expiring < 30 days
+  │             daysUntilExpiry,               │  warrantyStatus: active/expiring/expired
+  │             warrantyStatus}]               │
+  │                                            │
+  ├── GET /api/dashboard/location-stats ──────►│ Group by location
+  ├── GET /api/dashboard/age-stats ───────────►│ Age buckets (0-1yr, 1-3yr, 3-5yr, 5+yr)
+```
+
 ### Audit Trail Flow
 ```
 Any Write Action                         Database
   │                                        │
-  ├── Asset CREATE/UPDATE/DELETE ──────────►│ AuditLog
-  ├── Assignment ISSUE/RETURN ─────────────►│ AuditLog
-  ├── Maintenance CREATE/UPDATE ───────────►│ AuditLog
-  ├── Bulk IMPORT/STATUS_CHANGE ───────────►│ AuditLog
-  ├── Backup TRIGGER ──────────────────────►│ AuditLog
-  ├── Personnel CREATE/UPDATE/DELETE ──────►│ AuditLog
+  ├── Asset CREATE/UPDATE/DELETE ─────────►│ AuditLog (per-field tracking)
+  ├── Assignment ISSUE/RETURN ────────────►│ AuditLog
+  ├── Maintenance CREATE/UPDATE/DELETE ───►│ AuditLog
+  ├── Bulk IMPORT/STATUS_CHANGE/ASSIGN ───►│ AuditLog (per asset)
+  ├── Backup TRIGGER ─────────────────────►│ AuditLog
+  ├── Personnel CREATE/UPDATE/DELETE ─────►│ AuditLog
+  ├── User CREATE/UPDATE/STATUS_CHANGE ───►│ AuditLog
   │                                        │
-  │   AuditPage:                            │
-  ├── GET /api/audit (filter + paginate) ──►│
-  ├── GET /api/audit/export (CSV) ────────►│
-  ├── POST /api/audit/:id/revert ─────────►│ field-level undo
-  └── DELETE /api/audit/cleanup ───────────►│ purge old logs
-```
-
-### Backup Flow
-```
-┌──────────────┐                          ┌──────────┐
-│ Admin clicks │──► POST /api/backups/now │ backup.  │
-│ "Backup Now" │                          │ service  │
-│ (Settings)   │                          │          │
-└──────────────┘                          └────┬─────┘
-                                               │
-                              ┌── pg_dump → .sql
-                              ├── Archive uploads/ → .zip
-                              ├── Combine + encrypt → .enc file
-                              ├── Save to server/backups/
-                              ├── Upload to AWS S3
-                              └── CREATE BackupLog + AuditLog
-                                               
-                         Cron (02:00 SGT daily)
-                              └── Same flow, automatic
-```
-
-### Notification Flow
-```
-┌──────────────┐  Cron 09:00 SGT  ┌──────────────────┐
-│  Cron Job    │────────────────►│ notification.     │
-│             │                   │ service            │
-└──────────────┘                   │                   
-                                   ├── Check warranties expiring < 30 days
-                                   ├── Check overdue maintenance
-                                   ├── CREATE Notification records
-                                   └── Return count
-                                            │
-                                   ┌────────▼─────────┐
-                                   │ NotificationBell   │
-                                   │ (frontend)        │
-                                   │ GET /api/notifications
-                                   │ Show unread count  │
-                                   └───────────────────┘
-```
-
-### Guest Access Flow
-```
-┌──────────┐  Share link   ┌──────────────┐
-│  Admin   │──────────────►│ GuestToken   │
-│          │  /guest/:token │ (expires,    │
-│          │               │  maxAccess)  │
-└──────────┘               └──────┬───────┘
-                                  │
-                           ┌──────▼───────┐
-                           │ Public GET   │
-                           │ /api/guest/  │
-                           │ a/:token     │
-                           │ (rate limited)│
-                           └──────┬───────┘
-                                  │
-                           ┌──────▼───────┐
-                           │ guestFilter  │
-                           │ strips:      │
-                           │ • purchasePr │
-                           │ • serial#    │
-                           │ • remarks    │
-                           │ • warranty   │
-                           └──────┬───────┘
-                                  │
-                           ┌──────▼───────┐
-                           │ GuestAsset   │
-                           │ Page         │
-                           │ (read-only)  │
-                           └──────────────┘
+  │   AuditPage UI:                         │
+  ├── GET /api/audit (filtered + paginated)►│ Query with filters
+  ├── GET /api/audit/export (CSV) ────────►│ CSV download (new tab)
+  ├── POST /api/audit/:id/revert ─────────►│ Restore old field value
+  └── DELETE /api/audit/cleanup ──────────►│ Purge old logs (N days)
 ```
 
 ---
 
-## 8. Key File Quick Reference — "I need to change X, which file?"
+## 9. Key File Quick Reference
 
 | Want to... | Go to |
 |------------|-------|
-| Change database schema (add model/field/enum) | `server/prisma/schema.prisma` → then run `npx prisma migrate dev` |
-| Add a new API endpoint | `server/src/routes/` (pick or create file) + `server/src/services/` (business logic) |
-| Add Zod validation to a route | `server/src/routes/*.schema.ts` |
-| Change the Express app setup (middleware order, mount paths) | `server/src/index.ts` |
-| Change frontend routes / add a new page | `client/src/App.tsx` — add route + `client/src/pages/NewPage.tsx` |
-| Change auth behavior (JWT, roles) | `client/src/context/AuthContext.tsx` + `server/src/middleware/auth.ts` |
-| Modify API client (how frontend calls backend) | `client/src/lib/api.ts` |
-| Modify asset form (create/edit) | `client/src/components/assets/AssetFormModal.tsx` |
-| Modify asset detail view | `client/src/components/assets/AssetDetailModal.tsx` |
-| Change asset table/filters | `client/src/components/assets/AssetTable.tsx` + `AssetFilterSidebar.tsx` |
+| Change DB schema | `server/prisma/schema.prisma` → `npx prisma migrate dev` |
+| Add API endpoint | `server/src/routes/*.routes.ts` + `server/src/services/*.service.ts` |
+| Add Zod validation | `server/src/routes/*.schema.ts` |
+| Change Express setup | `server/src/index.ts` |
+| Add frontend route | `client/src/App.tsx` + `client/src/pages/NewPage.tsx` |
+| Change auth (JWT, roles) | `client/src/context/AuthContext.tsx` + `server/src/middleware/auth.ts` |
+| Change API client | `client/src/lib/api.ts` |
+| Change page layout | Component hierarchy: Header → KPI row → Filter bar → Table → Pagination |
+| Change asset table | `client/src/components/assets/AssetTable.tsx` |
+| Change dashboard | `client/src/pages/DashboardPage.tsx` |
+| Change issuance wizard | `client/src/pages/IssuancesPage.tsx` (inline NewIssuanceWizard) |
+| Change bulk issuance | `client/src/components/issuances/BulkIssuanceWizard.tsx` |
+| Change personnel mgmt | `client/src/pages/ProfilesPage.tsx` |
+| Change user mgmt | `client/src/pages/UserManagementPage.tsx` |
 | Change audit trail UI | `client/src/pages/AuditPage.tsx` |
-| Add a new frontend page | Create `client/src/pages/NewPage.tsx` + add route in `client/src/App.tsx` |
-| Change asset dropdowns (type/location/mfr) | `server/src/routes/lookup.routes.ts` + `client/src/hooks/useLookup.ts` |
-| Change accountability lookups (designations/institutions/projects) | `server/src/routes/accountabilityLookup.routes.ts` + `client/src/pages/AccountabilityLookupPage.tsx` |
-| Change personnel management | `server/src/routes/personnel.routes.ts` + `client/src/pages/ProfilesPage.tsx` |
-| Change issuance/return flow | `server/src/routes/issuance.routes.ts` + `client/src/pages/IssuancesPage.tsx` |
-| Change agreement PDF generation | `server/src/services/agreement.service.ts` + `server/src/routes/agreement.routes.ts` |
-| Change agreement template editor | `client/src/pages/AccountabilityTemplatesPage.tsx` |
-| Change dashboard widgets | `client/src/components/dashboard/DashboardWidgets.tsx` |
-| Modify label PDF output | `server/src/services/label.service.ts` |
-| Modify label template designer | `client/src/components/labels/TemplateDesigner.tsx` |
-| Change depreciation calculation | `client/src/utils/depreciation.ts` + `server/src/services/depreciation.service.ts` |
-| Change backup logic | `server/src/services/backup.service.ts` |
-| Modify cron schedules | `server/src/jobs/cron.ts` |
-| Change PM2 config (ports, instances) | `ecosystem.config.js` |
-| Change Vite build config (proxy, base path) | `client/vite.config.ts` |
-| Add shared TypeScript types | `shared/types/index.ts` |
-| Read env variables | `server/src/utils/env.ts` (validates required vars) |
+| Change dark mode | `client/src/context/ThemeContext.tsx` |
+| Change agreement PDF | `server/src/services/agreement.service.ts` |
+| Change label PDF | `server/src/services/label.service.ts` |
+| Change cron jobs | `server/src/jobs/cron.ts` |
+| Change PM2 config | `ecosystem.config.js` |
+| Change Vite config | `client/vite.config.ts` |
+| Add shared types | `shared/types/index.ts` |
+| Seed demo data | `server/scripts/seed-dashboard.ts` |
+| Base seed | `server/prisma/seed.ts` |
 
 ---
 
-## 9. Environment Variables
+## 10. Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `PORT` | Server port (default: 3001 dev, 3000 prod) | No |
-| `NODE_ENV` | `development` or `production` | Yes |
-| `DATABASE_URL` | PostgreSQL connection string | Yes |
-| `JWT_SECRET` | Access token signing key | Yes |
-| `REFRESH_TOKEN_SECRET` | Refresh token signing key | Yes |
-| `AWS_ACCESS_KEY_ID` | S3 backup upload credentials | For backups |
-| `AWS_SECRET_ACCESS_KEY` | S3 backup upload credentials | For backups |
-| `AWS_S3_BUCKET` | S3 bucket name | For backups |
-| `AWS_REGION` | S3 bucket region | For backups |
-| `GEMINI_API_KEY` | Google Gemini API key | For AI suggest |
-| `GMAIL_CLIENT_ID` | Gmail API OAuth client ID | For email |
-| `GMAIL_CLIENT_SECRET` | Gmail API OAuth secret | For email |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PORT` | No | Server port (default: 3001) |
+| `NODE_ENV` | Yes | `development` or `production` |
+| `DATABASE_URL` | Yes | PostgreSQL: `postgresql://user:pass@localhost:5432/aio_system` |
+| `JWT_SECRET` | Yes | 32+ hex chars for access token signing |
+| `REFRESH_TOKEN_SECRET` | Yes | Different 32+ hex chars for refresh token signing |
+| `BACKUP_ENCRYPTION_KEY` | Yes | 64 hex chars (32 bytes) for AES-256-GCM |
+| `CLIENT_URL` | No | CORS origin, default: `http://localhost:5173` |
+| `TWO_FA_ISSUER` | No | TOTP issuer name (default: AIO-System) |
+| `AWS_*` | For backups | S3 credentials, bucket, region |
+| `GOOGLE_*` | For Google Drive | Drive backup credentials |
+| `AI_API_URL` | For AI | OpenAI-compatible endpoint |
+| `AI_API_KEY` | For AI | API key |
+| `AI_MODEL` | No | Model name (default: gpt-4o-mini) |
 
 ---
 
-## 10. Commands Quick Reference
+## 11. Commands Quick Reference
 
 ```bash
-# Development
+# ── Development ──
 cd aio-system
-npm run dev              # Start both server + client (concurrently)
-
+npm install               # Install all workspace deps
+npm run dev               # Start server (ts-node-dev :3001) + client (Vite :3000)
+                          # Client proxies /api → :3001, serves at /aio-system/
 # Server only
-cd aio-system/server
-npx prisma generate      # Regenerate Prisma client after schema changes
-npx prisma migrate dev   # Run migrations
-npx prisma db seed       # Seed database
-npm run dev              # Start dev server (ts-node, hot reload)
+cd server
+npx prisma generate       # Regenerate Prisma client
+npx prisma migrate dev    # Create & apply migrations
+npx prisma migrate deploy # Apply pending migrations (production)
+npx prisma db seed        # Seed DB (admin user)
+npm run dev               # ts-node-dev hot reload
+
+# Seed demo data (10 assets + assignments + maintenance)
+cd server && npx ts-node-dev --transpile-only scripts/seed-dashboard.ts
 
 # Client only
-cd aio-system/client
-npm run dev              # Vite dev server (port 5173, proxies /api → :3001)
+cd client
+npm run dev               # Vite HMR on :3000
 
-# Build
-npm run build            # Build client (Vite) + server (tsc)
+# ── Build ──
+npm run build             # tsc (server) + vite build (client → server/public/)
 
-# Production
+# ── Production ──
 pm2 start ecosystem.config.js --env production
 pm2 status
 pm2 logs aio-system
 
-# Testing
-npm test                 # Run all Vitest tests
-cd tests && npx playwright test  # Run E2E tests
+# ── Testing ──
+npm test                  # Vitest (all suites)
+npm run test:smoke        # Fast smoke tests
+npm run test:all          # Functional + integration + security
+npm run test:ui           # Playwright E2E
+npm run test:all:with-ui  # Everything
+
+# ── DB Operations ──
+npm run db:migrate        # prisma migrate dev
+npm run db:seed           # prisma db seed
 ```
+
+---
+
+## 12. Quick Facts for AI Agents
+
+- **Working directory:** Project root is `aio-system/`
+- **Monorepo:** npm workspaces at `server/`, `client/`, `shared/`
+- **Dev server:** Express on port 3001, Vite on port 3000 (proxies /api → 3001)
+- **Base path:** Frontend served at `/aio-system/`
+- **Database:** PostgreSQL, Prisma ORM. Schema at `server/prisma/schema.prisma`
+- **Auth:** JWT access token (15min) + refresh token (7 days). Stored in localStorage.
+- **Roles:** ADMIN → STAFF_ADMIN → STAFF → GUEST (hierarchical, ADMIN has all)
+- **API response format:** `{success: boolean, data: any, error: {message} | null, meta: {page, limit, total, totalPages} | null}`
+- **Soft delete:** Assets have `deletedAt` timestamp. Personnel set `status=inactive`. Never hard-delete.
+- **Assets enum values use Prisma Enums:** AVAILABLE, ASSIGNED, MAINTENANCE, RETIRED, LOST
+- **Table pattern:** `overflow-x-auto rounded-lg border bg-white` wrapper with `bg-[#012061]` thead, `bg-white` tbody rows
+- **Brand colors:** Navy `#012061` (headers, accents), Orange `#f8931f` (buttons, highlights, KPIs), Red `#7B1113` (destructive)
+- **Font:** Geist Variable imported at `client/src/index.css`
+- **Dark mode:** `ThemeContext` toggles `.dark` on `<html>`, all components use `dark:` variants
+- **New Issuance Bug History:** Wizard had shared timer bug causing empty asset list. Fixed by using separate `useDebounce` hooks. If assets don't appear, check that `useDebounce` is called once per search field (not a shared `timerRef`).

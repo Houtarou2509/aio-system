@@ -22,9 +22,11 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  assignments   Assignment[]
-  auditLogs     AuditLog[]    @relation("PerformedBy")
-  labelTemplates LabelTemplate[]
+  assignments        Assignment[]
+  auditLogs          AuditLog[]         @relation("PerformedBy")
+  labelTemplates     LabelTemplate[]
+  purchaseRequests   PurchaseRequest[]  @relation("PurchaseRequests")
+  approvedRequests   PurchaseRequest[]  @relation("ApprovedRequests")
 
   @@map("users")
 }
@@ -49,6 +51,13 @@ model Asset {
   warrantyExpiry   DateTime?
   warrantyNotes     String?
   deletedAt        DateTime?
+
+  disposalReason   String?           @db.Text
+  disposalDate     DateTime?
+  disposalMethod   DisposalMethod?
+
+  supplierId     String?
+  supplier       Supplier? @relation(fields: [supplierId], references: [id])
 
   assignments     Assignment[]
   maintenanceLogs MaintenanceLog[]
@@ -183,6 +192,14 @@ enum AssetStatus {
   MAINTENANCE
   RETIRED
   LOST
+}
+
+enum DisposalMethod {
+  DONATED
+  SOLD
+  SCRAPPED
+  RETURNED_TO_VENDOR
+  OTHER
 }
 
 enum LookupCategory {
@@ -322,4 +339,37 @@ model MaintenanceSchedule {
   asset         Asset    @relation(fields: [assetId], references: [id])
 
   @@map("maintenance_schedules")
+}
+
+model Supplier {
+  id            String   @id @default(uuid())
+  name          String
+  contactPerson String?
+  email         String?
+  phone         String?
+  website       String?
+  notes         String?   @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  assets        Asset[]
+
+  @@map("suppliers")
+}
+
+model PurchaseRequest {
+  id            String    @id @default(uuid())
+  assetName     String
+  type          String
+  reason        String
+  status        String    @default("PENDING")
+  notes         String?
+  requestedById String
+  approvedById  String?
+  approvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  requestedBy   User      @relation("PurchaseRequests", fields: [requestedById], references: [id])
+  approvedBy    User?     @relation("ApprovedRequests", fields: [approvedById], references: [id])
+
+  @@map("purchase_requests")
 }

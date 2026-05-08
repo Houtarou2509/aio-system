@@ -261,10 +261,10 @@ function LookupTable({
         <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-[#012061]/5 dark:bg-slate-700/40">
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase">Name</th>
-                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase w-32">Status</th>
-                <th className="px-4 py-2.5 text-right text-[10px] font-semibold tracking-widest text-slate-500 dark:text-slate-400 uppercase w-48">Actions</th>
+              <tr className="bg-[#012061]">
+                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-white/70 uppercase">Name</th>
+                <th className="px-4 py-2.5 text-left text-[10px] font-semibold tracking-widest text-white/70 uppercase w-32">Status</th>
+                <th className="px-4 py-2.5 text-right text-[10px] font-semibold tracking-widest text-white/70 uppercase w-48">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -374,7 +374,7 @@ export default function AccountabilityLookupPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-light-bg dark:bg-slate-900">
+    <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
       {/* Header */}
       <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-4">
@@ -387,6 +387,9 @@ export default function AccountabilityLookupPage() {
           </p>
         </div>
       </header>
+
+      {/* ═══ CONTENT AREA ════════════════════════════════════ */}
+      <div className="flex-1 flex flex-col overflow-auto bg-light-bg dark:bg-slate-900">
 
       {/* KPI Cards */}
       <section className="px-6 pt-4 shrink-0">
@@ -436,6 +439,7 @@ export default function AccountabilityLookupPage() {
       <div className="flex-1 overflow-auto px-6 pb-6">
         <LookupTable endpoint={TABS.find(t => t.key === activeTab)!.endpoint} />
       </div>
+      </div>{/* close content area */}
     </div>
   );
 }

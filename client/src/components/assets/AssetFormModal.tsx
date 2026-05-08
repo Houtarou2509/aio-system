@@ -258,12 +258,12 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               {/* 4. Manufacturer */}
               <div>
                 <label className={labelClass}>Manufacturer</label>
-                <Select value={form.manufacturer || '__none__'} onValueChange={(val) => val != null && set('manufacturer', val === '__none__' ? '' : val)} disabled={manufacturerLoading}>
+                <Select value={form.manufacturer || 'none'} onValueChange={(val) => val != null && set('manufacturer', val === 'none' ? '' : val)} disabled={manufacturerLoading}>
                   <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
                     <SelectValue placeholder={manufacturerLoading ? 'Loading...' : 'Select manufacturer'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {mergeWithFallback(manufacturerOptions, form.manufacturer).map((opt) => (
                       <SelectItem key={opt.id} value={opt.value}>
                         {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
@@ -297,12 +297,12 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               {/* 8. Assigned To */}
               <div>
                 <label className={labelClass}>Assigned To</label>
-                <Select value={form.assignedTo || '__none__'} onValueChange={(val) => val != null && set('assignedTo', val === '__none__' ? '' : val)} disabled={assignedToLoading}>
+                <Select value={form.assignedTo || 'none'} onValueChange={(val) => val != null && set('assignedTo', val === 'none' ? '' : val)} disabled={assignedToLoading}>
                   <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
                     <SelectValue placeholder={assignedToLoading ? 'Loading...' : 'Select assignee'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {mergeWithFallback(assignedToOptions, form.assignedTo).map((opt) => (
                       <SelectItem key={opt.id} value={opt.value}>
                         {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
@@ -321,12 +321,12 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               {/* 10. Location */}
               <div>
                 <label className={labelClass}>Location</label>
-                <Select value={form.location || '__none__'} onValueChange={(val) => val != null && set('location', val === '__none__' ? '' : val)} disabled={locationLoading}>
+                <Select value={form.location || 'none'} onValueChange={(val) => val != null && set('location', val === 'none' ? '' : val)} disabled={locationLoading}>
                   <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
                     <SelectValue placeholder={locationLoading ? 'Loading...' : 'Select location'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {mergeWithFallback(locationOptions, form.location).map((opt) => (
                       <SelectItem key={opt.id} value={opt.value}>
                         {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}

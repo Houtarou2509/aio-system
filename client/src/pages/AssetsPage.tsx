@@ -12,12 +12,13 @@ import {
 import { useLookupOptions } from '@/hooks/useLookupOptions';
 import {
   Package, Search, ScanLine, Plus,
-  CheckCircle, Wrench, PackageOpen, X, Calendar
+  CheckCircle, Wrench, PackageOpen, X, Calendar, Trash2
 } from 'lucide-react';
 import {
   setFocusSearchCallback,
   setNewAssetCallback,
 } from '../hooks/useKeyboardShortcuts';
+import { DisposeAssetModal } from '../components/assets/DisposeAssetModal';
 
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
 const BULK_STATUS_OPTIONS = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED'];
@@ -68,6 +69,7 @@ export default function AssetsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editAsset, setEditAsset] = useState<Asset | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [disposeTarget, setDisposeTarget] = useState<Asset | null>(null);
 
   // KPI state
   const [kpiData, setKpiData] = useState<AssetKpiData | null>(null);
@@ -292,7 +294,7 @@ export default function AssetsPage() {
   ];
 
   return (
-    <div className="flex flex-col h-screen bg-light-bg dark:bg-slate-900">
+    <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
 
       {/* ═══ STICKY NAVY HEADER ═════════════════════════════ */}
       <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
@@ -304,34 +306,37 @@ export default function AssetsPage() {
           </div>
 
           {/* Right: Actions */}
-          <div className="flex items-center gap-2">
-            <button onClick={() => setScannerOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors">
-              <ScanLine className="h-3.5 w-3.5" /> Scan QR
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setScannerOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-2.5 sm:px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors">
+              <ScanLine className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Scan QR</span>
             </button>
             <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
-              <button onClick={() => setIsImportModalOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors">
-                ↑ Import CSV
+              <button onClick={() => setIsImportModalOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-2.5 sm:px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors">
+                <span className="hidden sm:inline">↑ Import</span><span className="sm:hidden">↑</span>
               </button>
-              <button onClick={() => { setEditAsset(null); setShowForm(true); }} className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors">
-                <Plus className="h-3.5 w-3.5" /> Add Asset
+              <button onClick={() => { setEditAsset(null); setShowForm(true); }} className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-3 sm:px-4 py-2 text-xs font-bold text-white hover:bg-[#e0841a] shadow-sm transition-colors shrink-0">
+                <Plus className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Add Asset</span><span className="sm:hidden">Add</span>
               </button>
             </RoleGate>
           </div>
         </div>
       </header>
 
+      {/* ═══ CONTENT AREA ════════════════════════════════════ */}
+      <div className="flex-1 flex flex-col overflow-auto bg-light-bg dark:bg-slate-900">
+
       {/* ═══ KPI TILES ═══════════════════════════════════════ */}
-      <section className="px-6 pt-4 shrink-0">
-        <div className="grid grid-cols-3 gap-3">
+      <section className="px-4 sm:px-6 pt-4 shrink-0">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           {KPI_CARDS.map(({ key, label, icon: Icon, value }) => (
-            <div key={key} className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
-                <Icon className="h-5 w-5 text-[#f8931f]" />
+            <div key={key} className="flex flex-col items-center text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 sm:p-4">
+              <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
+                  <Icon className="h-5 w-5 text-[#f8931f]" />
+                </div>
+                <p className="text-xl sm:text-2xl font-bold leading-tight text-[#f8931f]">{value}</p>
               </div>
-              <div className="min-w-0">
-                <p className="text-xl font-bold leading-tight text-[#f8931f]">{value}</p>
-                <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">{label}</p>
-              </div>
+              <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">{label}</p>
             </div>
           ))}
         </div>
@@ -486,6 +491,13 @@ export default function AssetsPage() {
             <RoleGate roles={['ADMIN']}>
               <button onClick={() => setConfirmDelete(true)} disabled={bulkLoading}
                 className="rounded-lg bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-50">Delete Selected</button>
+              <button onClick={() => {
+                const first = assets.find(a => selectedIds.has(a.id));
+                if (first) setDisposeTarget(first);
+              }}
+                className="rounded-lg bg-[#7B1113] px-3 py-1 text-xs text-white hover:bg-[#6a0f11] disabled:opacity-50">
+                <Trash2 className="h-3 w-3 inline mr-1" />Dispose
+              </button>
             </RoleGate>
             <button onClick={deselectAll}
               className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Deselect All</button>
@@ -555,7 +567,7 @@ export default function AssetsPage() {
 
       {/* ═══ MODALS ════════════════════════════════════════ */}
       {showDetail && selectedAsset && (
-        <AssetDetailModal asset={selectedAsset} onClose={() => setShowDetail(false)} onEdit={handleEdit} />
+        <AssetDetailModal asset={selectedAsset} onClose={() => setShowDetail(false)} onEdit={handleEdit} onDispose={(a) => { setShowDetail(false); setDisposeTarget(a); }} />
       )}
       {showForm && (
         <AssetFormModal asset={editAsset} onSubmit={editAsset ? handleUpdate : handleCreate} onClose={() => { setShowForm(false); setEditAsset(null); }} onImageUpload={assetsApi.uploadImage} />
@@ -613,6 +625,21 @@ export default function AssetsPage() {
           </div>
         </div>
       )}
+
+      {/* Dispose Asset Modal */}
+      {disposeTarget && (
+        <DisposeAssetModal
+          asset={disposeTarget}
+          onClose={() => setDisposeTarget(null)}
+          onDisposed={() => {
+            setDisposeTarget(null);
+            setSelectedIds(new Set());
+            refetch();
+            showToast('Asset disposed successfully');
+          }}
+        />
+      )}
+      </div>{/* close content area */}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, apiFetchBlob, ApiError, AUTH_EXPIRED_EVENT } from '../lib/api';
 import {
-  Users, PlusCircle, Search, Loader2, Eye, X, UserCircle, Briefcase, Building2, Calendar, Mail, Phone, Package, FileText, AlertTriangle, CheckCircle2, Info, ChevronDown,
+  Users, PlusCircle, Search, Loader2, Eye, X, UserCircle, Briefcase, Building2, Calendar, Mail, Phone, Package, FileText, AlertTriangle, CheckCircle2, CheckCircle, Info, ChevronDown, Edit3, Trash2,
 } from 'lucide-react';
 import BulkIssuanceWizard from '../components/issuances/BulkIssuanceWizard';
 import PDFPreviewModal from '../components/issuances/PDFPreviewModal';
@@ -613,20 +613,30 @@ function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail
           {activeLoans.length === 0 ? (
             <p className="text-xs text-slate-400 italic">No active possessions</p>
           ) : (
-            <table className="w-full text-xs">
-              <thead><tr className="text-slate-500 border-b"><th className="py-1 text-left">Asset</th><th className="py-1 text-left">Serial #</th><th className="py-1 text-left">Since</th><th className="py-1 text-left">Condition</th><th className="py-1 text-left">Status</th></tr></thead>
-              <tbody>
-                {activeLoans.map(a => (
-                  <tr key={a.id} className="border-b border-slate-100">
-                    <td className="py-1.5 font-medium text-slate-700">{a.asset?.name || '—'}</td>
-                    <td className="py-1.5 font-mono text-slate-500">{a.asset?.serialNumber || '—'}</td>
-                    <td className="py-1.5 text-slate-500">{new Date(a.assignedAt).toLocaleDateString()}</td>
-                    <td className="py-1.5"><span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 text-[10px] font-medium">{a.condition || 'Good'}</span></td>
-                    <td className="py-1.5"><span className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[10px] font-bold">ACTIVE</span></td>
+            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-[#012061] text-left">
+                    <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Asset</th>
+                    <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Serial #</th>
+                    <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Since</th>
+                    <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Condition</th>
+                    <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {activeLoans.map(a => (
+                    <tr key={a.id} className="border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800">
+                      <td className="px-3 py-2 font-semibold text-[#012061] dark:text-slate-100">{a.asset?.name || '—'}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 font-mono">{a.asset?.serialNumber || '—'}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">{new Date(a.assignedAt).toLocaleDateString()}</td>
+                      <td className="px-3 py-2"><span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200">{a.condition || 'Good'}</span></td>
+                      <td className="px-3 py-2"><span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-[#012061]/10 dark:bg-slate-700/50 text-[#012061] dark:text-slate-100">ACTIVE</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
@@ -639,21 +649,32 @@ function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail
           {pastLoans.length === 0 ? (
             <p className="text-xs text-slate-400 italic">No past issuances</p>
           ) : (
-            <table className="w-full text-xs">
-              <thead><tr className="text-slate-500 border-b"><th className="py-1 text-left">Asset</th><th className="py-1 text-left">Serial #</th><th className="py-1 text-left">Borrowed</th><th className="py-1 text-left">Returned</th><th className="py-1 text-left">Condition</th><th className="py-1 text-left">Status</th></tr></thead>
-              <tbody>
-                {pastLoans.map(a => (
-                  <tr key={a.id} className="border-b border-slate-100">
-                    <td className="py-1.5 font-medium text-slate-700">{a.asset?.name || '—'}</td>
-                    <td className="py-1.5 font-mono text-slate-500">{a.asset?.serialNumber || '—'}</td>
-                    <td className="py-1.5 text-slate-500">{new Date(a.assignedAt).toLocaleDateString()}</td>
-                    <td className="py-1.5 text-slate-500">{a.returnedAt ? new Date(a.returnedAt).toLocaleDateString() : '—'}</td>
-                    <td className="py-1.5"><span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-medium">{a.condition || 'Good'}</span></td>
-                    <td className="py-1.5"><span className="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold">RETURNED</span></td>
+            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-[#012061] text-left">
+                    <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Asset</th>
+                    <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Serial #</th>
+                    <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Borrowed</th>
+                    <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Returned</th>
+                    <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Condition</th>
+                    <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {pastLoans.map(a => (
+                    <tr key={a.id} className="border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800">
+                      <td className="px-3 py-2 font-semibold text-[#012061] dark:text-slate-100">{a.asset?.name || '—'}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 font-mono">{a.asset?.serialNumber || '—'}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">{new Date(a.assignedAt).toLocaleDateString()}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">{a.returnedAt ? new Date(a.returnedAt).toLocaleDateString() : '—'}</td>
+                      <td className="px-3 py-2"><span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{a.condition || 'Good'}</span></td>
+                      <td className="px-3 py-2"><span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">RETURNED</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
@@ -817,7 +838,7 @@ export default function ProfilesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
       <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -826,104 +847,175 @@ export default function ProfilesPage() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => { setEditing(null); setShowForm(true); }}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e07e0a] transition-colors">
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors">
               <PlusCircle className="w-3.5 h-3.5" /> Add Profile
             </button>
           </div>
         </div>
       </header>
 
-      {/* Search */}
-      <div className="px-6 py-3 border-b border-slate-200 bg-slate-50">
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
-        </div>
-      </div>
+      {/* ═══ CONTENT AREA ════════════════════════════════════ */}
+      <div className="flex-1 flex flex-col overflow-auto bg-light-bg dark:bg-slate-900">
 
-      {/* Table */}
-      <div className="px-6 py-4">
-        <table className="w-full">
-          <thead>
-            <tr style={{ backgroundColor: '#e8ecf4' }}>
-              <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Name</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Type</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Designation</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Project</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Year</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Active Items</th>
-              <th className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700">Status</th>
-              <th className="text-right px-3 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400 text-sm"><Loader2 className="w-5 h-5 animate-spin inline mr-2" />Loading...</td></tr>
-            ) : personnel.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-400 text-sm"><Users className="w-8 h-8 mx-auto mb-2 opacity-40" />No profiles yet</td></tr>
-            ) : personnel.map(p => (
-              <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                <td className="px-3 py-3">
-                  <button onClick={() => openDetail(p)} className="text-sm font-semibold hover:underline" style={{ color: '#012061' }}>{p.fullName}</button>
-                </td>
-                <td className="px-3 py-3">
-                  {p.personnelType === 'contractor' ? (
-                    <span className="inline-flex flex-col gap-0.5">
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">Contractor</span>
-                      {p.contractDurationMonths && (
-                        <span className="text-[10px] text-amber-600">
-                          {p.contractDurationMonths} mo{p.contractDurationMonths > 1 ? 's' : ''}
-                          {p.contractStartDate && p.contractEndDate && (
-                            <> · {new Date(p.contractStartDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {new Date(p.contractEndDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</>
+      {/* ═══ KPI TILES ═══════════════════════════════════════ */}
+      <section className="px-4 sm:px-6 pt-4 shrink-0">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="flex flex-col items-center text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 sm:p-4">
+            <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
+                <Users className="h-5 w-5 text-[#f8931f]" />
+              </div>
+              <p className="text-xl sm:text-2xl font-bold leading-tight text-[#f8931f]">{personnel.length}</p>
+            </div>
+            <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">TOTAL PROFILES</p>
+          </div>
+          <div className="flex flex-col items-center text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 sm:p-4">
+            <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
+                <CheckCircle className="h-5 w-5 text-[#f8931f]" />
+              </div>
+              <p className="text-xl sm:text-2xl font-bold leading-tight text-[#f8931f]">{personnel.filter(p => p.status === 'active').length}</p>
+            </div>
+            <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">ACTIVE</p>
+          </div>
+          <div className="flex flex-col items-center text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 sm:p-4">
+            <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
+                <Package className="h-5 w-5 text-[#f8931f]" />
+              </div>
+              <p className="text-xl sm:text-2xl font-bold leading-tight text-[#f8931f]">{personnel.reduce((sum, p) => sum + p.activeAssignments, 0)}</p>
+            </div>
+            <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">ACTIVE ITEMS</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ FILTER BAR ══════════════════════════════════════ */}
+      <section className="px-6 pt-3 pb-2 shrink-0">
+        <div className="flex flex-row items-center gap-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2.5">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search by name..."
+              className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 pl-9 pr-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none transition-colors" />
+          </div>
+        </div>
+      </section>
+
+      {/* Toast */}
+      {toasts.length > 0 && (
+        <div className="shrink-0 px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 text-sm text-[#012061] dark:text-slate-100 text-center font-medium">
+          {toasts[toasts.length - 1]?.message}
+        </div>
+      )}
+
+      {/* ═══ TABLE ══════════════════════════════════════════ */}
+      <div className="flex-1 overflow-auto px-6 py-4">
+        {loading ? (
+          <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 text-slate-400 animate-spin" /></div>
+        ) : personnel.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-[#f8931f]/10 mb-4">
+              <Users className="h-10 w-10 text-[#f8931f]" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">No profiles yet</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-5 max-w-xs">
+              Add personnel to start tracking asset accountability.
+            </p>
+            <button onClick={() => { setEditing(null); setShowForm(true); }}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#f8931f] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors">
+              <PlusCircle className="h-4 w-4" /> Add Profile
+            </button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[#012061] text-left">
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Name</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Type</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Designation</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Project</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Year</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Active Items</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Status</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {personnel.map(p => (
+                  <tr key={p.id} className="bg-white dark:bg-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all group">
+                    <td className="px-4 py-3">
+                      <button onClick={() => openDetail(p)} className="text-sm font-semibold hover:underline" style={{ color: '#012061' }}>{p.fullName}</button>
+                    </td>
+                    <td className="px-4 py-3">
+                      {p.personnelType === 'contractor' ? (
+                        <span className="inline-flex flex-col gap-0.5">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">Contractor</span>
+                          {p.contractDurationMonths && (
+                            <span className="text-[10px] text-amber-600">
+                              {p.contractDurationMonths} mo{p.contractDurationMonths > 1 ? 's' : ''}
+                              {p.contractStartDate && p.contractEndDate && (
+                                <> · {new Date(p.contractStartDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {new Date(p.contractEndDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</>
+                              )}
+                            </span>
                           )}
                         </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">Employee</span>
                       )}
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">Employee</span>
-                  )}
-                </td>
-                <td className="px-3 py-3 text-sm text-slate-600">{p.designationLookup?.name || p.designation || '—'}</td>
-                <td className="px-3 py-3 text-sm text-slate-600">{p.projectLookup?.name || '—'}</td>
-                <td className="px-3 py-3 text-sm text-slate-600">{p.projectYear || '—'}</td>
-                <td className="px-3 py-3">
-                  {p.activeAssignments > 0 ? (
-                    <button
-                      onClick={() => navigate(`/issuances?personnel=${p.id}`)}
-                      className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-[#f8931f]/10 text-[#f8931f] hover:bg-[#f8931f]/20 transition-colors cursor-pointer"
-                    >
-                      <Package className="w-3 h-3" />{p.activeAssignments}
-                    </button>
-                  ) : <span className="text-xs text-slate-400">0</span>}
-                </td>
-                <td className="px-3 py-3">
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${p.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
-                    {p.status.toUpperCase()}
-                  </span>
-                </td>
-                <td className="px-3 py-3 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <button onClick={() => { setBulkWizardPersonnelId(p.id); setShowBulkWizard(true); }}
-                      className="p-1 rounded hover:bg-[#f8931f]/10 text-slate-400 hover:text-[#f8931f]" title="Issue Assets">
-                      <Package className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => openDetail(p)} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-[#012061]" title="View"><Eye className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => { setEditing(p); setShowForm(true); }} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-[#f8931f]" title="Edit">✏️</button>
-                    <button onClick={() => handleDelete(p.id)} className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-[#7B1113]" title="Deactivate">🗑️</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{p.designationLookup?.name || p.designation || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{p.projectLookup?.name || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400">{p.projectYear || '—'}</td>
+                    <td className="px-4 py-3">
+                      {p.activeAssignments > 0 ? (
+                        <button
+                          onClick={() => navigate(`/issuances?personnel=${p.id}`)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-[#f8931f]/10 text-[#f8931f] hover:bg-[#f8931f]/20 transition-colors cursor-pointer"
+                        >
+                          <Package className="w-3 h-3" />{p.activeAssignments}
+                        </button>
+                      ) : <span className="text-xs text-slate-400">0</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide ${p.status === 'active' ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border border-emerald-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700'}`}>
+                        {p.status.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => { setBulkWizardPersonnelId(p.id); setShowBulkWizard(true); }}
+                          className="p-1.5 rounded-lg hover:bg-[#f8931f]/10 text-slate-400 hover:text-[#f8931f] transition-colors" title="Issue Assets">
+                          <Package className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => openDetail(p)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-[#012061] dark:hover:text-slate-100 transition-colors" title="View">
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => { setEditing(p); setShowForm(true); }} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-[#f8931f] transition-colors" title="Edit">
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => handleDelete(p.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950 text-slate-400 hover:text-[#7B1113] transition-colors" title="Deactivate">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* Pagination */}
+      {/* ═══ PAGINATION ════════════════════════════════════ */}
       {meta && (meta as { totalPages: number; page: number }).totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 px-6 py-4 text-xs">
-          <span className="text-slate-500">Page {(meta as { page: number }).page} of {(meta as { totalPages: number }).totalPages}</span>
+        <div className="flex items-center justify-center gap-2 border-t border-slate-200 dark:border-slate-700 px-6 py-2 shrink-0 bg-white dark:bg-slate-800">
+          <button className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
+            disabled={(meta as { page: number }).page <= 1}>Prev</button>
+          <span className="text-sm text-slate-500 dark:text-slate-400">Page {(meta as { page: number }).page} of {(meta as { totalPages: number }).totalPages}</span>
+          <button className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
+            disabled={(meta as { page: number }).page >= (meta as { totalPages: number }).totalPages}>Next</button>
         </div>
       )}
 
@@ -956,6 +1048,7 @@ export default function ProfilesPage() {
 
       {/* Toast Container */}
       <ToastContainer toasts={toasts} dismiss={dismissToast} />
+      </div>{/* close content area */}
     </div>
   );
 }
