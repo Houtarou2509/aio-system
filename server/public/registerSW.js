@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/aio-system/sw.js', { scope: '/aio-system/' })})}

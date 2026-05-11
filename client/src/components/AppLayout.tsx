@@ -24,7 +24,7 @@ const issuanceNav = [
   { to: '/accountability/templates', label: 'Agreement Templates', IconComponent: FileText, roles: ['ADMIN'] },
 ];
 
-const systemNav = [
+const systemNav: Array<{ to: string; label: string; IconComponent: any; roles?: string[] }> = [
   { to: '/settings', label: 'Admin Hub', IconComponent: Settings2 },
 ];
 

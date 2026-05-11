@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Settings2, Shield, Mail, Send, ChevronDown,
+  Settings2, Shield, Send, ChevronDown,
   Archive, History, Users, ShoppingCart, Truck,
-  Bell, Lock, HardDrive, Clock, CheckCircle2, AlertCircle,
+  Bell, Lock, HardDrive,
 } from 'lucide-react';
 
 /* ─── Accordion Section ──────────────────────────────────── */

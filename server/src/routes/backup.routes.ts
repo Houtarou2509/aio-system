@@ -33,7 +33,7 @@ router.get('/stats', authorize(['ADMIN']), async (_req: Request, res: Response) 
 // GET /api/backups/:id/download — download backup file
 router.get('/:id/download', authorize(['ADMIN']), async (req: Request, res: Response) => {
   try {
-    const backup = await backupService.getBackupById(req.params.id);
+    const backup = await backupService.getBackupById(String(req.params.id));
     if (!backup) return error(res, 'Backup not found', 404);
     if (!backup.filePath) return error(res, 'No file attached to this backup', 404);
     if (!fs.existsSync(backup.filePath)) return error(res, 'Backup file no longer exists on disk', 404);

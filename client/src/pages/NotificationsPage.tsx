@@ -129,7 +129,7 @@ export default function NotificationsPage() {
   const handleMarkAllRead = async () => {
     setMarkingAll(true);
     try {
-      const result = await apiFetch('/notifications/read-all', { method: 'PATCH' });
+      await apiFetch('/notifications/read-all', { method: 'PATCH' });
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setUnreadCount(0);
     } catch {

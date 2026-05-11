@@ -31,7 +31,7 @@ router.post('/', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res: 
     if (!parsed.success) return error(res, parsed.error.message, 400);
 
     const supplier = await supplierService.createSupplier(
-      parsed.data,
+      parsed.data as Parameters<typeof supplierService.createSupplier>[0],
       req.user!.id,
       getClientIp(req),
       String(req.headers['user-agent'] || ''),
@@ -60,7 +60,7 @@ router.put('/:id', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res
 
     const supplier = await supplierService.updateSupplier(
       String(req.params.id),
-      parsed.data,
+      parsed.data as Parameters<typeof supplierService.updateSupplier>[1],
       req.user!.id,
       getClientIp(req),
       String(req.headers['user-agent'] || ''),
