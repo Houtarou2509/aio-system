@@ -170,6 +170,31 @@ async function cleanupOldBackups() {
   });
 }
 
+export async function getBackupById(id: string) {
+  return prisma.backupLog.findUnique({ where: { id } });
+}
+
+export async function getBackupStats() {
+  const [totalBackups, lastBackup, aggregate] = await Promise.all([
+    prisma.backupLog.count({ where: { status: 'COMPLETED' } }),
+    prisma.backupLog.findFirst({
+      where: { status: 'COMPLETED' },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true, encryptedSize: true },
+    }),
+    prisma.backupLog.aggregate({
+      where: { status: 'COMPLETED' },
+      _sum: { encryptedSize: true },
+    }),
+  ]);
+
+  return {
+    lastBackup: lastBackup?.createdAt ?? null,
+    totalBackups,
+    totalSize: aggregate._sum.encryptedSize ?? 0,
+  };
+}
+
 export async function listBackups(page = 1, limit = 20) {
   const [items, total] = await Promise.all([
     prisma.backupLog.findMany({

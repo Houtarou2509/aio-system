@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
@@ -7,7 +7,7 @@ import {
   Plus, ScanLine, ClipboardList, Settings,
   PieChart, BarChart3, ShieldAlert, Activity,
   Clock, CalendarDays, Layers,
-  SlidersHorizontal,
+  SlidersHorizontal, RefreshCw,
 } from 'lucide-react';
 import { RoleGate } from '../components/auth';
 import { CustomizePanel } from '../components/dashboard/CustomizePanel';
@@ -256,6 +256,8 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [widgetPrefs, setWidgetPrefs] = useState<WidgetPref[]>(() => loadWidgetPrefs());
   const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [liveEnabled, setLiveEnabled] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   /* ── All dashboard state ──────────────────────────────── */
   const [data, setData] = useState<DashboardData | null>(null);
@@ -267,15 +269,20 @@ export default function DashboardPage() {
   const [locationStats, setLocationStats] = useState<LocationStat[]>([]);
   const [ageStats, setAgeStats] = useState<AgeStat[]>([]);
 
-  useEffect(() => {
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /* ── Shared refresh function ─────────────────────────── */
+  const refreshData = useCallback((showSpinner = false) => {
     const token = localStorage.getItem('accessToken');
     const h = { Authorization: `Bearer ${token}` };
+
+    if (showSpinner) setIsRefreshing(true);
 
     fetch('/api/dashboard/stats', { headers: h })
       .then(r => r.json())
       .then(d => { if (d.success) setData(d.data); })
       .catch((e) => console.error('[Dashboard] Failed to load stats:', e))
-      .finally(() => setLoading(false));
+      .finally(() => { setLoading(false); if (showSpinner) setIsRefreshing(false); });
 
     fetch('/api/maintenance/upcoming', { headers: h })
       .then(r => r.json())
@@ -299,6 +306,21 @@ export default function DashboardPage() {
       .then(d => { if (d.success) setAgeStats(d.data); })
       .catch((e) => console.error('[Dashboard] Failed to load age stats:', e));
   }, []);
+
+  /* ── Initial load ────────────────────────────────────── */
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
+
+  /* ── Auto-refresh interval (60s) ─────────────────────── */
+  useEffect(() => {
+    if (liveEnabled) {
+      intervalRef.current = setInterval(() => refreshData(true), 60_000);
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [liveEnabled, refreshData]);
 
   /* ── Chart data ───────────────────────────────────────── */
 
@@ -609,6 +631,29 @@ export default function DashboardPage() {
             <button onClick={() => navigate('/audit')} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 hidden sm:inline-flex">
               <ClipboardList className="h-3.5 w-3.5 text-[#f8931f]" />
               Audit
+            </button>
+            {/* Live / Paused indicator */}
+            <button
+              onClick={() => setLiveEnabled(v => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 transition-all duration-300 ${
+                liveEnabled
+                  ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+              }`}
+              title={liveEnabled ? 'Click to pause auto-refresh' : 'Click to resume auto-refresh'}
+            >
+              {isRefreshing ? (
+                <RefreshCw className="h-2.5 w-2.5 animate-spin" />
+              ) : (
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${
+                    liveEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                  }`}
+                />
+              )}
+              <span className="text-[10px] font-semibold uppercase tracking-wider">
+                {liveEnabled ? 'Live' : 'Paused'}
+              </span>
             </button>
             <button onClick={() => setCustomizeOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200">
               <SlidersHorizontal className="h-3.5 w-3.5 text-[#f8931f]" />

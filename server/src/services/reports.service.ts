@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma';
+import { calculateDepreciation } from './depreciation.service';
 
 const notDeleted = { deletedAt: null };
 
@@ -121,5 +122,71 @@ export async function getMaintenanceCosts() {
     totalCost,
     averageCost: totalCount > 0 ? totalCost / totalCount : 0,
     byAsset,
+  };
+}
+
+// ── Report 4: Asset Depreciation Summary ───────────────────
+
+export async function getDepreciationSummary() {
+  const assets = await prisma.asset.findMany({
+    where: {
+      deletedAt: null,
+      purchasePrice: { not: null },
+      purchaseDate: { not: null },
+    },
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      purchasePrice: true,
+      purchaseDate: true,
+      depreciationMethod: true,
+      usefulLifeYears: true,
+      salvageValue: true,
+      status: true,
+      location: true,
+    },
+    orderBy: { name: 'asc' },
+  });
+
+  const results = assets
+    .map((asset) => {
+      const calc = calculateDepreciation(asset);
+      if (!calc) return null;
+      return {
+        id: asset.id,
+        name: asset.name,
+        type: asset.type,
+        status: asset.status,
+        location: asset.location,
+        purchasePrice: calc.purchasePrice,
+        purchaseDate: asset.purchaseDate,
+        method: calc.method,
+        usefulLifeYears: calc.usefulLifeYears,
+        salvageValue: calc.salvageValue,
+        currentBookValue: calc.currentBookValue,
+        annualDepreciation: calc.annualDepreciation,
+        accumulatedDepreciation: calc.accumulatedDepreciation,
+        depreciationPercent: calc.depreciationPercent,
+        ageYears: calc.ageYears,
+        isFullyDepreciated: calc.isFullyDepreciated,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b!.depreciationPercent - a!.depreciationPercent);
+
+  const totalPurchasePrice = results.reduce((sum, r) => sum + (r?.purchasePrice ?? 0), 0);
+  const totalCurrentValue = results.reduce((sum, r) => sum + (r?.currentBookValue ?? 0), 0);
+  const totalDepreciation = totalPurchasePrice - totalCurrentValue;
+
+  return {
+    totalAssets: results.length,
+    totalPurchasePrice: Math.round(totalPurchasePrice * 100) / 100,
+    totalCurrentValue: Math.round(totalCurrentValue * 100) / 100,
+    totalDepreciation: Math.round(totalDepreciation * 100) / 100,
+    totalDepreciationPercent: totalPurchasePrice > 0
+      ? Math.round((totalDepreciation / totalPurchasePrice) * 1000) / 10
+      : 0,
+    assets: results,
   };
 }

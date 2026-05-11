@@ -340,11 +340,11 @@ export default function AccountabilityTemplatesPage() {
       <div className="flex-1 flex flex-col overflow-auto bg-light-bg dark:bg-slate-900">
 
       {/* ── Main split pane ── */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* ══════════════════════════════════════
             LEFT PANEL — Template list
             ══════════════════════════════════════ */}
-        <div className="w-80 border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex flex-col shrink-0">
+        <div className="w-full md:w-80 border-b md:border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex flex-col shrink-0">
           {/* Add new button */}
           <div className="p-3 border-b border-slate-100 dark:border-slate-700">
             <button

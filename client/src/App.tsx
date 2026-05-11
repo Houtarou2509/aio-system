@@ -18,6 +18,9 @@ import IssuancesPage from './pages/IssuancesPage';
 import ReportsPage from './pages/ReportsPage';
 import PurchaseRequestsPage from './pages/PurchaseRequestsPage';
 import SuppliersPage from './pages/SuppliersPage';
+import NotificationsPage from './pages/NotificationsPage';
+import MaintenanceCalendarPage from './pages/MaintenanceCalendarPage';
+import BackupManagementPage from './pages/BackupManagementPage';
 import './index.css';
 
 function App() {
@@ -48,6 +51,9 @@ function App() {
             <Route path="profiles" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><ProfilesPage /></ProtectedRoute>} />
             <Route path="issuances" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><IssuancesPage /></ProtectedRoute>} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="maintenance-calendar" element={<MaintenanceCalendarPage />} />
+            <Route path="backups" element={<ProtectedRoute requiredRole="ADMIN"><BackupManagementPage /></ProtectedRoute>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

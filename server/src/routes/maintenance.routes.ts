@@ -227,4 +227,65 @@ router.get('/upcoming', async (_req: Request, res: Response) => {
   }
 });
 
+/* ═══════════════════════════════════════════════════════
+   Calendar — /api/maintenance/calendar
+   ═══════════════════════════════════════════════════════ */
+
+// GET /api/maintenance/calendar?month=2026-05
+router.get('/calendar', async (req: Request, res: Response) => {
+  try {
+    const monthParam = req.query.month as string | undefined;
+
+    // Parse month into start/end range
+    let monthStart: Date;
+    let monthEnd: Date;
+
+    if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+      const [year, month] = monthParam.split('-').map(Number);
+      monthStart = new Date(year, month - 1, 1);
+      monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+    } else {
+      // Default to current month
+      const now = new Date();
+      monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Mark overdue: scheduledDate < today and status still pending
+    await prisma.maintenanceSchedule.updateMany({
+      where: { status: 'pending', scheduledDate: { lt: today } },
+      data: { status: 'overdue' },
+    });
+
+    // Fetch all schedules for the month
+    const schedules = await prisma.maintenanceSchedule.findMany({
+      where: {
+        scheduledDate: { gte: monthStart, lte: monthEnd },
+      },
+      orderBy: { scheduledDate: 'asc' },
+      include: { asset: { select: { id: true, name: true } } },
+    });
+
+    // KPI stats
+    const pending = schedules.filter(s => s.status === 'pending').length;
+    const overdue = schedules.filter(s => s.status === 'overdue').length;
+    const completedThisMonth = schedules.filter(
+      s => s.status === 'done'
+        && s.completedAt
+        && s.completedAt >= monthStart
+        && s.completedAt <= monthEnd
+    ).length;
+
+    return success(res, {
+      schedules,
+      stats: { pending, overdue, completedThisMonth },
+    }, 200);
+  } catch (err: any) {
+    return error(res, err.message, 500);
+  }
+});
+
 export default router;

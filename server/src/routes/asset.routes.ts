@@ -5,6 +5,7 @@ import fs from 'fs/promises';
 import sharp from 'sharp';
 import { parse as parseCsv } from 'csv-parse/sync';
 import * as assetService from '../services/asset.service';
+import { calculateDepreciation } from '../services/depreciation.service';
 import { prisma } from '../lib/prisma';
 
 import { authenticate, authorize } from '../middleware/auth';

@@ -5,21 +5,24 @@ import { authenticate } from '../middleware/auth';
 const router = Router();
 
 
-// GET /api/notifications — paginated unread
+// GET /api/notifications — paginated (unread by default, all when ?all=true)
 router.get('/', authenticate, async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const showAll = req.query.all === 'true';
+
+    const where = showAll ? {} : { isRead: false };
 
     const [notifications, total] = await Promise.all([
       prisma.notification.findMany({
-        where: { isRead: false },
+        where,
         include: { asset: { select: { id: true, name: true } } },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
       }),
-      prisma.notification.count({ where: { isRead: false } }),
+      prisma.notification.count({ where }),
     ]);
 
     res.json({
@@ -32,7 +35,20 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /api/notifications/:id/read — mark as read
+// PATCH /api/notifications/read-all — mark all notifications as read
+router.patch('/read-all', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const result = await prisma.notification.updateMany({
+      where: { isRead: false },
+      data: { isRead: true },
+    });
+    res.json({ success: true, data: { marked: result.count } });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+});
+
+// PATCH /api/notifications/:id/read — mark single notification as read
 router.patch('/:id/read', authenticate, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

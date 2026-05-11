@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { BookOpen, Settings2, LayoutDashboard, Package, Users, History, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, Truck, ShoppingCart, ScanLine } from 'lucide-react';
+import { BookOpen, Settings2, LayoutDashboard, Package, Wrench, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, ScanLine } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/notifications/NotificationBell';
@@ -12,6 +12,7 @@ import ShortcutsHelpModal from '../components/ShortcutsHelpModal';
 const inventoryNav = [
   { to: '/', label: 'Dashboard', IconComponent: LayoutDashboard, end: true },
   { to: '/assets', label: 'Assets', IconComponent: Package },
+  { to: '/maintenance-calendar', label: 'Maintenance', IconComponent: Wrench },
   { to: '/reports', label: 'Reports', IconComponent: BarChart3 },
   { to: '/lookup', label: 'Inventory Lookup', IconComponent: BookOpen, roles: ['ADMIN', 'STAFF_ADMIN'] },
 ];
@@ -24,11 +25,7 @@ const issuanceNav = [
 ];
 
 const systemNav = [
-  { to: '/suppliers', label: 'Suppliers', IconComponent: Truck },
-  { to: '/purchase-requests', label: 'Purchase Requests', IconComponent: ShoppingCart },
-  { to: '/users', label: 'Users', IconComponent: Users, roles: ['ADMIN'] },
-  { to: '/audit', label: 'Audit Trail', IconComponent: History },
-  { to: '/settings', label: 'Settings', IconComponent: Settings2 },
+  { to: '/settings', label: 'Admin Hub', IconComponent: Settings2 },
 ];
 
 export default function AppLayout() {
@@ -134,10 +131,10 @@ export default function AppLayout() {
 
       {/* ── Mobile Nav Overlay ── */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-30 bg-black/50" onMouseDown={(e) => { if (e.target === e.currentTarget) setMobileOpen(false); }}>
-          <div className="w-56 h-full bg-[#012061] border-r border-[#001a4d]" onClick={e => e.stopPropagation()}>
-            {/* Mobile Nav Links */}
-            <nav className="px-3 py-2 space-y-0.5 pt-20 overflow-y-auto">
+        <div className="md:hidden fixed inset-0 z-50 bg-black/50" onMouseDown={(e) => { if (e.target === e.currentTarget) setMobileOpen(false); }}>
+          <div className="w-56 h-full bg-[#012061] border-r border-[#001a4d] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Mobile Nav Links — fills remaining space, scrolls if needed */}
+            <nav className="flex-1 px-3 py-2 space-y-0.5 pt-20 overflow-y-auto">
               <div className="px-3 pt-2 pb-1">
                 <span className="text-[10px] tracking-widest font-semibold text-slate-500 dark:text-slate-400 uppercase">Inventory</span>
               </div>
@@ -169,8 +166,8 @@ export default function AppLayout() {
               ))}
             </nav>
 
-            {/* Mobile Profile & Logout */}
-            <div className="absolute bottom-0 left-0 right-0 bg-black/20 px-3 py-3 border-t border-[#001a4d]">
+            {/* Mobile Profile & Logout — pinned to bottom */}
+            <div className="shrink-0 bg-black/20 px-3 py-3 border-t border-[#001a4d]">
               <div className="mb-2">
                 <p className="text-sm font-semibold text-white leading-tight">{user?.username}</p>
                 <p className="text-[10px] tracking-widest font-medium text-[#f8931f] uppercase">{user?.role?.replace('_', '-')}</p>

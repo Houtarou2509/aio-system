@@ -36,4 +36,14 @@ router.get('/maintenance-costs', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /api/reports/depreciation-summary
+router.get('/depreciation-summary', async (_req: Request, res: Response) => {
+  try {
+    const data = await reportsService.getDepreciationSummary();
+    return success(res, data, 200);
+  } catch (err: any) {
+    return error(res, err.message, 500);
+  }
+});
+
 export default router;

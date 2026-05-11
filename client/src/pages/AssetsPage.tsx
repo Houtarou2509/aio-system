@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAssets } from '../hooks/useAssets';
 import { assetsApi, Asset } from '../lib/api';
 import { RoleGate } from '../components/auth';
-import { AssetTable, AssetDetailModal, AssetFormModal, ImportAssetsModal, BulkActionModal } from '../components/assets';
+import { AssetTable, AssetDetailModal, AssetFormModal, ImportAssetsModal, BulkActionModal, FilterPresetManager } from '../components/assets';
 import QRScannerModal from '../components/assets/QRScannerModal';
 import {
   Select, SelectContent, SelectItem,
@@ -201,6 +201,12 @@ export default function AssetsPage() {
     setSelectedIds(new Set());
   };
 
+  const handleApplyPreset = (presetFilters: typeof filters, presetManufacturerFilter: string) => {
+    setFilters({ ...presetFilters, page: 1 });
+    setManufacturerFilter(presetManufacturerFilter);
+    setSelectedIds(new Set());
+  };
+
   // Print QR labels for selected assets
   const handlePrintQR = async () => {
     setPrintLoading(true);
@@ -327,16 +333,16 @@ export default function AssetsPage() {
 
       {/* ═══ KPI TILES ═══════════════════════════════════════ */}
       <section className="px-4 sm:px-6 pt-4 shrink-0">
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {KPI_CARDS.map(({ key, label, icon: Icon, value }) => (
-            <div key={key} className="flex flex-col items-center text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 sm:p-4">
-              <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
-                  <Icon className="h-5 w-5 text-[#f8931f]" />
-                </div>
-                <p className="text-xl sm:text-2xl font-bold leading-tight text-[#f8931f]">{value}</p>
+            <div key={key} className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
+                <Icon className="h-5 w-5 text-[#f8931f]" />
               </div>
-              <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">{label}</p>
+              <div className="min-w-0">
+                <p className="text-xl font-bold leading-tight text-[#f8931f]">{value}</p>
+                <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">{label}</p>
+              </div>
             </div>
           ))}
         </div>
@@ -451,6 +457,13 @@ export default function AssetsPage() {
               <X className="h-3 w-3" /> Clear All
             </button>
           )}
+
+          {/* Filter Presets */}
+          <FilterPresetManager
+            filters={filters}
+            manufacturerFilter={manufacturerFilter}
+            onApplyPreset={handleApplyPreset}
+          />
         </div>
       </section>
 

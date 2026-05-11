@@ -206,7 +206,7 @@ export default function NotificationBell() {
 
         {/* ─── Footer ─── */}
         {notifications.length > 0 && (
-          <div className="px-4 py-2 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-700">
+          <div className="px-4 py-2 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-700 space-y-1">
             <button
               onClick={() => {
                 notifications.forEach(n => handleMarkRead(n.id));
@@ -214,6 +214,15 @@ export default function NotificationBell() {
               className="w-full text-center text-xs font-medium text-brand-blue hover:text-brand-orange transition-colors py-1"
             >
               Mark all as read
+            </button>
+            <button
+              onClick={() => {
+                setOpen(false);
+                window.location.href = '/aio-system/notifications';
+              }}
+              className="block w-full text-center text-xs font-medium text-[#f8931f] hover:text-[#e0841a] transition-colors py-1 border-t border-slate-200 dark:border-slate-700"
+            >
+              View all notifications
             </button>
           </div>
         )}

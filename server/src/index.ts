@@ -32,6 +32,7 @@ import reportsRoutes from './routes/reports.routes';
 import purchaseRequestRoutes from './routes/purchase-request.routes';
 import searchRoutes from './routes/search.routes';
 import supplierRoutes from './routes/supplier.routes';
+import settingsRoutes from './routes/settings.routes';
 import { startCronJobs } from './jobs/cron';
 
 // Start server only when not in test
@@ -120,6 +121,7 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/purchase-requests', purchaseRequestRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/suppliers', supplierRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Redirect root to /aio-system/
 app.get('/', (_req, res) => {

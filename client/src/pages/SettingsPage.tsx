@@ -1,378 +1,254 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { RoleGate } from '../components/auth';
 import {
-  Cloud,
-  Play,
-  Clock,
-  Settings2,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  HardDrive,
-  Globe,
-  Lock,
-  Terminal,
-  Database,
-  CloudCog,
-  Shield,
+  Settings2, Shield, Mail, Send, ChevronDown,
+  Archive, History, Users, ShoppingCart, Truck,
+  Bell, Lock, HardDrive, Clock, CheckCircle2, AlertCircle,
 } from 'lucide-react';
 
-interface BackupLog {
-  id: string;
-  status: string;
-  destination: string;
-  filePath?: string;
-  encryptedSize?: number;
-  createdAt: string;
-}
+/* ─── Accordion Section ──────────────────────────────────── */
 
-/* ─── Status Badge — standardized ─── */
-function StatusBadge({ status }: { status: string }) {
-  if (status === 'COMPLETED') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-50 dark:bg-emerald-9500" />
-        Completed
-      </span>
-    );
-  }
-  if (status === 'IN_PROGRESS') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950 text-amber-700">
-        <Loader2 className="w-3 h-3 animate-spin" />
-        In Progress
-      </span>
-    );
-  }
-  if (status === 'FAILED') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 dark:bg-red-950 text-red-700">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-50 dark:bg-red-9500" />
-        Failed
-      </span>
-    );
-  }
+function AccordionSection({
+  icon: Icon,
+  title,
+  subtitle,
+  defaultOpen = false,
+  children,
+}: {
+  icon: React.ElementType;
+  title: string;
+  subtitle: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
   return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-      {status}
-    </span>
+    <div className="border-b border-slate-100 dark:border-slate-700">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left"
+      >
+        <div className="flex items-center justify-center w-9 h-9 rounded-lg shrink-0 bg-[#012061]/10 dark:bg-slate-700/50">
+          <Icon className="w-5 h-5" style={{ color: '#012061' }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-sm font-bold" style={{ color: '#012061' }}>{title}</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>
+        </div>
+        <ChevronDown
+          className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {open && (
+        <div className="px-6 pb-4 pt-1 bg-slate-50/50 dark:bg-slate-900/50">
+          {children}
+        </div>
+      )}
+    </div>
   );
 }
 
-/* ─── Destination Icon ─── */
-function DestinationIcon({ destination }: { destination: string }) {
-  const isCloud = destination.toLowerCase().includes('s3') || destination.toLowerCase().includes('cloud') || destination.toLowerCase().includes('google');
-  return isCloud ? (
-    <div className="flex items-center justify-center w-8 h-8 rounded-full text-white text-xs font-bold" style={{ backgroundColor: '#012061' }}>
-      <Globe className="w-3.5 h-3.5" />
-    </div>
-  ) : (
-    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-bold">
-      <HardDrive className="w-3.5 h-3.5" />
+/* ─── Quick Stat Row ─────────────────────────────────────── */
+
+function StatLine({ label, value, color = '#012061' }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="flex items-center justify-between py-1.5">
+      <span className="text-xs text-slate-500 dark:text-slate-400">{label}</span>
+      <span className="text-xs font-semibold" style={{ color }}>{value}</span>
     </div>
   );
 }
+
+/* ─── Email Test (inline) ─────────────────────────────────── */
+
+function EmailTestInline() {
+  const [email, setEmail] = useState('');
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const handleTest = async () => {
+    if (!email.trim()) { setResult({ ok: false, msg: 'Enter an email address' }); return; }
+    setSending(true);
+    setResult(null);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch('/api/settings/test-email', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const d = await res.json();
+      if (d.success) setResult({ ok: true, msg: 'Test email sent!' });
+      else setResult({ ok: false, msg: d.error?.message || 'Failed' });
+    } catch (e: any) {
+      setResult({ ok: false, msg: e.message || 'Error' });
+    } finally { setSending(false); }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="your@email.com"
+          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 w-48 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+        />
+        <button
+          onClick={handleTest}
+          disabled={sending}
+          className="inline-flex items-center gap-1 rounded-lg bg-[#f8931f] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#e0841a] disabled:opacity-50 transition-colors"
+        >
+          <Send className="h-3 w-3" />
+          {sending ? '…' : 'Test'}
+        </button>
+      </div>
+      {result && (
+        <p className={`text-xs font-medium ${result.ok ? 'text-emerald-600' : 'text-red-600'}`}>
+          {result.ok ? '✓' : '✗'} {result.msg}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ─── Quick Link Button ──────────────────────────────────── */
+
+function QuickLink({ to, icon: Icon, label }: { to: string; icon: React.ElementType; label: string }) {
+  return (
+    <Link
+      to={to}
+      className="inline-flex items-center gap-2 rounded-lg border border-[#f8931f]/30 bg-[#f8931f]/5 px-4 py-2 text-xs font-semibold text-[#f8931f] hover:bg-[#f8931f] hover:text-white transition-colors"
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+    </Link>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN PAGE
+   ═══════════════════════════════════════════════════════════ */
 
 export default function SettingsPage() {
-  const [backups, setBackups] = useState<BackupLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
-  const [msg, setMsg] = useState('');
-  const [msgType, setMsgType] = useState<'success' | 'error'>('success');
+  const [backupStats, setBackupStats] = useState<{ lastBackup: string | null; totalBackups: number }>({ lastBackup: null, totalBackups: 0 });
 
-  const fetchBackups = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('accessToken');
-      const res = await fetch('/api/backups', { headers: { Authorization: `Bearer ${token}` } });
-      const d = await res.json();
-      if (d.success) setBackups(d.data);
-    } catch {} finally { setLoading(false); }
-  };
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    fetch('/api/backups/stats', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => { if (d.success) setBackupStats(d.data ?? d); })
+      .catch(() => {});
+  }, []);
 
-  useEffect(() => { fetchBackups(); }, []);
-
-  const handleRunBackup = async () => {
-    setRunning(true);
-    setMsg('');
-    try {
-      const token = localStorage.getItem('accessToken');
-      const res = await fetch('/api/backups/now', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-      const d = await res.json();
-      if (d.success) {
-        setMsg('Backup completed successfully!');
-        setMsgType('success');
-        fetchBackups();
-      } else {
-        setMsg(d.error?.message || 'Backup failed');
-        setMsgType('error');
-      }
-    } catch (e: any) {
-      setMsg(e.message);
-      setMsgType('error');
-    }
-    setRunning(false);
-  };
-
-  const lastBackup = backups[0];
-  const completedCount = backups.filter(b => b.status === 'COMPLETED').length;
-  const failedCount = backups.filter(b => b.status === 'FAILED').length;
+  const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Never';
 
   return (
     <div className="flex flex-col min-h-dvh pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
-      {/* ── Header (matches Assets Page) ── */}
+      {/* ── Header ── */}
       <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Settings2 className="h-6 w-6 text-[#f8931f]" />
-            <h1 className="text-lg font-bold text-white tracking-tight">System Settings</h1>
+        <div className="flex items-center gap-3">
+          <Settings2 className="h-6 w-6 text-[#f8931f]" />
+          <div>
+            <h1 className="text-lg font-bold text-white tracking-tight">Admin Hub</h1>
+            <p className="text-xs text-white/50 hidden sm:block">System configuration & management</p>
           </div>
-          {lastBackup && (
-            <div className="hidden sm:flex items-center gap-2 text-xs text-slate-700 dark:text-white/60 bg-white dark:bg-slate-800/10 rounded-lg px-3 py-2">
-              <Clock className="w-3.5 h-3.5" />
-              Last backup: {new Date(lastBackup.createdAt).toLocaleString()}
-            </div>
-          )}
         </div>
       </header>
 
-      {/* ── Scrollable Content ── */}
+      {/* ── Content Accordion ── */}
       <div className="flex-1 overflow-y-auto bg-white dark:bg-slate-800 pb-20 md:pb-0">
 
-      {/* ── Account Row ── */}
-      <div>
-        <div className="flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-[#012061]/10 dark:bg-slate-700/50">
-              <Shield className="w-5 h-5" style={{ color: '#012061' }} />
-            </div>
+        {/* Security */}
+        <AccordionSection
+          icon={Shield}
+          title="Security"
+          subtitle="Two-factor authentication & account protection"
+        >
+          <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-bold" style={{ color: '#012061' }}>Two-Factor Authentication</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Add an extra layer of security to your account.</p>
+              <StatLine label="2FA Status" value="Available" color="#0891b2" />
+              <p className="text-[11px] text-slate-400 mt-1">Add an extra layer of security to your account.</p>
+            </div>
+            <QuickLink to="/setup-2fa" icon={Lock} label="Setup 2FA" />
+          </div>
+        </AccordionSection>
+
+        {/* Backups */}
+        <AccordionSection
+          icon={Archive}
+          title="Backups"
+          subtitle="Automated daily backups with encryption"
+        >
+          <div className="space-y-3">
+            <StatLine label="Last Backup" value={formatDate(backupStats.lastBackup)} color="#012061" />
+            <StatLine label="Total Backups" value={backupStats.totalBackups.toString()} color="#f8931f" />
+            <div className="flex items-center gap-3 flex-wrap pt-1">
+              <QuickLink to="/backups" icon={HardDrive} label="Manage Backups" />
             </div>
           </div>
-          <Link
-            to="/setup-2fa"
-            className="inline-flex items-center gap-1.5 rounded-lg border-2 border-[#f8931f] text-[#f8931f] px-4 py-2 text-xs font-semibold hover:bg-[#f8931f] hover:text-white transition-colors"
-          >
-            <Shield className="w-3.5 h-3.5" />
-            Setup 2FA
-          </Link>
-        </div>
-      </div>
+        </AccordionSection>
 
-      {/* ── Horizontal Backup Toolbar ── */}
-      <div className="bg-light-bg dark:bg-slate-900 px-6 py-3 border-b border-slate-200 dark:border-slate-700">
-        <div className="flex items-center gap-4 flex-wrap">
-          <RoleGate roles={['ADMIN']}>
-            <button
-              onClick={handleRunBackup}
-              disabled={running}
-              className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-white shadow-sm hover:shadow-md transition-all disabled:opacity-50"
-              style={{ backgroundColor: '#f8931f' }}
-            >
-              {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-              {running ? 'Running backup...' : 'Run Backup Now'}
-            </button>
-          </RoleGate>
-
-          {msg && (
-            <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full border ${
-              msgType === 'success'
-                ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border-emerald-200'
-                : 'bg-red-50 dark:bg-red-950 text-red-700 border-red-200'
-            }`}>
-              {msgType === 'success' ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-              {msg}
-            </span>
-          )}
-
-          <div className="flex-1" />
-
-          {lastBackup ? (
-            <div className="flex items-center gap-2 text-xs">
-              <Clock className="w-3.5 h-3.5" style={{ color: '#012061' }} />
-              <span className="font-medium" style={{ color: '#012061' }}>Last Backup:</span>
-              <span className="text-slate-500 dark:text-slate-400">{new Date(lastBackup.createdAt).toLocaleString()}</span>
-              <StatusBadge status={lastBackup.status} />
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <Clock className="w-3.5 h-3.5" />
-              <span>No backups recorded</span>
-            </div>
-          )}
-
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-              <Cloud className="w-3 h-3" />
-              AWS S3
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-            </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-              <CloudCog className="w-3 h-3" />
-              Google Drive
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-            </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border border-emerald-200">
-              <Lock className="w-3 h-3" />
-              AES-256
-              <CheckCircle2 className="w-3 h-3" />
-            </span>
+        {/* Users & Permissions */}
+        <AccordionSection
+          icon={Users}
+          title="Users & Permissions"
+          subtitle="Manage system accounts and access roles"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-500 dark:text-slate-400">Create, edit, and manage user accounts. Assign roles: Admin, Staff Admin, Staff, Guest.</p>
+            <QuickLink to="/users" icon={Users} label="Manage Users" />
           </div>
-        </div>
-      </div>
+        </AccordionSection>
 
-      {/* ── Security KPIs ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 px-4 sm:px-6 py-4 border-b border-slate-100 dark:border-slate-700">
-        <div className="flex flex-col items-center text-center bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 p-3 sm:p-4">
-          <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
-            <div className="p-2 rounded-md bg-emerald-50 dark:bg-emerald-950 shrink-0">
-              <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" />
-            </div>
-            <p className="text-lg sm:text-2xl font-bold text-emerald-600">{completedCount}</p>
+        {/* Audit & Compliance */}
+        <AccordionSection
+          icon={History}
+          title="Audit & Compliance"
+          subtitle="Activity logs, change tracking, and export history"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-500 dark:text-slate-400">Every create, update, delete, assign, and transfer is logged with timestamp and user tracking.</p>
+            <QuickLink to="/audit" icon={History} label="View Audit Trail" />
           </div>
-          <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Successful</p>
-        </div>
-        <div className="flex flex-col items-center text-center bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 p-3 sm:p-4">
-          <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
-            <div className="p-2 rounded-md bg-red-50 dark:bg-red-950 shrink-0">
-              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
-            </div>
-            <p className="text-lg sm:text-2xl font-bold text-red-600">{failedCount}</p>
-          </div>
-          <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Failed</p>
-        </div>
-        <div className="flex flex-col items-center text-center bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 p-3 sm:p-4">
-          <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
-            <div className="p-2 rounded-md bg-slate-100 dark:bg-slate-800 shrink-0">
-              <Lock className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: '#012061' }} />
-            </div>
-            <p className="text-lg sm:text-2xl font-bold" style={{ color: '#012061' }}>AES-256</p>
-          </div>
-          <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Encryption</p>
-        </div>
-        <div className="flex flex-col items-center text-center bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 p-3 sm:p-4">
-          <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
-            <div className="p-2 rounded-md bg-slate-100 dark:bg-slate-800 shrink-0">
-              <Clock className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: '#012061' }} />
-            </div>
-            <p className="text-lg sm:text-2xl font-bold" style={{ color: '#012061' }}>02:00</p>
-          </div>
-          <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Daily Backup</p>
-        </div>
-      </div>
+        </AccordionSection>
 
-      {/* ── Backup History Table (Premium Row) ── */}
-      <div className="px-6 py-4">
-        <table className="w-full">
-          <thead>
-            <tr style={{ backgroundColor: '#e8ecf4' }}>
-              <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Destination</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Date</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Size</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-12 text-center text-slate-400 text-sm">
-                  <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
-                  Loading...
-                </td>
-              </tr>
-            ) : backups.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-12 text-center text-slate-400 text-sm">
-                  <Cloud className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                  No backups yet
-                </td>
-              </tr>
-            ) : (
-              backups.map(b => (
-                <tr
-                  key={b.id}
-                  className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                  style={{ borderLeftWidth: '2px', borderLeftStyle: 'solid', borderLeftColor: 'transparent' }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderLeftColor = '#f8931f'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderLeftColor = 'transparent'; }}
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <DestinationIcon destination={b.destination} />
-                      <span className="text-sm font-semibold" style={{ color: '#012061' }}>{b.destination}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">{new Date(b.createdAt).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">{b.encryptedSize ? `${(b.encryptedSize / 1024).toFixed(1)}KB` : '—'}</td>
-                  <td className="px-4 py-3 text-right">
-                    <StatusBadge status={b.status} />
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+        {/* Procurement */}
+        <AccordionSection
+          icon={Truck}
+          title="Procurement"
+          subtitle="Suppliers and purchase request management"
+        >
+          <div className="flex items-center gap-3 flex-wrap">
+            <QuickLink to="/suppliers" icon={Truck} label="Suppliers" />
+            <QuickLink to="/purchase-requests" icon={ShoppingCart} label="Purchase Requests" />
+          </div>
+        </AccordionSection>
 
-        {/* Info banner */}
-        <div className="flex items-start gap-3 p-3 mt-4 bg-blue-50 dark:bg-blue-950 border border-blue-100 rounded-lg text-xs text-blue-700">
-          <Cloud className="w-4 h-4 shrink-0 mt-0.5" />
-          <p>Automated daily backups at 02:00 SGT. Local retention: 7 days. Cloud retention: 30 days. Backups are AES-256-GCM encrypted.</p>
-        </div>
-
-        {/* Connectivity Matrix */}
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-4">
-          {[
-            { icon: Cloud, name: 'AWS S3', envVar: 'AWS_S3_BUCKET', configured: false },
-            { icon: CloudCog, name: 'Google Drive', envVar: 'GOOGLE_DRIVE_CREDENTIALS', configured: false },
-            { icon: Lock, name: 'Encryption', envVar: null, configured: true, detail: 'AES-256-GCM' },
-            { icon: Database, name: 'Local Storage', envVar: null, configured: true, detail: '7-day retention' },
-          ].map(item => {
-            const Icon = item.icon;
-            return (
-              <div
-                key={item.name}
-                className="flex flex-col items-center text-center sm:flex-row sm:text-left sm:items-center gap-2 sm:gap-3 p-2 sm:p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-slate-300 transition-colors"
-              >
-                <div className={`flex items-center justify-center w-8 h-8 rounded-lg shrink-0 ${
-                  item.configured ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
-                }`}>
-                  <Icon className="w-4 h-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-1.5">
-                    <p className="text-[11px] sm:text-xs font-semibold truncate" style={{ color: '#012061' }}>{item.name}</p>
-                    {item.configured ? (
-                      <span className="inline-flex items-center gap-0.5 text-[9px] sm:text-[10px] font-medium px-1.5 py-0 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border border-emerald-200 self-center sm:self-auto w-fit">
-                        <CheckCircle2 className="w-2.5 h-2.5" />
-                        Enabled
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-0.5 text-[9px] sm:text-[10px] font-medium px-1.5 py-0 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 self-center sm:self-auto w-fit">
-                        Not Configured
-                      </span>
-                    )}
-                  </div>
-                  {item.detail && (
-                    <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{item.detail}</p>
-                  )}
-                  {item.envVar && (
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <Terminal className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                      <code className="text-[9px] sm:text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-mono truncate">
-                        {item.envVar}
-                      </code>
-                    </div>
-                  )}
-                </div>
+        {/* Notifications & Alerts */}
+        <AccordionSection
+          icon={Bell}
+          title="Notifications & Alerts"
+          subtitle="System alerts and email configuration"
+        >
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold" style={{ color: '#012061' }}>In-App Notifications</p>
+                <p className="text-[11px] text-slate-400">Warranty expirations, maintenance overdue alerts</p>
               </div>
-            );
-          })}
-        </div>
+              <QuickLink to="/notifications" icon={Bell} label="View All" />
+            </div>
+            <div className="border-t border-slate-200 dark:border-slate-700 pt-3">
+              <p className="text-xs font-semibold mb-2" style={{ color: '#012061' }}>Email Alerts</p>
+              <EmailTestInline />
+            </div>
+          </div>
+        </AccordionSection>
+
       </div>
-      </div>{/* close scrollable content */}
     </div>
   );
 }

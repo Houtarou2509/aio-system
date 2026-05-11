@@ -39,6 +39,9 @@ model Asset {
   serialNumber     String?       @unique
   purchasePrice    Decimal?
   purchaseDate     DateTime?
+  depreciationMethod String?      @default("straight_line")
+  usefulLifeYears   Int?         @default(5)
+  salvageValue      Decimal?     @default(0)
   status           AssetStatus   @default(AVAILABLE)
   location         String?
   imageUrl         String?

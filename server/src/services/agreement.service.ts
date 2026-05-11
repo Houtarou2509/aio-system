@@ -260,12 +260,12 @@ export async function generateAgreementPdf(p: {
 
   // Split-level header: logo left, title center — both at same Y
   const HEADER_Y = LETTERHEAD_TOP;                    // 72pt = 1"
-  const TITLE_Y = 85;                                 // vertically centered with larger logo
+  const TITLE_Y = 105;                                // more breathing room below letterhead (was 85)
   const LOGO_W = 95;                                   // logo width
-  const BODY_START_Y = 160;                            // clear the header row with comfortable spacing
+  const BODY_START_Y = 180;                            // clear the title row with comfortable spacing (was 160)
 
-  // Signature block — anchored near bottom with 0.5" bottom margin
-  const SIG_BLOCK_TOP = PH - 80;    // signature line area
+  // Signature block — anchored with generous bottom margin
+  const SIG_BLOCK_TOP = PH - 100;   // ~1.4" from bottom for footer breathing room (was PH - 80)
   const SIG_LINE_Y = SIG_BLOCK_TOP;
   const SIG_LABEL_Y = SIG_LINE_Y + 16;
   const MAX_BODY_Y = SIG_BLOCK_TOP - 40;               // 40pt breathing room before signatures
