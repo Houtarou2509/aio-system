@@ -12,6 +12,7 @@ interface User {
   email: string;
   role: string;
   status: string;
+  permissions: string[];
   lastLogin: string | null;
   createdAt: string;
 }
@@ -70,6 +71,7 @@ export default function UserManagementPage() {
     email: string;
     password: string;
     role: string;
+    permissions: string[];
   }) => {
     setServerErrors({});
     try {
@@ -104,6 +106,7 @@ export default function UserManagementPage() {
     email: string;
     role: string;
     password?: string;
+    permissions: string[];
   }) => {
     if (!editingUser) return { success: false };
     setServerErrors({});

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { BookOpen, Settings2, LayoutDashboard, Package, Wrench, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, ScanLine } from 'lucide-react';
+import { BookOpen, Settings2, LayoutDashboard, Package, Wrench, Users, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, ScanLine } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/notifications/NotificationBell';

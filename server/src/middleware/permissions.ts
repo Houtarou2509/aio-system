@@ -1,0 +1,60 @@
+// Permission keys — used across the application for access control
+
+export const ALL_PERMISSIONS: Record<string, string> = {
+  'assets:view': 'View Assets',
+  'assets:create': 'Create Assets',
+  'assets:edit': 'Edit Assets',
+  'assets:delete': 'Delete Assets',
+  'reports:view': 'View Reports',
+  'suppliers:view': 'View Suppliers',
+  'suppliers:create': 'Create Suppliers',
+  'suppliers:edit': 'Edit Suppliers',
+  'suppliers:delete': 'Delete Suppliers',
+  'purchase-requests:view': 'View Purchase Requests',
+  'purchase-requests:create': 'Create Purchase Requests',
+  'purchase-requests:approve': 'Approve Purchase Requests',
+  'issuances:view': 'View Issuances',
+  'issuances:create': 'Create Issuances',
+  'issuances:edit': 'Edit Issuances',
+  'audit:view': 'View Audit Trail',
+  'audit:export': 'Export Audit Trail',
+  'users:view': 'View Users',
+  'users:create': 'Create Users',
+  'users:edit': 'Edit Users',
+  'backups:view': 'View Backups',
+  'backups:create': 'Create Backups',
+  'settings:view': 'View Settings',
+  'notifications:view': 'View Notifications',
+};
+
+export const PERMISSION_KEYS = Object.keys(ALL_PERMISSIONS);
+
+export const DEFAULT_PERMISSIONS: Record<string, string[]> = {
+  ADMIN: Object.keys(ALL_PERMISSIONS),
+  STAFF_ADMIN: [
+    'assets:view',
+    'assets:create',
+    'assets:edit',
+    'reports:view',
+    'suppliers:view',
+    'suppliers:create',
+    'suppliers:edit',
+    'purchase-requests:view',
+    'purchase-requests:create',
+    'purchase-requests:approve',
+    'issuances:view',
+    'issuances:create',
+    'issuances:edit',
+    'audit:view',
+    'audit:export',
+    'notifications:view',
+  ],
+  STAFF: [
+    'assets:view',
+    'reports:view',
+    'issuances:view',
+    'audit:view',
+    'notifications:view',
+  ],
+  GUEST: [] as string[],
+};

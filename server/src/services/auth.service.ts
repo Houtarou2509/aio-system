@@ -15,6 +15,17 @@ const TWO_FA_ISSUER = process.env.TWO_FA_ISSUER || 'AIO-System';
 interface TokenPayload {
   id: string;
   role: string;
+  permissions: string[];
+}
+
+/** Parse the stored JSON permissions string into a string array. */
+function parsePermissions(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function signAccessToken(payload: TokenPayload): string {
@@ -60,7 +71,8 @@ export async function login(email: string, password: string, twoFactorToken?: st
     if (!verified) throw new Error('Invalid 2FA token');
   }
 
-  const payload: TokenPayload = { id: user.id, role: user.role };
+  const permissions = parsePermissions(user.permissions);
+  const payload: TokenPayload = { id: user.id, role: user.role, permissions };
   const accessToken = signAccessToken(payload);
   const refreshToken = signRefreshToken(payload);
 
@@ -85,6 +97,7 @@ export async function login(email: string, password: string, twoFactorToken?: st
       email: user.email,
       role: user.role,
       twoFactorEnabled: user.twoFactorEnabled,
+      permissions,
     },
   };
 }
@@ -102,14 +115,15 @@ export async function refreshToken(oldRefreshToken: string) {
   // Verify the JWT is still structurally valid
   const decoded = jwt.verify(oldRefreshToken, REFRESH_SECRET) as TokenPayload;
 
-  // Verify user still exists
+  // Verify user still exists — reload permissions from DB in case they changed
   const user = await prisma.user.findUnique({ where: { id: decoded.id } });
   if (!user) throw new Error('User not found');
 
   // Rotate: invalidate old, issue new pair
   refreshTokens.delete(oldHash);
 
-  const payload: TokenPayload = { id: user.id, role: user.role };
+  const permissions = parsePermissions(user.permissions);
+  const payload: TokenPayload = { id: user.id, role: user.role, permissions };
   const accessToken = signAccessToken(payload);
   const newRefreshToken = signRefreshToken(payload);
 
@@ -196,12 +210,16 @@ export async function getMe(userId: string) {
       email: true,
       role: true,
       twoFactorEnabled: true,
+      permissions: true,
       createdAt: true,
       updatedAt: true,
     },
   });
   if (!user) throw new Error('User not found');
-  return user;
+  return {
+    ...user,
+    permissions: parsePermissions(user.permissions),
+  };
 }
 
 function generateBackupCodes(): string[] {

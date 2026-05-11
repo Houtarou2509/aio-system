@@ -1,5 +1,6 @@
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { X, UserPlus, Eye, EyeOff } from 'lucide-react';
+import { PermissionChecklist, getDefaultPermissions } from './PermissionChecklist';
 
 const ROLES = [
   { value: 'ADMIN', label: 'Admin' },
@@ -15,6 +16,7 @@ interface Props {
     email: string;
     password: string;
     role: string;
+    permissions: string[];
   }) => Promise<void>;
   onClose: () => void;
   serverErrors?: Record<string, string>;
@@ -29,10 +31,16 @@ export function AddUserModal({ onSubmit, onClose, serverErrors }: Props) {
     confirmPassword: '',
     role: 'STAFF',
   });
+  const [permissions, setPermissions] = useState<string[]>(getDefaultPermissions('STAFF'));
   const [showPw, setShowPw] = useState(false);
   const [showCp, setShowCp] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+
+  // Auto-apply default permissions when role changes
+  useEffect(() => {
+    setPermissions(getDefaultPermissions(form.role));
+  }, [form.role]);
 
   const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm(f => ({ ...f, [field]: e.target.value }));
@@ -65,6 +73,7 @@ export function AddUserModal({ onSubmit, onClose, serverErrors }: Props) {
         email: form.email.trim(),
         password: form.password,
         role: form.role,
+        permissions,
       });
     } catch {
       // handled by parent
@@ -159,6 +168,9 @@ export function AddUserModal({ onSubmit, onClose, serverErrors }: Props) {
                 </select>
                 {fieldError('role') && <p className="text-xs text-red-500 mt-1">{fieldError('role')}</p>}
               </div>
+
+              {/* Permissions */}
+              <PermissionChecklist selected={permissions} onChange={setPermissions} />
 
             </div>
           </div>

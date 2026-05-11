@@ -13,6 +13,7 @@ model User {
   email           String    @unique
   passwordHash    String
   role            Role      @default(STAFF)
+  permissions     String    @default("[]")
   twoFactorSecret String?
   twoFactorEnabled Boolean  @default(false)
   backupCodes     String   @default("[]")

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PERMISSION_KEYS } from '../middleware/permissions';
 
 export const createUserSchema = z.object({
   fullName: z.string().min(1, 'Full name is required').max(200),
@@ -6,6 +7,7 @@ export const createUserSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters').max(100),
   role: z.enum(['ADMIN', 'STAFF_ADMIN', 'STAFF', 'GUEST']),
+  permissions: z.array(z.string()).optional(),
 });
 
 export const updateUserSchema = z.object({
@@ -14,7 +16,8 @@ export const updateUserSchema = z.object({
   email: z.string().email().optional(),
   role: z.enum(['ADMIN', 'STAFF_ADMIN', 'STAFF', 'GUEST']).optional(),
   password: z.string().min(6).max(100).optional(),
-}).refine(d => d.fullName || d.username || d.email || d.role || d.password, {
+  permissions: z.array(z.string()).optional(),
+}).refine(d => d.fullName || d.username || d.email || d.role || d.password || d.permissions, {
   message: 'Provide at least one field to update',
 });
 

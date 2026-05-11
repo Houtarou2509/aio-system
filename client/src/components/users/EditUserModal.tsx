@@ -1,5 +1,6 @@
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { X, UserCog, Eye, EyeOff } from 'lucide-react';
+import { PermissionChecklist, getDefaultPermissions } from './PermissionChecklist';
 
 const ROLES = [
   { value: 'ADMIN', label: 'Admin' },
@@ -15,6 +16,7 @@ interface User {
   email: string;
   role: string;
   status: string;
+  permissions: string[];
   lastLogin: string | null;
   createdAt: string;
 }
@@ -28,6 +30,7 @@ interface Props {
     email: string;
     role: string;
     password?: string;
+    permissions: string[];
   }) => Promise<void>;
   onClose: () => void;
   serverErrors?: Record<string, string>;
@@ -40,6 +43,9 @@ export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }:
     email: user.email,
     role: user.role,
   });
+  const [permissions, setPermissions] = useState<string[]>(
+    user.permissions || getDefaultPermissions(user.role)
+  );
   const [showPwSection, setShowPwSection] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -47,6 +53,13 @@ export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }:
   const [showCp, setShowCp] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+
+  // Auto-apply default permissions when role changes (unless self-editing)
+  useEffect(() => {
+    if (!isSelf) {
+      setPermissions(getDefaultPermissions(form.role));
+    }
+  }, [form.role, isSelf]);
 
   const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm(f => ({ ...f, [field]: e.target.value }));
@@ -74,11 +87,12 @@ export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }:
     if (!validate()) return;
     setLoading(true);
     try {
-      const payload: { fullName: string; username: string; email: string; role: string; password?: string } = {
+      const payload: { fullName: string; username: string; email: string; role: string; password?: string; permissions: string[] } = {
         fullName: form.fullName.trim(),
         username: form.username.trim(),
         email: form.email.trim(),
         role: form.role,
+        permissions,
       };
       if (showPwSection) payload.password = newPassword;
       await onSubmit(payload);
@@ -158,6 +172,9 @@ export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }:
                 {isSelf && <p className="text-[10px] text-amber-600 mt-1">You cannot change your own role.</p>}
                 {fieldError('role') && <p className="text-xs text-red-500 mt-1">{fieldError('role')}</p>}
               </div>
+
+              {/* Permissions */}
+              <PermissionChecklist selected={permissions} onChange={setPermissions} />
 
               {/* Password Reset Section */}
               <div className="border-t border-slate-100 dark:border-slate-700 pt-4">

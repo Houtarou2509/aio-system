@@ -5,6 +5,7 @@ import { authenticate, requireRole } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { createUserSchema, updateUserSchema, updateUserStatusSchema } from './user.schema';
 import { success, error } from '../utils/response';
+import { ALL_PERMISSIONS, PERMISSION_KEYS, DEFAULT_PERMISSIONS } from '../middleware/permissions';
 
 const router = Router();
 
@@ -20,9 +21,25 @@ const SAFE_SELECT = {
   email: true,
   role: true,
   status: true,
+  permissions: true,
   lastLogin: true,
   createdAt: true,
 };
+
+/** Validate that every entry in `perms` is a known permission key. */
+function isValidPermissions(perms: string[]): boolean {
+  return Array.isArray(perms) && perms.every(p => PERMISSION_KEYS.includes(p));
+}
+
+/** Ensure permissions field is parsed into an array before responding. */
+function serializeUser(user: any) {
+  if (!user) return user;
+  try {
+    return { ...user, permissions: JSON.parse(user.permissions) };
+  } catch {
+    return { ...user, permissions: [] };
+  }
+}
 
 // GET /api/users — paginated list
 router.get('/', async (req: Request, res: Response) => {
@@ -40,7 +57,7 @@ router.get('/', async (req: Request, res: Response) => {
       prisma.user.count(),
     ]);
 
-    return success(res, users, 200, {
+    return success(res, users.map(serializeUser), 200, {
       page, limit, total, totalPages: Math.ceil(total / limit),
     });
   } catch (err: any) {
@@ -51,7 +68,7 @@ router.get('/', async (req: Request, res: Response) => {
 // POST /api/users
 router.post('/', validate(createUserSchema), async (req: Request, res: Response) => {
   try {
-    const { fullName, username, email, password, role } = req.body;
+    const { fullName, username, email, password, role, permissions } = req.body;
 
     // Check unique constraints
     const existing = await prisma.user.findFirst({
@@ -62,14 +79,32 @@ router.post('/', validate(createUserSchema), async (req: Request, res: Response)
       return error(res, 'Email already exists', 409);
     }
 
+    // Resolve permissions: explicit > role defaults
+    let finalPermissions: string[];
+    if (permissions !== undefined) {
+      if (!isValidPermissions(permissions)) {
+        return error(res, 'Invalid permission keys provided', 400);
+      }
+      finalPermissions = permissions;
+    } else {
+      finalPermissions = DEFAULT_PERMISSIONS[role] ?? [];
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
-      data: { fullName, username, email, passwordHash, role },
+      data: {
+        fullName,
+        username,
+        email,
+        passwordHash,
+        role,
+        permissions: JSON.stringify(finalPermissions),
+      },
       select: SAFE_SELECT,
     });
 
-    return success(res, user, 201);
+    return success(res, serializeUser(user), 201);
   } catch (err: any) {
     return error(res, err.message, 500);
   }
@@ -79,7 +114,7 @@ router.post('/', validate(createUserSchema), async (req: Request, res: Response)
 router.put('/:id', validate(updateUserSchema), async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
-    const { fullName, username, email, role, password } = req.body;
+    const { fullName, username, email, role, password, permissions } = req.body;
 
     // Verify user exists
     const existing = await prisma.user.findUnique({ where: { id } });
@@ -109,13 +144,24 @@ router.put('/:id', validate(updateUserSchema), async (req: Request, res: Respons
     if (role !== undefined) data.role = role;
     if (password) data.passwordHash = await bcrypt.hash(password, 10);
 
+    // Handle permissions
+    if (permissions !== undefined) {
+      if (!isValidPermissions(permissions)) {
+        return error(res, 'Invalid permission keys provided', 400);
+      }
+      data.permissions = JSON.stringify(permissions);
+    } else if (role !== undefined && role !== existing.role) {
+      // Role changed without explicit permissions — assign defaults for the new role
+      data.permissions = JSON.stringify(DEFAULT_PERMISSIONS[role] ?? []);
+    }
+
     const user = await prisma.user.update({
       where: { id },
       data,
       select: SAFE_SELECT,
     });
 
-    return success(res, user, 200);
+    return success(res, serializeUser(user), 200);
   } catch (err: any) {
     return error(res, err.message, 500);
   }
@@ -141,7 +187,7 @@ router.patch('/:id/status', validate(updateUserStatusSchema), async (req: Reques
       select: SAFE_SELECT,
     });
 
-    return success(res, updated, 200);
+    return success(res, serializeUser(updated), 200);
   } catch (err: any) {
     return error(res, err.message, 500);
   }
