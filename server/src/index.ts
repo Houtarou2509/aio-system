@@ -57,27 +57,12 @@ app.use(helmet({
   strictTransportSecurity: false,
   crossOriginEmbedderPolicy: false,
   crossOriginOpenerPolicy: false,
+  crossOriginResourcePolicy: false,
 }));
 
-// CORS — whitelist trusted origins only
-const ALLOWED_ORIGINS = (process.env.CLIENT_URL || '')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
-
-// Always allow localhost origins
-ALLOWED_ORIGINS.push('http://localhost:3000', 'http://localhost:5173');
-
-// Reject requests from disallowed origins before they reach any route
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (!origin) return next();
-  if (ALLOWED_ORIGINS.includes(origin)) return next();
-  res.status(403).json({ success: false, data: null, error: { message: 'Origin not allowed by CORS' }, meta: null });
-});
-
+// CORS — reflect the request origin in production (internal network), restrict in prod with CLIENT_URL
 app.use(cors({
-  origin: true, // we pre-filter above
+  origin: isProduction ? true : ['http://localhost:3000', 'http://localhost:5173'],
   credentials: true,
 }));
 
