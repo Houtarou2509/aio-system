@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch, ApiError } from '../lib/api';
 import { useDebounce } from '../hooks/useDebounce';
-import { RoleGate } from '../components/auth';
+import { RoleGate, PermissionGate } from '../components/auth';
 import {
   FileSignature, PlusCircle, Search, Loader2, X, ArrowRightLeft, RotateCcw,
   Package, FileText, QrCode, CheckCircle2, ChevronRight, Calendar, CheckCircle,
@@ -405,14 +405,14 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       <p className="text-sm text-slate-500 dark:text-slate-400 mb-5 max-w-xs">
         Issue an asset to personnel to start tracking accountability.
       </p>
-      <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
+      <PermissionGate permissions={['issuances:create']}>
         <button
           onClick={onAdd}
           className="inline-flex items-center gap-2 rounded-lg bg-[#f8931f] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors"
         >
           <PlusCircle className="h-4 w-4" /> New Issuance
         </button>
-      </RoleGate>
+      </PermissionGate>
     </div>
   );
 }
@@ -579,14 +579,14 @@ export default function IssuancesPage() {
             <button onClick={() => setShowQRReturn(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors">
               <QrCode className="h-3.5 w-3.5" /> QR Return
             </button>
-            <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
+            <PermissionGate permissions={['issuances:create']}>
               <button onClick={() => setShowBulkWizard(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors">
                 <Package className="h-3.5 w-3.5" /> Bulk Issuance
               </button>
               <button onClick={() => setShowWizard(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors">
                 <PlusCircle className="h-3.5 w-3.5" /> New Issuance
               </button>
-            </RoleGate>
+            </PermissionGate>
           </div>
         </div>
       </header>
@@ -654,12 +654,12 @@ export default function IssuancesPage() {
             ☑ {selectedIds.size} issuance{selectedIds.size !== 1 ? 's' : ''} selected
           </span>
           <div className="flex items-center gap-2">
-            <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
+            <PermissionGate permissions={['issuances:create']}>
               <button onClick={handleBulkReturn} disabled={bulkReturning}
                 className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50">
                 {bulkReturning ? 'Returning...' : 'Bulk Return'}
               </button>
-            </RoleGate>
+            </PermissionGate>
             <button onClick={deselectAll}
               className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">
               Deselect All
@@ -763,7 +763,7 @@ export default function IssuancesPage() {
                   <td className="px-4 py-4 text-center">
                     <div className="flex items-center justify-center gap-1.5">
                       {!iss.returnedAt && (
-                        <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
+                        <PermissionGate permissions={['issuances:edit']}>
                           <button
                             onClick={async () => {
                               try {
@@ -777,7 +777,7 @@ export default function IssuancesPage() {
                           >
                             <RotateCcw className="w-4 h-4" />
                           </button>
-                        </RoleGate>
+                        </PermissionGate>
                       )}
                       <button
                         onClick={() => openAgreementPreview({

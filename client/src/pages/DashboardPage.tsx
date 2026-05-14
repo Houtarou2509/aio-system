@@ -9,7 +9,7 @@ import {
   Clock, CalendarDays, Layers,
   SlidersHorizontal, RefreshCw,
 } from 'lucide-react';
-import { RoleGate } from '../components/auth';
+import { RoleGate, PermissionGate } from '../components/auth';
 import { CustomizePanel } from '../components/dashboard/CustomizePanel';
 import { loadWidgetPrefs, saveWidgetPrefs, type WidgetPref } from '../lib/widgetRegistry';
 
@@ -623,11 +623,11 @@ export default function DashboardPage() {
               <ScanLine className="h-3.5 w-3.5 text-[#f8931f]" />
               <span className="hidden sm:inline">Scan</span>
             </button>
-            <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
+            <PermissionGate permissions={['assets:create']}>
               <button onClick={() => navigate('/assets?action=create')} className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold bg-[#f8931f] text-white hover:bg-[#e0841a] transition-all duration-200 shadow-lg shadow-[#f8931f]/25 hover:shadow-xl hover:shadow-[#f8931f]/30 active:scale-95">
                 <Plus className="h-3.5 w-3.5" /> Add
               </button>
-            </RoleGate>
+            </PermissionGate>
             <button onClick={() => navigate('/audit')} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 hidden sm:inline-flex">
               <ClipboardList className="h-3.5 w-3.5 text-[#f8931f]" />
               Audit
@@ -659,11 +659,11 @@ export default function DashboardPage() {
               <SlidersHorizontal className="h-3.5 w-3.5 text-[#f8931f]" />
               <span className="hidden sm:inline">Customize</span>
             </button>
-            <RoleGate roles={['ADMIN']}>
+            <PermissionGate permissions={['settings:view']}>
               <button onClick={() => navigate('/settings')} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 hidden sm:inline-flex">
                 <Settings className="h-3.5 w-3.5 text-[#f8931f]" />
               </button>
-            </RoleGate>
+            </PermissionGate>
           </div>
         </div>
       </header>

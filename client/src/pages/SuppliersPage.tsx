@@ -128,8 +128,7 @@ export default function SuppliersPage() {
   const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null);
 
-  const isAdmin = user?.role === 'ADMIN';
-  const canManage = user?.role === 'ADMIN' || user?.role === 'STAFF_ADMIN';
+  const userPerms = user?.permissions || [];
 
   const fetchSuppliers = useCallback(async () => {
     setLoading(true);
@@ -195,7 +194,7 @@ export default function SuppliersPage() {
               <p className="text-[11px] text-slate-400 font-medium">Vendor & Supplier Management</p>
             </div>
           </div>
-          {canManage && (
+          {userPerms.includes('suppliers:create') && (
             <button
               onClick={handleAdd}
               className="inline-flex items-center gap-2 rounded-lg bg-[#f8931f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors"
@@ -250,8 +249,8 @@ export default function SuppliersPage() {
                 key: 'actions', header: 'Actions',
                 render: (s) => (
                   <div className="flex items-center justify-end gap-1">
-                    {canManage && <button onClick={(e) => { e.stopPropagation(); handleEdit(s); }} className="p-1.5 rounded-md text-slate-400 hover:text-[#f8931f] hover:bg-[#f8931f]/10 transition-colors" title="Edit"><Pencil className="h-4 w-4" /></button>}
-                    {isAdmin && <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(s); }} className="p-1.5 rounded-md text-slate-400 hover:text-[#7B1113] hover:bg-[#7B1113]/10 transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>}
+                    {userPerms.includes('suppliers:edit') && <button onClick={(e) => { e.stopPropagation(); handleEdit(s); }} className="p-1.5 rounded-md text-slate-400 hover:text-[#f8931f] hover:bg-[#f8931f]/10 transition-colors" title="Edit"><Pencil className="h-4 w-4" /></button>}
+                    {userPerms.includes('suppliers:delete') && <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(s); }} className="p-1.5 rounded-md text-slate-400 hover:text-[#7B1113] hover:bg-[#7B1113]/10 transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>}
                   </div>
                 ),
               },

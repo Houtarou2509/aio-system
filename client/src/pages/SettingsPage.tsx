@@ -5,6 +5,7 @@ import {
   Archive, History, Users, ShoppingCart, Truck,
   Bell, Lock, HardDrive,
 } from 'lucide-react';
+import { PermissionGate } from '../components/auth';
 
 /* ─── Accordion Section ──────────────────────────────────── */
 
@@ -176,7 +177,7 @@ export default function SettingsPage() {
           </div>
         </AccordionSection>
 
-        {/* Backups */}
+        <PermissionGate permissions={['backups:view']}>
         <AccordionSection
           icon={Archive}
           title="Backups"
@@ -190,8 +191,9 @@ export default function SettingsPage() {
             </div>
           </div>
         </AccordionSection>
+        </PermissionGate>
 
-        {/* Users & Permissions */}
+        <PermissionGate permissions={['users:view']}>
         <AccordionSection
           icon={Users}
           title="Users & Permissions"
@@ -202,8 +204,9 @@ export default function SettingsPage() {
             <QuickLink to="/users" icon={Users} label="Manage Users" />
           </div>
         </AccordionSection>
+        </PermissionGate>
 
-        {/* Audit & Compliance */}
+        <PermissionGate permissions={['audit:view']}>
         <AccordionSection
           icon={History}
           title="Audit & Compliance"
@@ -214,8 +217,9 @@ export default function SettingsPage() {
             <QuickLink to="/audit" icon={History} label="View Audit Trail" />
           </div>
         </AccordionSection>
+        </PermissionGate>
 
-        {/* Procurement */}
+        <PermissionGate permissions={['suppliers:view']}>
         <AccordionSection
           icon={Truck}
           title="Procurement"
@@ -226,8 +230,9 @@ export default function SettingsPage() {
             <QuickLink to="/purchase-requests" icon={ShoppingCart} label="Purchase Requests" />
           </div>
         </AccordionSection>
+        </PermissionGate>
 
-        {/* Notifications & Alerts */}
+        <PermissionGate permissions={['notifications:view']}>
         <AccordionSection
           icon={Bell}
           title="Notifications & Alerts"
@@ -247,6 +252,7 @@ export default function SettingsPage() {
             </div>
           </div>
         </AccordionSection>
+        </PermissionGate>
 
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { maintenanceApi, MaintenanceLog } from '../../lib/api';
-import { RoleGate } from '../auth';
+import { RoleGate, PermissionGate } from '../auth';
 import { useAuth } from '../../context/AuthContext';
 import { ScheduleMaintenanceModal } from './ScheduleMaintenanceModal';
 import {
@@ -219,7 +219,8 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
 
   const activeSchedules = schedules.filter(s => s.status !== 'done');
   const completedSchedules = schedules.filter(s => s.status === 'done');
-  const canDelete = userRole === 'ADMIN' || userRole === 'STAFF_ADMIN';
+  const userPerms = user?.permissions || [];
+  const canDelete = userPerms.includes('assets:delete');
 
   return (
     <div className="space-y-4">
@@ -238,6 +239,7 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
             <Wrench className="w-3.5 h-3.5 text-indigo-600" />
             <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Upcoming Maintenance</h3>
           </div>
+          <PermissionGate permissions={['assets:edit']}>
           <button
             onClick={() => setIsScheduleModalOpen(true)}
             className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
@@ -245,6 +247,7 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
             <Plus className="w-3 h-3" />
             Schedule
           </button>
+          </PermissionGate>
         </div>
         <div className="p-3 space-y-2">
           {schedulesLoading && (
@@ -303,7 +306,7 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
             <Clock className="w-3.5 h-3.5 text-indigo-600" />
             <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Maintenance Logs</h3>
           </div>
-          <RoleGate roles={['ADMIN', 'STAFF_ADMIN', 'STAFF']}>
+          <PermissionGate permissions={['assets:edit']}>
             <button
               onClick={() => { setShowForm(!showForm); setValidationError(null); }}
               className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50 transition-colors"
@@ -311,7 +314,7 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
               <Plus className="w-3 h-3" />
               Add Log
             </button>
-          </RoleGate>
+          </PermissionGate>
         </div>
 
         {/* Add form */}
@@ -364,11 +367,11 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
                   <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(l.date).toLocaleDateString()}</p>
                   {Number(l.cost) > 0 && <p className="text-xs text-indigo-600 font-medium">₱{Number(l.cost).toLocaleString()}</p>}
                 </div>
-                <RoleGate roles={['ADMIN']}>
+                <PermissionGate permissions={['assets:delete']}>
                   <button onClick={() => handleDelete(l.id)} className="text-slate-400 hover:text-red-500 transition-colors shrink-0">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
-                </RoleGate>
+                </PermissionGate>
               </div>
             ))
           )}

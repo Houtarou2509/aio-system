@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { auditApi, AuditLogEntry, AuditFilters } from '../lib/api';
-import { RoleGate } from '../components/auth';
+import { RoleGate, PermissionGate } from '../components/auth';
 import {
   History,
   PlusCircle,
@@ -318,14 +318,14 @@ export default function AuditPage() {
 
                         {/* Revert */}
                         <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                          <RoleGate roles={['ADMIN']}>
+                          <PermissionGate permissions={['audit:export']}>
                             {l.field && l.field !== '*' && l.oldValue !== null && String(l.oldValue) !== String(l.newValue) && (
                               <button onClick={() => handleRevert(l.id)}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-[#f8931f] hover:underline transition-colors">
                                 <RotateCcw className="w-3 h-3" /> Revert
                               </button>
                             )}
-                          </RoleGate>
+                          </PermissionGate>
                         </td>
                       </tr>
 
