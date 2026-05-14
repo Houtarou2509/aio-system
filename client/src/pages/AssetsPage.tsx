@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAssets } from '../hooks/useAssets';
 import { assetsApi, Asset } from '../lib/api';
-import { RoleGate } from '../components/auth';
+import { RoleGate, PermissionGate } from '../components/auth';
 import { AssetTable, AssetDetailModal, AssetFormModal, ImportAssetsModal, BulkActionModal, FilterPresetManager } from '../components/assets';
 import QRScannerModal from '../components/assets/QRScannerModal';
 import {
@@ -43,14 +43,14 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       <p className="text-sm text-slate-500 dark:text-slate-400 mb-5 max-w-xs">
         Start building your inventory by adding your first asset to the system.
       </p>
-      <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
+      <PermissionGate permissions={['assets:create']}>
         <button
           onClick={onAdd}
           className="inline-flex items-center gap-2 rounded-lg bg-[#f8931f] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors"
         >
           <Plus className="h-4 w-4" /> Add First Asset
         </button>
-      </RoleGate>
+      </PermissionGate>
     </div>
   );
 }
@@ -316,14 +316,14 @@ export default function AssetsPage() {
             <button onClick={() => setScannerOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-2.5 sm:px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors">
               <ScanLine className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Scan QR</span>
             </button>
-            <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
+            <PermissionGate permissions={['assets:create']}>
               <button onClick={() => setIsImportModalOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-2.5 sm:px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors">
                 <span className="hidden sm:inline">↑ Import</span><span className="sm:hidden">↑</span>
               </button>
               <button onClick={() => { setEditAsset(null); setShowForm(true); }} className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-3 sm:px-4 py-2 text-xs font-bold text-white hover:bg-[#e0841a] shadow-sm transition-colors shrink-0">
                 <Plus className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Add Asset</span><span className="sm:hidden">Add</span>
               </button>
-            </RoleGate>
+            </PermissionGate>
           </div>
         </div>
       </header>
@@ -501,7 +501,7 @@ export default function AssetsPage() {
               className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50">
               {exportLoading ? 'Exporting...' : 'Export CSV'}
             </button>
-            <RoleGate roles={['ADMIN']}>
+            <PermissionGate permissions={['assets:delete']}>
               <button onClick={() => setConfirmDelete(true)} disabled={bulkLoading}
                 className="rounded-lg bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-50">Delete Selected</button>
               <button onClick={() => {
@@ -511,7 +511,7 @@ export default function AssetsPage() {
                 className="rounded-lg bg-[#7B1113] px-3 py-1 text-xs text-white hover:bg-[#6a0f11] disabled:opacity-50">
                 <Trash2 className="h-3 w-3 inline mr-1" />Dispose
               </button>
-            </RoleGate>
+            </PermissionGate>
             <button onClick={deselectAll}
               className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Deselect All</button>
           </div>

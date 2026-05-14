@@ -7,6 +7,7 @@ interface User {
   email: string;
   role: string;
   twoFactorEnabled: boolean;
+  permissions: string[];
 }
 
 interface AuthState {

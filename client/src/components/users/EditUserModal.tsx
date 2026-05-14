@@ -1,4 +1,4 @@
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, useRef, FormEvent, useEffect } from 'react';
 import { X, UserCog, Eye, EyeOff } from 'lucide-react';
 import { PermissionChecklist, getDefaultPermissions } from './PermissionChecklist';
 
@@ -53,11 +53,17 @@ export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }:
   const [showCp, setShowCp] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const prevRoleRef = useRef(form.role);
+
+  console.log('EditUserModal received permissions:', user.permissions);
 
   // Auto-apply default permissions when role changes (unless self-editing)
   useEffect(() => {
-    if (!isSelf) {
-      setPermissions(getDefaultPermissions(form.role));
+    if (form.role !== prevRoleRef.current) {
+      prevRoleRef.current = form.role;
+      if (!isSelf) {
+        setPermissions(getDefaultPermissions(form.role));
+      }
     }
   }, [form.role, isSelf]);
 

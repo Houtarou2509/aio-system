@@ -8,7 +8,7 @@ import * as assetService from '../services/asset.service';
 import { calculateDepreciation } from '../services/depreciation.service';
 import { prisma } from '../lib/prisma';
 
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, hasPermission } from '../middleware/auth';
 import { success, error } from '../utils/response';
 
 function getClientIp(req: Request): string {
@@ -81,7 +81,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
 
 
 // POST /api/assets — create (supports JSON and multipart/form-data)
-router.post('/', authorize(['ADMIN', 'STAFF_ADMIN']), upload.single('image'), async (req: Request, res: Response) => {
+router.post('/', hasPermission('assets:create'), upload.single('image'), async (req: Request, res: Response) => {
   try {
     // If multipart: data field contains JSON, file is image
     let body = req.body;
@@ -112,7 +112,7 @@ router.post('/', authorize(['ADMIN', 'STAFF_ADMIN']), upload.single('image'), as
 // POST /api/assets/import — CSV bulk import
 const VALID_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED'];
 
-router.post('/import', authorize(['ADMIN', 'STAFF_ADMIN']), importUpload.single('file'), async (req: Request, res: Response) => {
+router.post('/import', hasPermission('assets:create'), importUpload.single('file'), async (req: Request, res: Response) => {
   try {
     if (!req.file) {
       return error(res, 'No file uploaded', 400);
@@ -228,7 +228,7 @@ router.post('/import', authorize(['ADMIN', 'STAFF_ADMIN']), importUpload.single(
 });
 
 // PATCH /api/assets/bulk-status — change status for multiple assets
-router.patch('/bulk-status', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res: Response) => {
+router.patch('/bulk-status', hasPermission('assets:edit'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkStatusSchema.safeParse(req.body);
     if (!parsed.success) return error(res, parsed.error.message, 400);
@@ -259,7 +259,7 @@ router.patch('/bulk-status', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Re
 });
 
 // DELETE /api/assets/bulk-delete — soft delete (retire) multiple assets
-router.delete('/bulk-delete', authorize(['ADMIN']), async (req: Request, res: Response) => {
+router.delete('/bulk-delete', hasPermission('assets:delete'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkDeleteSchema.safeParse(req.body);
     if (!parsed.success) return error(res, parsed.error.message, 400);
@@ -291,7 +291,7 @@ router.delete('/bulk-delete', authorize(['ADMIN']), async (req: Request, res: Re
 });
 
 // POST /api/assets/bulk-assign — assign multiple assets to one person
-router.post('/bulk-assign', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res: Response) => {
+router.post('/bulk-assign', hasPermission('assets:edit'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkAssignSchema.safeParse(req.body);
     if (!parsed.success) return error(res, parsed.error.message, 400);
@@ -348,7 +348,7 @@ router.post('/bulk-assign', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Req
 });
 
 // POST /api/assets/bulk-return — return multiple assets at once
-router.post('/bulk-return', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res: Response) => {
+router.post('/bulk-return', hasPermission('assets:edit'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkReturnSchema.safeParse(req.body);
     if (!parsed.success) return error(res, parsed.error.message, 400);
@@ -395,7 +395,7 @@ router.post('/bulk-return', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Req
 });
 
 // POST /api/assets/bulk-update — update location/status for multiple assets
-router.post('/bulk-update', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res: Response) => {
+router.post('/bulk-update', hasPermission('assets:edit'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkUpdateSchema.safeParse(req.body);
     if (!parsed.success) return error(res, parsed.error.message, 400);
@@ -444,7 +444,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // PUT /api/assets/:id — update (supports JSON and multipart/form-data)
-router.put('/:id', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), upload.single('image'), async (req: Request, res: Response) => {
+router.put('/:id', hasPermission('assets:edit'), upload.single('image'), async (req: Request, res: Response) => {
   try {
     let body = req.body;
     if (req.body.data && typeof req.body.data === 'string') {
@@ -471,7 +471,7 @@ router.put('/:id', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), upload.single('
 });
 
 // DELETE /api/assets/:id — soft delete (Admin only)
-router.delete('/:id', authorize(['ADMIN']), async (req: Request, res: Response) => {
+router.delete('/:id', hasPermission('assets:delete'), async (req: Request, res: Response) => {
   try {
     const asset = await assetService.deleteAsset(String(req.params.id), req.user!.id, getClientIp(req), String(req.headers['user-agent'] || ''));
     return success(res, asset, 200);
@@ -481,7 +481,7 @@ router.delete('/:id', authorize(['ADMIN']), async (req: Request, res: Response) 
 });
 
 // POST /api/assets/:id/image
-router.post('/:id/image', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), upload.single('image'), async (req: Request, res: Response) => {
+router.post('/:id/image', hasPermission('assets:edit'), upload.single('image'), async (req: Request, res: Response) => {
   try {
     if (!req.file) return error(res, 'No image uploaded', 400);
 
@@ -506,7 +506,7 @@ router.post('/:id/image', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), upload.s
 });
 
 // POST /api/assets/:id/dispose — formal disposal with reason/method/date (Admin only)
-router.post('/:id/dispose', authorize(['ADMIN']), async (req: Request, res: Response) => {
+router.post('/:id/dispose', hasPermission('assets:delete'), async (req: Request, res: Response) => {
   try {
     const parsed = disposeAssetSchema.safeParse(req.body);
     if (!parsed.success) return error(res, parsed.error.message, 400);
