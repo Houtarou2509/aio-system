@@ -94,6 +94,7 @@ export async function login(email: string, password: string, twoFactorToken?: st
     user: {
       id: user.id,
       username: user.username,
+      fullName: user.fullName,
       email: user.email,
       role: user.role,
       twoFactorEnabled: user.twoFactorEnabled,
@@ -207,6 +208,7 @@ export async function getMe(userId: string) {
     select: {
       id: true,
       username: true,
+      fullName: true,
       email: true,
       role: true,
       twoFactorEnabled: true,

@@ -4,6 +4,7 @@ import { AUTH_EXPIRED_EVENT } from '../lib/api';
 interface User {
   id: string;
   username: string;
+  fullName?: string;
   email: string;
   role: string;
   twoFactorEnabled: boolean;

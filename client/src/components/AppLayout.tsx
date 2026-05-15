@@ -95,7 +95,7 @@ export default function AppLayout() {
               <NotificationBell />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white leading-tight truncate">{user?.username}</p>
+              <p className="text-sm font-semibold text-white leading-tight truncate">{user?.fullName}</p>
               <p className="text-[10px] tracking-widest font-medium text-[#f8931f] uppercase">{user?.role?.replace('_', '-')}</p>
             </div>
             <button
@@ -169,7 +169,7 @@ export default function AppLayout() {
             {/* Mobile Profile & Logout — pinned to bottom */}
             <div className="shrink-0 bg-black/20 px-3 py-3 border-t border-[#001a4d]">
               <div className="mb-2">
-                <p className="text-sm font-semibold text-white leading-tight">{user?.username}</p>
+                <p className="text-sm font-semibold text-white leading-tight">{user?.fullName}</p>
                 <p className="text-[10px] tracking-widest font-medium text-[#f8931f] uppercase">{user?.role?.replace('_', '-')}</p>
               </div>
               <button
