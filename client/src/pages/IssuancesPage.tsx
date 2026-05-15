@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch, ApiError } from '../lib/api';
 import { useDebounce } from '../hooks/useDebounce';
-import { RoleGate, PermissionGate } from '../components/auth';
+import { PermissionGate } from '../components/auth';
 import {
   FileSignature, PlusCircle, Search, Loader2, X, ArrowRightLeft, RotateCcw,
   Package, FileText, QrCode, CheckCircle2, ChevronRight, Calendar, CheckCircle,

@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { maintenanceApi, MaintenanceLog } from '../../lib/api';
-import { RoleGate, PermissionGate } from '../auth';
+import { PermissionGate } from '../auth';
 import { useAuth } from '../../context/AuthContext';
 import { ScheduleMaintenanceModal } from './ScheduleMaintenanceModal';
 import {
@@ -115,7 +115,7 @@ function ScheduleTile({
    ═════════════════════════════════════════════════════ */
 export function MaintenanceTab({ assetId, frequentRepair }: Props) {
   const { user } = useAuth();
-  const userRole = user?.role || '';
+
 
   const [logs, setLogs] = useState<MaintenanceLog[]>([]);
   const [loading, setLoading] = useState(true);

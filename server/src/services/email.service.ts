@@ -1,19 +1,14 @@
 import * as nodemailer from 'nodemailer';
 
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
-const SMTP_FROM = process.env.SMTP_FROM || 'AIO-System <noreply@localhost>';
-const SMTP_SECURE = process.env.SMTP_SECURE === 'true';
-
-const transporter = nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: SMTP_PORT,
-  secure: SMTP_SECURE,
-  auth: SMTP_USER && SMTP_PASS ? { user: SMTP_USER, pass: SMTP_PASS } : undefined,
-  tls: { rejectUnauthorized: false },
-});
+function getTransporter() {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: process.env.SMTP_USER && process.env.SMTP_PASS ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
+    tls: { rejectUnauthorized: false },
+  });
+}
 
 /**
  * Send an email to one or more recipients.
@@ -25,14 +20,15 @@ export async function sendEmail(options: {
   text: string;
   html?: string;
 }): Promise<boolean> {
-  if (!SMTP_HOST) {
+  if (!process.env.SMTP_HOST) {
     console.warn('[Email] SMTP_HOST not configured — skipping email');
     return false;
   }
 
   try {
+    const transporter = getTransporter();
     const info = await transporter.sendMail({
-      from: SMTP_FROM,
+      from: process.env.SMTP_FROM || 'AIO-System <noreply@localhost>',
       to: options.to,
       subject: options.subject,
       text: options.text,
@@ -52,7 +48,7 @@ export async function sendEmail(options: {
  */
 export async function sendSystemAlert(subject: string, message: string): Promise<number> {
   // If no SMTP configured, silently skip
-  if (!SMTP_HOST) return 0;
+  if (!process.env.SMTP_HOST) return 0;
 
   const { prisma } = await import('../lib/prisma');
   const admins = await prisma.user.findMany({

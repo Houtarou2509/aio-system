@@ -9,6 +9,8 @@ import {
   refreshSchema,
   twoFaVerifySchema,
   twoFaValidateSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } from './auth.schema';
 
 const router = Router();
@@ -97,6 +99,35 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
     return success(res, user, 200);
   } catch (err: any) {
     return error(res, err.message, 404);
+  }
+});
+
+// POST /api/auth/forgot-password
+const forgotLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { success: false, data: null, error: { message: 'Too many requests, try again later' }, meta: null },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+router.post('/forgot-password', forgotLimiter, validate(forgotPasswordSchema), async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    const result = await authService.forgotPassword(email);
+    return success(res, result, 200);
+  } catch (err: any) {
+    return success(res, { message: 'If that email exists, a reset link has been sent.' }, 200);
+  }
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', validate(resetPasswordSchema), async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body;
+    const result = await authService.resetPassword(token, password);
+    return success(res, result, 200);
+  } catch (err: any) {
+    return error(res, err.message, 400);
   }
 });
 

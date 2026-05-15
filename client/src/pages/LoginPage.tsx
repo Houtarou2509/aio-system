@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate, Navigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import {
@@ -304,7 +304,7 @@ export default function LoginPage() {
             />
             <label htmlFor="remember" className="text-xs text-slate-500 dark:text-slate-400 cursor-pointer select-none">Remember me</label>
           </div>
-          <a href="#" className="text-xs text-slate-500 dark:text-slate-400 hover:text-[#f8931f] transition-colors" onClick={e => e.preventDefault()}>Forgot password?</a>
+          <Link to="/forgot-password" className="text-xs text-slate-500 dark:text-slate-400 hover:text-[#f8931f] transition-colors">Forgot password?</Link>
         </div>
 
         {/* Submit */}

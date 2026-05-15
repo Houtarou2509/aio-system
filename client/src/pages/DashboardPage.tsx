@@ -9,7 +9,7 @@ import {
   Clock, CalendarDays, Layers,
   SlidersHorizontal, RefreshCw,
 } from 'lucide-react';
-import { RoleGate, PermissionGate } from '../components/auth';
+import { PermissionGate } from '../components/auth';
 import { CustomizePanel } from '../components/dashboard/CustomizePanel';
 import { loadWidgetPrefs, saveWidgetPrefs, type WidgetPref } from '../lib/widgetRegistry';
 

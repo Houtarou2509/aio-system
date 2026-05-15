@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAssets } from '../hooks/useAssets';
 import { assetsApi, Asset } from '../lib/api';
-import { RoleGate, PermissionGate } from '../components/auth';
+import { PermissionGate } from '../components/auth';
 import { AssetTable, AssetDetailModal, AssetFormModal, ImportAssetsModal, BulkActionModal, FilterPresetManager } from '../components/assets';
 import QRScannerModal from '../components/assets/QRScannerModal';
 import {

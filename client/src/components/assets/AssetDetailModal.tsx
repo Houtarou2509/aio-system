@@ -97,7 +97,7 @@ function InfoRow({ label, value, highlight }: { label: string; value: React.Reac
    ASSET DETAIL MODAL
    ═════════════════════════════════════════════════════ */
 export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
-  const { user } = useAuth();
+  useAuth();
   const [tab, setTab] = useState('overview');
   const [frequentRepair, setFrequentRepair] = useState(false);
   const [showLightbox, setShowLightbox] = useState(false);

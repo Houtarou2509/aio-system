@@ -3,6 +3,8 @@ import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/auth';
 import AppLayout from './components/AppLayout';
 import LoginPage from './pages/LoginPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import Setup2FaPage from './pages/Setup2FaPage';
 import DashboardPage from './pages/DashboardPage';
 import AssetsPage from './pages/AssetsPage';
@@ -29,6 +31,8 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/setup-2fa" element={<ProtectedRoute><Setup2FaPage /></ProtectedRoute>} />
           <Route path="/guest/:token" element={<GuestAssetPage />} />
 

@@ -20,3 +20,12 @@ export const twoFaValidateSchema = z.object({
   userId: z.string().min(1),
   token: z.string().length(6, 'TOTP token must be 6 digits'),
 });
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email('Valid email is required'),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, 'Reset token is required'),
+  password: z.string().min(6, 'Password must be at least 6 characters').max(100),
+});

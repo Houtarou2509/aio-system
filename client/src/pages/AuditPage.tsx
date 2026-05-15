@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { auditApi, AuditLogEntry, AuditFilters } from '../lib/api';
-import { RoleGate, PermissionGate } from '../components/auth';
+import { PermissionGate } from '../components/auth';
 import {
   History,
   PlusCircle,

@@ -222,6 +222,77 @@ export async function getMe(userId: string) {
   };
 }
 
+/** In-memory store for password reset tokens. Keyed by token hash. */
+const resetTokens = new Map<string, { userId: string; expires: number }>();
+
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    return { message: 'If that email exists, a reset link has been sent.' };
+  }
+
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+  resetTokens.set(tokenHash, {
+    userId: user.id,
+    expires: Date.now() + 60 * 60 * 1000,
+  });
+
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000/aio-system';
+  const resetLink = `${clientUrl}/reset-password?token=${rawToken}`;
+
+  const { sendEmail } = await import('./email.service');
+  await sendEmail({
+    to: user.email,
+    subject: 'AIO System — Password Reset Request',
+    text: `You requested a password reset.\n\nClick this link to reset your password (valid for 1 hour):\n${resetLink}\n\nIf you didn't request this, ignore this email.`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: #012061; padding: 20px; text-align: center;">
+          <h2 style="color: #f8931f; margin: 0;">AIO System</h2>
+        </div>
+        <div style="padding: 24px; background: #fff; border: 1px solid #e2e8f0;">
+          <h3 style="color: #012061;">Password Reset Request</h3>
+          <p style="color: #334155; font-size: 15px;">Click the button below to reset your password. This link is valid for 1 hour.</p>
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${resetLink}"
+               style="display: inline-block; background: #f8931f; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">
+              Reset Password
+            </a>
+          </div>
+          <p style="color: #94a3b8; font-size: 13px;">If you didn't request this, please ignore this email.</p>
+        </div>
+        <div style="padding: 16px; text-align: center; color: #94a3b8; font-size: 12px;">
+          Sent from AIO-System
+        </div>
+      </div>
+    `,
+  });
+
+  return { message: 'If that email exists, a reset link has been sent.' };
+}
+
+export async function resetPassword(rawToken: string, newPassword: string): Promise<{ message: string }> {
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const stored = resetTokens.get(tokenHash);
+  if (!stored) throw new Error('Invalid or expired reset token');
+
+  if (Date.now() > stored.expires) {
+    resetTokens.delete(tokenHash);
+    throw new Error('Reset token has expired');
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({
+    where: { id: stored.userId },
+    data: { passwordHash },
+  });
+
+  resetTokens.delete(tokenHash);
+  return { message: 'Password has been reset successfully.' };
+}
+
 function generateBackupCodes(): string[] {
   const codes: string[] = [];
   for (let i = 0; i < 8; i++) {
