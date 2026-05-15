@@ -5,6 +5,8 @@ import { AuditTimeline } from '../audit';
 import { GuestTokenManager } from '../guest';
 import FinancialsTab from '../depreciation/FinancialsTab';
 import { getWarrantyStatus, formatWarrantyDate } from '../../lib/warranty';
+import { PermissionGate } from '../auth';
+import { useAuth } from '../../context/AuthContext';
 import {
   Dialog,
   DialogContent,
@@ -95,6 +97,7 @@ function InfoRow({ label, value, highlight }: { label: string; value: React.Reac
    ASSET DETAIL MODAL
    ═════════════════════════════════════════════════════ */
 export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
+  const { user } = useAuth();
   const [tab, setTab] = useState('overview');
   const [frequentRepair, setFrequentRepair] = useState(false);
   const [showLightbox, setShowLightbox] = useState(false);
@@ -141,15 +144,18 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                 <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-full border ${statusConf.className}`}>
                   {statusConf.label}
                 </span>
-                <button
-                  onClick={() => onEdit(asset)}
-                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-colors inline-flex items-center gap-1"
-                  style={{ backgroundColor: '#f8931f' }}
-                >
-                  <Pencil className="w-3 h-3" />
-                  Edit
-                </button>
+                <PermissionGate permissions={['assets:edit']}>
+                  <button
+                    onClick={() => onEdit(asset)}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-colors inline-flex items-center gap-1"
+                    style={{ backgroundColor: '#f8931f' }}
+                  >
+                    <Pencil className="w-3 h-3" />
+                    Edit
+                  </button>
+                </PermissionGate>
                 {asset.status !== 'RETIRED' && onDispose && (
+                  <PermissionGate permissions={['assets:delete']}>
                   <button
                     onClick={() => { onDispose(asset); }}
                     className="rounded-lg px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-colors inline-flex items-center gap-1"
@@ -159,7 +165,8 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                     <Trash2 className="w-3 h-3" />
                     Dispose
                   </button>
-                )}
+                  </PermissionGate>
+                  )}
                 <button
                   onClick={onClose}
                   className="rounded-lg border border-white/20 bg-white dark:bg-slate-800/10 p-1.5 text-slate-700 dark:text-white/60 hover:text-white hover:bg-white/20 transition-colors"
