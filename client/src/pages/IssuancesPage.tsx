@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch, ApiError } from '../lib/api';
 import { useDebounce } from '../hooks/useDebounce';
 import { PermissionGate } from '../components/auth';
@@ -16,7 +16,7 @@ interface AssetOption { id: string; name: string; serialNumber: string | null; p
 interface PersonnelOption { id: string; fullName: string; position: string | null; project: string | null; department: string | null; designation: string | null; designationLookup: { name: string } | null }
 interface Issuance {
   id: string; assetId: string; personnelId: string | null; assignedTo: string | null; assignedAt: string; returnedAt: string | null;
-  condition: string | null; notes: string | null; agreementId: string | null;
+  condition: string | null; notes: string | null; agreementId: string | null; bulkBatchId: string | null;
   asset: { id: string; name: string; serialNumber: string | null; propertyNumber: string | null; status: string } | null;
   personnel: { id: string; fullName: string; position: string | null; project: string | null; department: string | null; designation: string | null; designationLookup: { name: string } | null } | null;
 }
@@ -479,6 +479,35 @@ export default function IssuancesPage() {
 
   const deselectAll = () => setSelectedIds(new Set());
 
+  // Group issuances: batch records appear as single rows, unbatched as individual
+  type GroupRow = { type: 'batch'; batchId: string; items: Issuance[] } | { type: 'single'; item: Issuance };
+  const groupedIssuances: GroupRow[] = useMemo(() => {
+    const batches: Record<string, Issuance[]> = {};
+    const singles: Issuance[] = [];
+    for (const iss of issuances) {
+      if (iss.bulkBatchId) {
+        if (!batches[iss.bulkBatchId]) batches[iss.bulkBatchId] = [];
+        batches[iss.bulkBatchId].push(iss);
+      } else {
+        singles.push(iss);
+      }
+    }
+    const result: GroupRow[] = [];
+    for (const [, items] of Object.entries(batches)) {
+      result.push({ type: 'batch', batchId: items[0].bulkBatchId!, items });
+    }
+    for (const item of singles) {
+      result.push({ type: 'single', item });
+    }
+    // Sort by assignedAt desc (most recent first)
+    result.sort((a, b) => {
+      const aDate = a.type === 'batch' ? a.items[0].assignedAt : a.item.assignedAt;
+      const bDate = b.type === 'batch' ? b.items[0].assignedAt : b.item.assignedAt;
+      return new Date(bDate).getTime() - new Date(aDate).getTime();
+    });
+    return result;
+  }, [issuances]);
+
   const handleBulkReturn = async () => {
     setBulkReturning(true);
     let succeeded = 0;
@@ -711,96 +740,196 @@ export default function IssuancesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {issuances.map(iss => (
-                  <tr key={iss.id} className="bg-white dark:bg-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all group">
-                    <td className="px-4 py-4">
-                      <span
-                        onClick={() => toggleSelect(iss.id)}
-                        className={`inline-flex items-center justify-center w-4 h-4 rounded border cursor-pointer ${
-                          selectedIds.has(iss.id) ? 'bg-[#012061] border-[#012061]' : 'border-slate-300 dark:border-slate-600'
-                        }`}
-                      >
-                        {selectedIds.has(iss.id) && <CheckCircle className="w-3 h-3 text-white" />}
-                      </span>
-                    </td>
-                  <td className="px-4 py-4">
-                    <div className="flex flex-col">
-                      <p className="font-bold text-sm" style={{ color: '#012061' }}>{iss.asset?.name || '—'}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-tight">S/N:</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400">{iss.asset?.serialNumber || '—'}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <div className="flex flex-col">
-                      <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">{iss.personnel?.fullName || iss.assignedTo || '—'}</p>
-                      {iss.personnel && (
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 italic mt-0.5">
-                          {iss.personnel.designationLookup?.name || iss.personnel.designation || 'No designation'}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 text-xs font-medium text-slate-600 dark:text-slate-400 tabular-nums">
-                    {new Date(iss.assignedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
-                  </td>
-                  <td className="px-4 py-4">
-                    {iss.returnedAt ? (
-                      <div className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                          Returned {new Date(iss.returnedAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Active</span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-4 text-center">
-                    <div className="flex items-center justify-center gap-1.5">
-                      {!iss.returnedAt && (
-                        <PermissionGate permissions={['issuances:edit']}>
-                          <button
-                            onClick={async () => {
-                              try {
-                                await apiFetch(`/issuances/${iss.id}/return`, { method: 'POST', body: { condition: 'Good' } });
-                                showToast('Asset returned successfully');
-                                fetchIssuances();
-                              } catch (e: any) { showToast(e instanceof ApiError ? e.message : 'Return failed'); }
-                            }}
-                            className="p-2 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all group-hover:shadow-sm"
-                            title="Return Asset"
+                {groupedIssuances.map(row => {
+                  if (row.type === 'single') {
+                    const iss = row.item;
+                    return (
+                      <tr key={iss.id} className="bg-white dark:bg-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all group">
+                        <td className="px-4 py-4">
+                          <span
+                            onClick={() => toggleSelect(iss.id)}
+                            className={`inline-flex items-center justify-center w-4 h-4 rounded border cursor-pointer ${
+                              selectedIds.has(iss.id) ? 'bg-[#012061] border-[#012061]' : 'border-slate-300 dark:border-slate-600'
+                            }`}
                           >
-                            <RotateCcw className="w-4 h-4" />
+                            {selectedIds.has(iss.id) && <CheckCircle className="w-3 h-3 text-white" />}
+                          </span>
+                        </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-col">
+                          <p className="font-bold text-sm" style={{ color: '#012061' }}>{iss.asset?.name || '—'}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] font-medium text-slate-400 uppercase tracking-tight">S/N:</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">{iss.asset?.serialNumber || '—'}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-col">
+                          <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">{iss.personnel?.fullName || iss.assignedTo || '—'}</p>
+                          {iss.personnel && (
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 italic mt-0.5">
+                              {iss.personnel.designationLookup?.name || iss.personnel.designation || 'No designation'}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-xs font-medium text-slate-600 dark:text-slate-400 tabular-nums">
+                        {new Date(iss.assignedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </td>
+                      <td className="px-4 py-4">
+                        {iss.returnedAt ? (
+                          <div className="flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                              Returned {new Date(iss.returnedAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Active</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {!iss.returnedAt && (
+                            <PermissionGate permissions={['issuances:edit']}>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await apiFetch(`/issuances/${iss.id}/return`, { method: 'POST', body: { condition: 'Good' } });
+                                    showToast('Asset returned successfully');
+                                    fetchIssuances();
+                                  } catch (e: any) { showToast(e instanceof ApiError ? e.message : 'Return failed'); }
+                                }}
+                                className="p-2 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all group-hover:shadow-sm"
+                                title="Return Asset"
+                              >
+                                <RotateCcw className="w-4 h-4" />
+                              </button>
+                            </PermissionGate>
+                          )}
+                          <button
+                            onClick={() => openAgreementPreview({
+                              personnelName: iss.personnel?.fullName,
+                              position: iss.personnel?.position || undefined,
+                              department: iss.personnel?.department || undefined,
+                              project: iss.personnel?.project || undefined,
+                              assetName: iss.asset?.name,
+                              serialNumber: iss.asset?.serialNumber || undefined,
+                              propertyNumber: iss.asset?.propertyNumber || undefined,
+                              condition: iss.condition,
+                              templateId: iss.agreementId || undefined,
+                              personnelId: iss.personnelId || undefined,
+                            })}
+                            className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#012061] dark:hover:text-white transition-all group-hover:shadow-sm"
+                            title="View Agreement"
+                          >
+                            <FileText className="w-4 h-4" />
                           </button>
-                        </PermissionGate>
-                      )}
-                      <button
-                        onClick={() => openAgreementPreview({
-                          personnelName: iss.personnel?.fullName,
-                          position: iss.personnel?.position || undefined,
-                          department: iss.personnel?.department || undefined,
-                          project: iss.personnel?.project || undefined,
-                          assetName: iss.asset?.name,
-                          serialNumber: iss.asset?.serialNumber || undefined,
-                          propertyNumber: iss.asset?.propertyNumber || undefined,
-                          condition: iss.condition,
-                          templateId: iss.agreementId || undefined,
-                          personnelId: iss.personnelId || undefined,
-                        })}
-                        className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#012061] dark:hover:text-white transition-all group-hover:shadow-sm"
-                        title="View Agreement"
-                      >
-                        <FileText className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        </div>
+                      </td>
+                    </tr>
+                    );
+                  }
+                  // Batch row — multiple assets in one agreement
+                  if (row.type !== 'batch') return null;
+                  const batchItems = row.items;
+                  const first = batchItems[0];
+                  const allReturned = batchItems.every((i: Issuance) => i.returnedAt);
+                  const anyReturned = batchItems.some((i: Issuance) => i.returnedAt);
+                  const batchId = row.batchId;
+                  return (
+                    <tr key={`batch-${batchId}`} className="bg-white dark:bg-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all group">
+                      <td className="px-4 py-4 align-top pt-5">
+                        <span className="inline-flex items-center justify-center w-4 h-4 rounded border border-slate-300 dark:border-slate-600 cursor-pointer"
+                          title="Bulk batch — select individual assets to return">
+                          <Package className="w-2.5 h-2.5 text-slate-300" />
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-col gap-1">
+                          <p className="font-bold text-sm" style={{ color: '#012061' }}>
+                            {batchItems.length} Assets
+                          </p>
+                          <ul className="space-y-0.5">
+                            {batchItems.map(bi => (
+                              <li key={bi.id} className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#f8931f]/40 shrink-0" />
+                                {bi.asset?.name || '—'}
+                                {bi.asset?.serialNumber && <span className="text-slate-400">· {bi.asset.serialNumber}</span>}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 align-top pt-5">
+                        <div className="flex flex-col">
+                          <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">{first.personnel?.fullName || first.assignedTo || '—'}</p>
+                          {first.personnel && (
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 italic mt-0.5">
+                              {first.personnel.designationLookup?.name || first.personnel.designation || 'No designation'}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-xs font-medium text-slate-600 dark:text-slate-400 tabular-nums align-top pt-5">
+                        {new Date(first.assignedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </td>
+                      <td className="px-4 py-4 align-top pt-5">
+                        {allReturned ? (
+                          <div className="flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                              All returned
+                            </span>
+                          </div>
+                        ) : anyReturned ? (
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                                {batchItems.filter(i => i.returnedAt).length}/{batchItems.length} returned
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Active</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-center align-top pt-5">
+                        <button
+                          onClick={() => openAgreementPreview({
+                            personnelName: first.personnel?.fullName,
+                            position: first.personnel?.position || undefined,
+                            department: first.personnel?.department || undefined,
+                            project: first.personnel?.project || undefined,
+                            assetName: `${batchItems.length} assets`,
+                            serialNumber: undefined,
+                            propertyNumber: undefined,
+                            condition: first.condition,
+                            templateId: first.agreementId || undefined,
+                            personnelId: first.personnelId || undefined,
+                            assets: batchItems.map(bi => ({
+                              name: bi.asset?.name || '—',
+                              serialNumber: bi.asset?.serialNumber || undefined,
+                              propertyNumber: bi.asset?.propertyNumber || undefined,
+                            })),
+                          })}
+                          className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#012061] dark:hover:text-white transition-all group-hover:shadow-sm"
+                          title="View Agreement"
+                        >
+                          <FileText className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
           </div>

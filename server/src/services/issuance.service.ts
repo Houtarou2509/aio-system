@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+import * as crypto from 'crypto';
 import { classifySeverity, generateSummary } from '../utils/auditHelpers';
 import { parseTemplate } from '../utils/templateParser';
 
@@ -168,6 +169,9 @@ export async function bulkIssueAssets(
   const { personnelId, assetIds, condition, notes, agreementTemplateId, propertyOfficerName, authorizedRepName } = params;
   const errors: Array<{ assetId: string; reason: string }> = [];
 
+  // Generate a single batch ID for all assignments in this bulk operation
+  const bulkBatchId = crypto.randomUUID();
+
   // Verify personnel exists and is active
   const personnel = await prisma.personnel.findUnique({ where: { id: personnelId } });
   if (!personnel) throw new Error('Personnel not found');
@@ -230,6 +234,7 @@ export async function bulkIssueAssets(
           notes: notes || null,
           agreementText: agreementText || null,
           agreementId: agreementId || null,
+          bulkBatchId,
         },
         include: {
           asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },

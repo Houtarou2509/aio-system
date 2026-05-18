@@ -221,11 +221,13 @@ export async function generateAgreementPdf(p: {
   templateId?: string;
   propertyOfficerName?: string;
   authorizedRepName?: string;
+  /** For bulk batches: all assets in this agreement */
+  assets?: Array<{ name: string; serialNumber?: string | null; propertyNumber?: string | null }>;
 }): Promise<Buffer> {
   const {
     personnelName, designation, project, institution, assetName, serialNumber,
     propertyNumber, condition, templateId,
-    propertyOfficerName, authorizedRepName,
+    propertyOfficerName, authorizedRepName, assets,
   } = p;
 
   const tmpl = templateId
@@ -241,6 +243,12 @@ export async function generateAgreementPdf(p: {
     serialNumber: serialNumber || undefined,
     propertyNumber: propertyNumber || undefined,
     condition: condition || undefined,
+    assets: assets?.map(a => ({
+      name: a.name,
+      serialNumber: a.serialNumber || undefined,
+      propertyNumber: a.propertyNumber || undefined,
+      condition: condition || undefined,
+    })) || undefined,
   });
 
   const cleanBody = stripSignatureSection(filled).replace(/\r\n?/g, '\n');

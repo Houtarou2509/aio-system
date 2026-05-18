@@ -84,6 +84,7 @@ model Assignment {
   notes         String?
   agreementText String?          // Resolved agreement content (separate from general notes)
   agreementId   String?          // FK to the template used for this issuance
+  bulkBatchId   String?          // Groups multiple assets issued together (1 agreement → N assets)
   asset         Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
   user          User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
   personnel     Personnel?       @relation("PersonnelAssignments", fields: [personnelId], references: [id], onDelete: SetNull)
