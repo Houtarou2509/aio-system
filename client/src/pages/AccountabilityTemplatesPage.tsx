@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   FileText, Plus, Trash2, Loader2, Check, Copy, Eye, Upload,
   X, Image as ImageIcon, Star, StarOff, AlertTriangle,
-  Wand2, ChevronRight,
+  Wand2, ChevronRight, History,
 } from 'lucide-react';
 import { apiFetch, ApiError, AUTH_EXPIRED_EVENT } from '../lib/api';
 
@@ -18,8 +18,25 @@ interface AgreementTemplate {
   isDefault: boolean;
   defaultPropertyOfficer: string | null;
   defaultAuthorizedRep: string | null;
+  currentVersion: number;
+  versions?: AgreementTemplateVersion[];
+  _count?: { versions: number };
   createdAt: string;
   updatedAt: string;
+}
+
+interface AgreementTemplateVersion {
+  id: string;
+  templateId: string;
+  versionNumber: number;
+  name: string;
+  title: string;
+  content: string;
+  headerLogo: string | null;
+  defaultPropertyOfficer: string | null;
+  defaultAuthorizedRep: string | null;
+  changeSummary: string | null;
+  createdAt: string;
 }
 
 interface PlaceholderRef {
@@ -93,6 +110,8 @@ export default function AccountabilityTemplatesPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [placeholders, setPlaceholders] = useState<PlaceholderRef[]>([]);
+  const [versionHistory, setVersionHistory] = useState<AgreementTemplateVersion[]>([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Editor state
@@ -158,6 +177,22 @@ export default function AccountabilityTemplatesPage() {
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onSessionExpired);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const fetchVersionHistory = useCallback(async (templateId: string) => {
+    if (!templateId || templateId === '__new__') {
+      setVersionHistory([]);
+      return;
+    }
+    try {
+      setLoadingVersions(true);
+      const res = await apiFetch(`/agreements/templates/${templateId}/versions`);
+      setVersionHistory(res.data ?? res);
+    } catch (err: any) {
+      if (!err.message?.includes('Session expired')) addToast('error', err.message || 'Failed to load template versions');
+    } finally {
+      setLoadingVersions(false);
+    }
+  }, [addToast]);
+
   /* ─── Populate editor ─── */
 
   function populateEditor(template: AgreementTemplate, newFlag: boolean) {
@@ -177,6 +212,7 @@ export default function AccountabilityTemplatesPage() {
   function selectTemplate(template: AgreementTemplate) {
     setSelectedId(template.id);
     populateEditor(template, false);
+    fetchVersionHistory(template.id);
   }
 
   function startNew() {
@@ -190,10 +226,12 @@ export default function AccountabilityTemplatesPage() {
       isDefault: false,
       defaultPropertyOfficer: null,
       defaultAuthorizedRep: null,
+      currentVersion: 1,
       createdAt: '',
       updatedAt: '',
     };
     setSelectedId('__new__');
+    setVersionHistory([]);
     populateEditor(blank, true);
   }
 
@@ -240,6 +278,7 @@ export default function AccountabilityTemplatesPage() {
         setTemplates(prev => [created, ...prev.filter(t => t.id !== '__new__')]);
         setSelectedId(created.id);
         populateEditor(created, false);
+        await fetchVersionHistory(created.id);
         addToast('success', 'Template created');
       } else if (selectedId) {
         const updated = await multipartRequest(
@@ -249,6 +288,7 @@ export default function AccountabilityTemplatesPage() {
         // If we changed isDefault, refresh all to reflect changes
         if (editIsDefault) await fetchTemplates();
         populateEditor(updated, false);
+        await fetchVersionHistory(updated.id);
         addToast('success', 'Template updated');
       }
     } catch (err: any) {
@@ -327,6 +367,11 @@ export default function AccountabilityTemplatesPage() {
   /* ─── Selected template data ─── */
 
   const selected = templates.find(t => t.id === selectedId);
+
+  useEffect(() => {
+    if (selectedId && selectedId !== '__new__') fetchVersionHistory(selectedId);
+    if (selectedId === '__new__') setVersionHistory([]);
+  }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ─── RENDER ─── */
 
@@ -432,7 +477,7 @@ export default function AccountabilityTemplatesPage() {
                             )}
                           </div>
                           <p className="text-[10px] text-slate-400 mt-1 pl-[22px]">
-                            {new Date(t.createdAt).toLocaleDateString('en-US', {
+                            v{t.currentVersion || 1} · {t._count?.versions ?? t.currentVersion ?? 1} revision{(t._count?.versions ?? t.currentVersion ?? 1) === 1 ? '' : 's'} · {new Date(t.createdAt).toLocaleDateString('en-US', {
                               month: 'short', day: 'numeric', year: 'numeric',
                             })}
                           </p>
@@ -486,6 +531,17 @@ export default function AccountabilityTemplatesPage() {
                   className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow"
                 />
               </div>
+
+              {!isNew && selected && (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[#012061]/10 bg-[#012061]/5 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#012061] px-2 py-1 font-semibold text-white">
+                    <History className="h-3 w-3 text-[#f8931f]" />
+                    Version {selected.currentVersion || 1}
+                  </span>
+                  <span>{versionHistory.length || selected._count?.versions || selected.currentVersion || 1} saved revision{(versionHistory.length || selected._count?.versions || selected.currentVersion || 1) === 1 ? '' : 's'}</span>
+                  <span className="text-slate-400">Latest edit {new Date(selected.updatedAt).toLocaleString()}</span>
+                </div>
+              )}
 
               {/* Set as Default */}
               <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -622,6 +678,39 @@ export default function AccountabilityTemplatesPage() {
                   </div>
                 </div>
               </div>
+
+              {!isNew && selected && (
+                <div>
+                  <label className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <History className="h-3.5 w-3.5 text-[#f8931f]" />
+                    Revision History
+                  </label>
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
+                    {loadingVersions ? (
+                      <div className="flex items-center gap-2 text-xs text-slate-400">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading revisions...
+                      </div>
+                    ) : versionHistory.length === 0 ? (
+                      <p className="text-xs text-slate-400">No saved revision rows yet.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {versionHistory.map(version => (
+                          <div key={version.id} className="flex items-start justify-between gap-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-900/50">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="rounded-full bg-[#012061] px-2 py-0.5 font-semibold text-white">v{version.versionNumber}</span>
+                                <span className="truncate font-medium text-slate-700 dark:text-slate-200">{version.name}</span>
+                              </div>
+                              <p className="mt-1 truncate text-[11px] text-slate-400">{version.changeSummary || 'Saved revision'} · {version.title}</p>
+                            </div>
+                            <span className="shrink-0 text-[11px] text-slate-400">{new Date(version.createdAt).toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Visual Variable Picker */}
               <div>

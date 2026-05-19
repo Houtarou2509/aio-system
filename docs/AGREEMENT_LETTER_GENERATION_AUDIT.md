@@ -11,16 +11,16 @@ The current implementation now covers the critical MVP requirements for a real a
 
 Remaining hardening items:
 
-1. Add template versioning so each document can point to an explicit template revision number.
-2. Add automated tests for lock/release cleanup, multi-asset template parsing, PDF generation, batch sign-off, historical document backfill, and document signed-copy management.
-3. Improve the default/fallback template quality when an admin has not created a production-ready default template.
+1. Add automated tests for lock/release cleanup, multi-asset template parsing, PDF generation, batch sign-off, historical document backfill, and document signed-copy management.
+2. Improve the default/fallback template quality when an admin has not created a production-ready default template.
 
 Completed hardening:
 
 - Historical `AgreementDocument` backfill is implemented through `POST /api/agreements/documents/backfill` with dry-run support, per-document audit logging, batch grouping, and signed-state preservation. Local verification backfilled 9 historical assignments into 8 immutable documents.
 - Document-level signed-copy UX is implemented in the Issuances PDF preview flow: rows show when a scanned signed PDF is on file, users can view signed copies directly, and the PDF preview modal provides document-level status, view/download, upload, and replace controls backed by `POST /api/agreements/documents/:id/signed-copy`. Signed-copy uploads/replacements now write `AgreementDocument` audit logs.
+- Template versioning is implemented with `AgreementTemplate.currentVersion`, immutable `AgreementTemplateVersion` rows, historical v1 backfill, issuance/backfill population of `AgreementDocument.templateVersion` + `templateVersionId`, and revision history visible in the Agreement Templates admin page.
 
-Recommendation: treat the current version as the operational MVP, then harden it with template versioning and automated regression coverage before relying on it as a permanent official document archive.
+Recommendation: treat the current version as the operational MVP, then harden it with automated regression coverage and a production-quality fallback template before relying on it as a permanent official document archive.
 
 ## Current System Map
 
@@ -392,33 +392,23 @@ Add template governance:
 
 Priority: P1
 
-## 8. Medium: Template versioning is missing
+## 8. Medium: Template versioning is implemented
 
 ### Current State
 
-Templates are mutable in place.
+Templates now maintain an immutable revision history via `AgreementTemplateVersion`. `AgreementTemplate.currentVersion` increments when revision-bearing fields change, historical templates were backfilled to v1, and new/backfilled `AgreementDocument` rows store both `templateVersion` and `templateVersionId`.
 
-### Risk
+The Agreement Templates admin page shows each template's current version and a revision-history panel.
 
-Historical issuances cannot prove which template wording was active at issuance time.
+### Remaining Risk
+
+No restore/compare action exists yet. Revision history is audit-visible, but admins cannot roll back from the UI.
 
 ### Recommendation
 
-Implement versioning:
+Optional future enhancement: add version compare/restore controls if admins need template rollback.
 
-- `AgreementTemplateVersion`
-  - `id`
-  - `templateId`
-  - `versionNumber`
-  - `title`
-  - `content`
-  - `headerLogo`
-  - signatory defaults
-  - `createdAt`
-  - `createdById`
-- Each agreement document stores the version used.
-
-Priority: P2
+Priority: Done
 
 ## 9. Medium: Digital sign-off is internal/admin-driven, not recipient-driven
 
@@ -686,7 +676,7 @@ Recommended renderer flow:
 | P1 | Add Zod validation for PDF endpoint | Prevents malformed PDFs and bad inputs |
 | P1 | Replace template editor preview with server parser preview | Prevents preview/final drift |
 | P1 | Replace local default/test template with production DRDF template | Prevents invalid official output |
-| P2 | Add template versioning | Auditability and legal/document traceability |
+| Done | Add template versioning | Implemented with `AgreementTemplateVersion`, document version links, migration backfill, and admin revision history |
 | P2 | Add document-level signed-copy storage | Correct ownership of uploaded signed PDFs |
 | P2 | Improve batch sign-off audit logs | Better per-assignment traceability |
 | P2 | Render real PDF tables | Better multi-asset readability |

@@ -77,6 +77,23 @@ router.get(
   },
 );
 
+// GET  /api/agreement/templates/:id/versions
+router.get(
+  '/templates/:id/versions',
+  authenticate,
+  hasPermission('settings:view'),
+  async (req: Request, res: Response) => {
+    try {
+      const template = await agreementService.getTemplate(String(req.params.id));
+      if (!template) return error(res, 'Template not found', 404);
+      const versions = await agreementService.listTemplateVersions(String(req.params.id));
+      success(res, versions);
+    } catch (e: any) {
+      error(res, e.message, 500);
+    }
+  },
+);
+
 // GET  /api/agreement/templates/:id
 router.get(
   '/templates/:id',

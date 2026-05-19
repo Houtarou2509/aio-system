@@ -333,18 +333,42 @@ model AgreementTemplate {
   isDefault              Boolean  @default(false)
   defaultPropertyOfficer String?  // default name for Property Officer signatory
   defaultAuthorizedRep   String?  // default name for Authorized Representative signatory
+  currentVersion         Int      @default(1)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
   assignments            Assignment[] @relation("AssignmentAgreement")
   documents              AgreementDocument[] @relation("AgreementDocumentTemplate")
+  versions               AgreementTemplateVersion[]
 
   @@map("agreement_templates")
+}
+
+model AgreementTemplateVersion {
+  id                     String   @id @default(uuid())
+  templateId             String
+  versionNumber          Int
+  name                   String
+  title                  String
+  content                String   @db.Text
+  headerLogo             String?
+  defaultPropertyOfficer String?
+  defaultAuthorizedRep   String?
+  changeSummary          String?
+  createdAt              DateTime @default(now())
+
+  template               AgreementTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  documents              AgreementDocument[] @relation("AgreementDocumentTemplateVersion")
+
+  @@unique([templateId, versionNumber])
+  @@index([templateId])
+  @@map("agreement_template_versions")
 }
 
 model AgreementDocument {
   id                         String   @id @default(uuid())
   documentNumber             String   @unique
   templateId                 String?
+  templateVersionId          String?
   templateVersion            Int?
   title                      String
   resolvedText               String   @db.Text
@@ -372,6 +396,7 @@ model AgreementDocument {
   updatedAt                  DateTime @updatedAt
 
   template                   AgreementTemplate? @relation("AgreementDocumentTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  templateVersionRecord      AgreementTemplateVersion? @relation("AgreementDocumentTemplateVersion", fields: [templateVersionId], references: [id], onDelete: SetNull)
   personnel                  Personnel? @relation("AgreementDocumentPersonnel", fields: [personnelId], references: [id], onDelete: SetNull)
   issuedBy                   User @relation("AgreementDocumentIssuedBy", fields: [issuedById], references: [id])
   signedUploadedBy           User? @relation("AgreementDocumentSignedUploadedBy", fields: [signedUploadedById], references: [id], onDelete: SetNull)
@@ -379,6 +404,7 @@ model AgreementDocument {
 
   @@index([bulkBatchId])
   @@index([personnelId])
+  @@index([templateVersionId])
   @@index([issuedAt])
   @@map("agreement_documents")
 }

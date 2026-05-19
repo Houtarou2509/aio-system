@@ -16,7 +16,7 @@ export async function getActiveIssuanceForAsset(assetId: string) {
       asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
       personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
       agreement: { select: { id: true, name: true, title: true } },
-        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
     },
   });
 }
@@ -56,7 +56,7 @@ export async function listIssuances(params: {
         asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
         personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
         agreement: { select: { id: true, name: true, title: true } },
-        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
       },
     }),
     prisma.assignment.count({ where }),
@@ -91,9 +91,16 @@ export async function createIssuance(params: {
   if (!personnel.isReadyForIssuance) throw new Error('Personnel is not ready for issuance');
 
   // Validate agreementId references an existing template (if provided)
+  let agreementTemplate: Awaited<ReturnType<typeof prisma.agreementTemplate.findUnique>> | null = null;
+  let agreementTemplateVersionId: string | null = null;
   if (agreementId) {
-    const tmpl = await prisma.agreementTemplate.findUnique({ where: { id: agreementId } });
-    if (!tmpl) throw new Error('Agreement template not found');
+    agreementTemplate = await prisma.agreementTemplate.findUnique({ where: { id: agreementId } });
+    if (!agreementTemplate) throw new Error('Agreement template not found');
+    const version = await prisma.agreementTemplateVersion.findUnique({
+      where: { templateId_versionNumber: { templateId: agreementTemplate.id, versionNumber: agreementTemplate.currentVersion } },
+      select: { id: true },
+    });
+    agreementTemplateVersionId = version?.id ?? null;
   }
 
   // Create immutable agreement document + assignment, then update asset status in a transaction
@@ -104,7 +111,9 @@ export async function createIssuance(params: {
       data: {
         documentNumber: makeDocumentNumber(),
         templateId: agreementId || null,
-        title: 'ISSUANCE & ACCOUNTABILITY AGREEMENT',
+        templateVersionId: agreementTemplateVersionId,
+        templateVersion: agreementTemplate?.currentVersion ?? null,
+        title: agreementTemplate?.title ?? 'ISSUANCE & ACCOUNTABILITY AGREEMENT',
         resolvedText: agreementText || '',
         personnelId,
         personnelNameSnapshot: personnel.fullName,
@@ -130,7 +139,7 @@ export async function createIssuance(params: {
         asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
         personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
         agreement: { select: { id: true, name: true, title: true } },
-        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
       },
     });
 
@@ -253,7 +262,9 @@ export async function bulkIssueAssets(
       data: {
         documentNumber: makeDocumentNumber(),
         templateId: agreementId || null,
-        title: 'ISSUANCE & ACCOUNTABILITY AGREEMENT',
+        templateVersionId: resolvedTemplate.templateVersionId ?? null,
+        templateVersion: resolvedTemplate.templateVersion ?? null,
+        title: resolvedTemplate.templateTitle ?? 'ISSUANCE & ACCOUNTABILITY AGREEMENT',
         resolvedText: agreementText || '',
         bulkBatchId,
         personnelId,
@@ -288,7 +299,7 @@ export async function bulkIssueAssets(
           asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
           personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
           agreement: { select: { id: true, name: true, title: true } },
-          agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
+          agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
         },
       });
 
@@ -431,7 +442,7 @@ export async function returnIssuance(
         asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
         personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
         agreement: { select: { id: true, name: true, title: true } },
-        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
       },
     });
 
@@ -705,6 +716,12 @@ export async function resolveTemplate(params: {
   const resolvedInstitution = institution;
 
   const templateContent = template?.content ?? '';
+  const templateVersionRecord = template
+    ? await prisma.agreementTemplateVersion.findUnique({
+        where: { templateId_versionNumber: { templateId: template.id, versionNumber: template.currentVersion } },
+        select: { id: true, versionNumber: true },
+      })
+    : null;
 
   // If no template exists, generate a default agreement text
   if (!templateContent) {
@@ -740,6 +757,8 @@ Authorized Representative`;
       resolvedText,
       templateName: null,
       templateId: null,
+      templateVersion: null,
+      templateVersionId: null,
       templateTitle: null,
       defaultPropertyOfficer: null,
       defaultAuthorizedRep: null,
@@ -791,6 +810,8 @@ Authorized Representative`;
     resolvedText: resolved,
     templateName: template?.name ?? null,
     templateId: template?.id ?? null,
+    templateVersion: templateVersionRecord?.versionNumber ?? template?.currentVersion ?? null,
+    templateVersionId: templateVersionRecord?.id ?? null,
     templateTitle: template?.title ?? null,
     defaultPropertyOfficer: template?.defaultPropertyOfficer ?? null,
     defaultAuthorizedRep: template?.defaultAuthorizedRep ?? null,

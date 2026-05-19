@@ -41,12 +41,30 @@ export async function getDefaultTemplate() {
 
 /** Get a single template by ID. */
 export async function getTemplate(id: string) {
-  return prisma.agreementTemplate.findUnique({ where: { id } });
+  return prisma.agreementTemplate.findUnique({
+    where: { id },
+    include: {
+      versions: { orderBy: { versionNumber: 'desc' }, take: 1 },
+    },
+  });
 }
 
 /** List all templates, newest first. */
 export function listTemplates() {
-  return prisma.agreementTemplate.findMany({ orderBy: { createdAt: 'desc' } });
+  return prisma.agreementTemplate.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: {
+      versions: { orderBy: { versionNumber: 'desc' }, take: 1 },
+      _count: { select: { versions: true } },
+    },
+  });
+}
+
+export function listTemplateVersions(templateId: string) {
+  return prisma.agreementTemplateVersion.findMany({
+    where: { templateId },
+    orderBy: { versionNumber: 'desc' },
+  });
 }
 
 /** Create a new template, optionally with a logo. */
@@ -54,24 +72,43 @@ export async function createTemplate(
   data: TemplateCreateData,
   logoPath?: string,
 ) {
-  // Only one default template allowed at a time
-  if (data.isDefault) {
-    await prisma.agreementTemplate.updateMany({
-      where: { isDefault: true },
-      data: { isDefault: false },
-    });
-  }
+  return prisma.$transaction(async (tx) => {
+    // Only one default template allowed at a time
+    if (data.isDefault) {
+      await tx.agreementTemplate.updateMany({
+        where: { isDefault: true },
+        data: { isDefault: false },
+      });
+    }
 
-  return prisma.agreementTemplate.create({
-    data: {
-      name: data.name,
-      title: data.title ?? "ISSUANCE & ACCOUNTABILITY AGREEMENT",
-      content: data.content,
-      isDefault: data.isDefault ?? false,
-      defaultPropertyOfficer: data.defaultPropertyOfficer ?? null,
-      defaultAuthorizedRep: data.defaultAuthorizedRep ?? null,
-      ...(logoPath ? { headerLogo: logoPath } : {}),
-    },
+    const template = await tx.agreementTemplate.create({
+      data: {
+        name: data.name,
+        title: data.title ?? "ISSUANCE & ACCOUNTABILITY AGREEMENT",
+        content: data.content,
+        isDefault: data.isDefault ?? false,
+        defaultPropertyOfficer: data.defaultPropertyOfficer ?? null,
+        defaultAuthorizedRep: data.defaultAuthorizedRep ?? null,
+        currentVersion: 1,
+        ...(logoPath ? { headerLogo: logoPath } : {}),
+      },
+    });
+
+    await tx.agreementTemplateVersion.create({
+      data: {
+        templateId: template.id,
+        versionNumber: 1,
+        name: template.name,
+        title: template.title,
+        content: template.content,
+        headerLogo: template.headerLogo,
+        defaultPropertyOfficer: template.defaultPropertyOfficer,
+        defaultAuthorizedRep: template.defaultAuthorizedRep,
+        changeSummary: 'Initial version',
+      },
+    });
+
+    return template;
   });
 }
 
@@ -84,14 +121,6 @@ export async function updateTemplate(
   const existing = await prisma.agreementTemplate.findUnique({ where: { id } });
   if (!existing) throw new Error('Template not found');
 
-  // Unset old default if this one becomes the new default
-  if (data.isDefault) {
-    await prisma.agreementTemplate.updateMany({
-      where: { isDefault: true, id: { not: id } },
-      data: { isDefault: false },
-    });
-  }
-
   const updateData: any = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.title !== undefined) updateData.title = data.title ?? "ISSUANCE & ACCOUNTABILITY AGREEMENT";
@@ -101,7 +130,55 @@ export async function updateTemplate(
   if (data.defaultAuthorizedRep !== undefined) updateData.defaultAuthorizedRep = data.defaultAuthorizedRep || null;
   if (logoPath && logoPath !== '') updateData.headerLogo = logoPath;
 
-  return prisma.agreementTemplate.update({ where: { id }, data: updateData });
+  const nextSnapshot = {
+    name: updateData.name ?? existing.name,
+    title: updateData.title ?? existing.title,
+    content: updateData.content ?? existing.content,
+    headerLogo: updateData.headerLogo ?? existing.headerLogo,
+    defaultPropertyOfficer: updateData.defaultPropertyOfficer ?? existing.defaultPropertyOfficer,
+    defaultAuthorizedRep: updateData.defaultAuthorizedRep ?? existing.defaultAuthorizedRep,
+  };
+
+  const revisionChanged =
+    nextSnapshot.name !== existing.name ||
+    nextSnapshot.title !== existing.title ||
+    nextSnapshot.content !== existing.content ||
+    nextSnapshot.headerLogo !== existing.headerLogo ||
+    nextSnapshot.defaultPropertyOfficer !== existing.defaultPropertyOfficer ||
+    nextSnapshot.defaultAuthorizedRep !== existing.defaultAuthorizedRep;
+
+  return prisma.$transaction(async (tx) => {
+    // Unset old default if this one becomes the new default
+    if (data.isDefault) {
+      await tx.agreementTemplate.updateMany({
+        where: { isDefault: true, id: { not: id } },
+        data: { isDefault: false },
+      });
+    }
+
+    const versionNumber = revisionChanged ? existing.currentVersion + 1 : existing.currentVersion;
+    if (revisionChanged) updateData.currentVersion = versionNumber;
+
+    const template = await tx.agreementTemplate.update({ where: { id }, data: updateData });
+
+    if (revisionChanged) {
+      await tx.agreementTemplateVersion.create({
+        data: {
+          templateId: id,
+          versionNumber,
+          name: nextSnapshot.name,
+          title: nextSnapshot.title,
+          content: nextSnapshot.content,
+          headerLogo: nextSnapshot.headerLogo,
+          defaultPropertyOfficer: nextSnapshot.defaultPropertyOfficer,
+          defaultAuthorizedRep: nextSnapshot.defaultAuthorizedRep,
+          changeSummary: 'Template edited',
+        },
+      });
+    }
+
+    return template;
+  });
 }
 
 /** Delete a template and optionally its associated logo file. */
@@ -177,7 +254,8 @@ export async function listAgreementDocuments(params: { personnelId?: string; ass
     orderBy: { issuedAt: 'desc' },
     include: {
       assignments: { select: { id: true, asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true } } } },
-      template: { select: { id: true, name: true, title: true } },
+      template: { select: { id: true, name: true, title: true, currentVersion: true } },
+      templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true, changeSummary: true } },
       issuedBy: { select: { id: true, username: true, fullName: true } },
     },
   });
@@ -265,7 +343,7 @@ export async function backfillAgreementDocuments(params: { performedById: string
           institution: { select: { name: true } },
         },
       },
-      agreement: { select: { id: true, name: true, title: true, headerLogo: true, defaultPropertyOfficer: true, defaultAuthorizedRep: true } },
+      agreement: { select: { id: true, name: true, title: true, headerLogo: true, defaultPropertyOfficer: true, defaultAuthorizedRep: true, currentVersion: true, versions: { orderBy: { versionNumber: 'desc' }, take: 1, select: { id: true, versionNumber: true } } } },
     },
   });
 
@@ -326,6 +404,8 @@ export async function backfillAgreementDocuments(params: { performedById: string
         data: {
           documentNumber: makeDocumentNumber('AGR-BF'),
           templateId: first.agreementId || null,
+          templateVersionId: first.agreement?.versions?.[0]?.id || null,
+          templateVersion: first.agreement?.versions?.[0]?.versionNumber || first.agreement?.currentVersion || null,
           title: first.agreement?.title || 'ISSUANCE & ACCOUNTABILITY AGREEMENT',
           resolvedText: buildHistoricalAgreementText(first, assets),
           headerLogo: first.agreement?.headerLogo || null,
