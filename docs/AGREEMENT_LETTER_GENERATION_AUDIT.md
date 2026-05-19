@@ -1,6 +1,6 @@
 # Agreement Letter Generation Audit & Recommendations
 
-Audit timestamp: 2026-05-19 11:53 +08
+Audit timestamp: 2026-05-20 06:38 +08
 Scope: AIO System accountability agreement templates, issuance agreement resolution, PDF generation, PDF preview/download/upload, and recipient sign-off flow.
 
 ## Executive Summary
@@ -11,16 +11,18 @@ The current implementation now covers the critical MVP requirements for a real a
 
 Remaining hardening items:
 
-1. Add automated tests for lock/release cleanup, multi-asset template parsing, PDF generation, batch sign-off, historical document backfill, and document signed-copy management.
-2. Improve the default/fallback template quality when an admin has not created a production-ready default template.
+None for the tracked hardening set in this audit. Future enhancements remain listed below by priority, but the previously pending hardening items are now complete.
 
 Completed hardening:
 
 - Historical `AgreementDocument` backfill is implemented through `POST /api/agreements/documents/backfill` with dry-run support, per-document audit logging, batch grouping, and signed-state preservation. Local verification backfilled 9 historical assignments into 8 immutable documents.
 - Document-level signed-copy UX is implemented in the Issuances PDF preview flow: rows show when a scanned signed PDF is on file, users can view signed copies directly, and the PDF preview modal provides document-level status, view/download, upload, and replace controls backed by `POST /api/agreements/documents/:id/signed-copy`. Signed-copy uploads/replacements now write `AgreementDocument` audit logs.
 - Template versioning is implemented with `AgreementTemplate.currentVersion`, immutable `AgreementTemplateVersion` rows, historical v1 backfill, issuance/backfill population of `AgreementDocument.templateVersion` + `templateVersionId`, and revision history visible in the Agreement Templates admin page.
+- Automated agreement-document regression coverage is implemented in `tests/integration/agreement-document-hardening.test.ts` for asset lock/release cleanup, multi-asset template parsing, multi-page PDF generation from saved agreement text, batch sign-off metadata, historical document backfill, document signed-copy upload/replacement auditing, and deterministic fallback-template behavior.
+- Default/fallback template quality is hardened. When no explicit default template exists, the system now uses a deterministic DRDF-safe fallback agreement template instead of selecting an arbitrary most-recent template. Fallback-generated documents intentionally carry no template ID/version link, preserving historical integrity and template version semantics.
+- Issuances pagination Prev/Next navigation is implemented in `client/src/pages/IssuancesPage.tsx`; the page state is sent to `/api/issuances` and reset when filters/search change.
 
-Recommendation: treat the current version as the operational MVP, then harden it with automated regression coverage and a production-quality fallback template before relying on it as a permanent official document archive.
+Recommendation: treat the current version as the operational MVP for the audited agreement-document hardening scope. Continue future improvements through the optional enhancement list below rather than reopening completed hardening items.
 
 ## Current System Map
 
@@ -101,6 +103,7 @@ Current frontend behavior:
 
 - `cd server && npx prisma validate` passed.
 - `npm run build` passed.
+- `npx vitest run --no-file-parallelism --config server/vitest.config.ts tests/integration/agreement-document-hardening.test.ts` passed with 8 regression tests, including fallback-template behavior.
 - Template parser supports:
   - `{{assetParagraph}}`
   - `{{assetTable}}`
@@ -110,25 +113,15 @@ Current frontend behavior:
   - `{{#ifMultipleAssets}}...{{/ifMultipleAssets}}`
 - Active DB has the expected assignment columns.
 - Active DB has a default template.
+- Code path no longer falls back to an arbitrary newest template when no explicit default exists.
+- Issuances pagination uses API `page`, `limit`, `total`, and `totalPages` metadata for Prev/Next navigation.
 - Direct PDF generation produced a PDF buffer successfully.
 
-### Warning From PDF Text Extraction
+### Fallback Template Hardening
 
-A sample generated PDF extracted text resembling:
+The fallback path now produces a deterministic DRDF-safe accountability agreement when no explicit default template exists or the default template content is blank. The fallback includes DRDF identity/address, recipient/personnel context, single-vs-multiple asset sections, accountability terms, and signature placeholders.
 
-```text
-LSAHP TITLE
-Issued: May 19, 2026
-Recipient: Juan Dela Cruz
-Assets: 3
-Pending recipient signoff
-LSAHP LETTER BODY
-...
-TEST Officer
-Test Representative
-```
-
-This suggests the current default template in the local DB may be test/sample content, not a production-ready DRDF accountability letter. Even if the engine works, the active default template content itself needs review.
+The code no longer selects the most recently created template as an implicit fallback. Historical integrity is preserved: when the fallback is used, generated document snapshots keep `templateId`, `templateVersion`, and `templateVersionId` as `null` rather than pretending a database template/version was used.
 
 ## Major Findings & Recommendations
 
@@ -369,28 +362,30 @@ Validate:
 
 Priority: P1
 
-## 7. Medium: Default template content needs production control
+## 7. Medium: Default/fallback template quality is hardened
 
 ### Current State
 
-The local default template appears to contain test/sample labels such as `LSAHP TITLE`, `LSAHP LETTER BODY`, `TEST Officer`, and `Test Representative`.
+The runtime fallback path now uses a deterministic DRDF-safe agreement template from code when no explicit default template exists or the default template content is blank. It no longer selects an arbitrary most-recent template.
 
-### Risk
+Fallback output includes DRDF identity/address, recipient/personnel context, single-vs-multiple asset handling through the same parser, accountability terms, and signature placeholders. Because fallback content is not a database template revision, generated snapshots keep template identity/version fields null when fallback is used.
 
-A user can generate a valid PDF with invalid official wording/header/signatories.
+### Remaining Risk
+
+Template governance is still optional future work. Admin-created default templates can still contain poor wording if entered incorrectly, but absence of a default no longer produces arbitrary/test-template output.
 
 ### Recommendation
 
-Add template governance:
+Optional future governance:
 
-- Seed a production DRDF default template.
+- Seed a production DRDF default template as editable admin content if DRDF wants a canonical DB-backed default.
 - Add “Draft / Active / Archived” status to templates.
 - Only active templates can be used for issuance.
 - Require explicit confirmation before making a template default.
 - Show “last updated by / updated at”.
 - Consider admin-only template editing using a more precise permission than `settings:view`.
 
-Priority: P1
+Priority: Done for fallback hardening; optional P2 for broader governance
 
 ## 8. Medium: Template versioning is implemented
 
@@ -675,7 +670,7 @@ Recommended renderer flow:
 | P1 | Fix edited agreement textarea behavior | Prevents user-visible text differing from saved/final text |
 | P1 | Add Zod validation for PDF endpoint | Prevents malformed PDFs and bad inputs |
 | P1 | Replace template editor preview with server parser preview | Prevents preview/final drift |
-| P1 | Replace local default/test template with production DRDF template | Prevents invalid official output |
+| Done | Add deterministic DRDF-safe fallback template and remove arbitrary newest-template fallback | Prevents invalid fallback output and preserves template-version integrity |
 | Done | Add template versioning | Implemented with `AgreementTemplateVersion`, document version links, migration backfill, and admin revision history |
 | P2 | Add document-level signed-copy storage | Correct ownership of uploaded signed PDFs |
 | P2 | Improve batch sign-off audit logs | Better per-assignment traceability |
@@ -684,8 +679,8 @@ Recommended renderer flow:
 
 ## Final Recommendation
 
-The system is ready as a prototype/operational MVP, but not yet robust enough as the permanent official agreement-letter engine.
+The audited agreement-document hardening scope is now operationally complete for the tracked items.
 
 The most important change is conceptual: stop treating agreement PDFs as live renders of current database/template state. Treat each agreement as an immutable issued document with a snapshot of wording, personnel, assets, signatories, and sign-off state.
 
-Once that is done, visual polish and template UX improvements will be much safer because the underlying recordkeeping will be stable.
+The remaining items in this document should be treated as optional future enhancements unless a new audit finding reclassifies them.

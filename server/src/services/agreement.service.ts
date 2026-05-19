@@ -28,15 +28,45 @@ interface TemplateUpdateData {
   defaultAuthorizedRep?: string;
 }
 
+export const FALLBACK_AGREEMENT_TITLE = 'ISSUANCE & ACCOUNTABILITY AGREEMENT';
+
+export const FALLBACK_AGREEMENT_TEMPLATE = `ISSUANCE AND ACCOUNTABILITY AGREEMENT
+
+This Accountability Agreement is executed by and between the Demographic Research and Development Foundation, Inc. (DRDF), 2nd Floor Palma Hall, UP Diliman, Quezon City, and {{personnelName}}{{designationComma}}{{institutionText}}{{projectText}}, for the issuance and custody of DRDF property described below.
+
+{{#ifSingleAsset}}The recipient acknowledges receipt of the following asset in good working condition unless otherwise stated:
+
+{{assetParagraph}}{{/ifSingleAsset}}{{#ifMultipleAssets}}The recipient acknowledges receipt of the following {{assetCount}} assets in good working condition unless otherwise stated:
+
+{{assetTable}}{{/ifMultipleAssets}}
+
+Terms and Conditions:
+1. The issued asset(s) shall be used only for official DRDF work, approved project activities, or other authorized purposes.
+2. The recipient shall exercise due care in handling, securing, and maintaining the asset(s) and shall keep them protected from loss, theft, damage, misuse, or unauthorized access.
+3. The asset(s) shall not be sold, lent, transferred, reassigned, modified, or disposed of without prior approval and proper documentation from the authorized DRDF representative or Property Officer.
+4. Any loss, theft, damage, malfunction, or security incident involving the asset(s) shall be reported immediately to the Property Officer or authorized DRDF representative.
+5. The recipient shall make the asset(s) available for inspection, inventory, repair, reassignment, or recall when requested by DRDF.
+6. The recipient shall return the asset(s), including accessories and related materials, upon completion of assignment, separation from DRDF, transfer of responsibility, project closeout, or upon demand by DRDF.
+7. The recipient accepts accountability for the asset(s) from the date of issuance until the asset(s) are officially returned, transferred, or otherwise cleared in DRDF records.
+
+By signing below, the recipient acknowledges receipt of the asset(s), confirms that the information stated in this agreement is correct to the best of their knowledge, and accepts the accountability obligations stated above.
+
+________________________________________
+{{personnelName}} (Recipient)
+
+________________________________________
+Property Officer
+
+________________________________________
+Authorized Representative`;
+
 /* ═══════════════════════════════════════════════════════
    TEMPLATES CRUD
    ═══════════════════════════════════════════════════════ */
 
-/** Get the default template, falling back to the most recent. */
+/** Get the explicit default template. Never fall back to an arbitrary recent template. */
 export async function getDefaultTemplate() {
-  let t = await prisma.agreementTemplate.findFirst({ where: { isDefault: true } });
-  if (!t) t = await prisma.agreementTemplate.findFirst({ orderBy: { createdAt: 'desc' } });
-  return t;
+  return prisma.agreementTemplate.findFirst({ where: { isDefault: true } });
 }
 
 /** Get a single template by ID. */
@@ -566,11 +596,12 @@ export async function generateAgreementPdf(p: {
   const tmpl = templateId
     ? (await prisma.agreementTemplate.findUnique({ where: { id: templateId } })) || (await getDefaultTemplate())
     : await getDefaultTemplate();
+  const templateContent = tmpl?.content?.trim() ? tmpl.content : FALLBACK_AGREEMENT_TEMPLATE;
 
-  const titleText = p.title || tmpl?.title || 'ISSUANCE & ACCOUNTABILITY AGREEMENT';
+  const titleText = p.title || tmpl?.title || FALLBACK_AGREEMENT_TITLE;
   const filled = agreementText && agreementText.trim().length > 0
     ? agreementText
-    : parseTemplate(tmpl?.content ?? '', {
+    : parseTemplate(templateContent, {
         personnelName,
         designation: designation || position || undefined,
         project: project || undefined,

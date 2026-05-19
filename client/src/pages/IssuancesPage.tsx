@@ -134,6 +134,7 @@ export default function IssuancesPage() {
   const [searchParams] = useSearchParams();
   const preFilterPersonnel = searchParams.get('personnel');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'returned'>(preFilterPersonnel ? 'active' : 'all');
+  const [page, setPage] = useState(1);
   const [showReturn, setShowReturn] = useState(false);
   const [showQRReturn, setShowQRReturn] = useState(false);
   const [showBulkWizard, setShowBulkWizard] = useState(false);
@@ -155,6 +156,7 @@ export default function IssuancesPage() {
       if (search) params.set('search', search);
       params.set('status', statusFilter);
       if (preFilterPersonnel) params.set('personnelId', preFilterPersonnel);
+      params.set('page', String(page));
       params.set('limit', '50');
       const res = await apiFetch(`/issuances?${params}`);
       setIssuances(res.data || []);
@@ -162,7 +164,7 @@ export default function IssuancesPage() {
     } catch {} finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchIssuances(); }, [search, statusFilter]);
+  useEffect(() => { fetchIssuances(); }, [search, statusFilter, preFilterPersonnel, page]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -401,7 +403,7 @@ export default function IssuancesPage() {
               type="text"
               placeholder="Search asset, serial, personnel..."
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
               className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 pl-9 pr-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none transition-colors"
             />
           </div>
@@ -409,7 +411,7 @@ export default function IssuancesPage() {
           {/* Status filter */}
           <select
             value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value as any)}
+            onChange={e => { setStatusFilter(e.target.value as any); setPage(1); }}
             className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
           >
             <option value="all">Status: All</option>
@@ -771,14 +773,10 @@ export default function IssuancesPage() {
       {meta && meta.totalPages > 1 && (
         <div className="flex items-center justify-center gap-2 border-t border-slate-200 dark:border-slate-700 px-6 py-2 shrink-0 bg-white dark:bg-slate-800">
           <button className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
-            disabled={meta.page <= 1} onClick={() => {
-              // TODO: page navigation if supported by API
-            }}>Prev</button>
+            disabled={meta.page <= 1 || loading} onClick={() => setPage(Math.max(1, meta.page - 1))}>Prev</button>
           <span className="text-sm text-slate-500 dark:text-slate-400">Page {meta.page} of {meta.totalPages}</span>
           <button className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
-            disabled={meta.page >= meta.totalPages} onClick={() => {
-              // TODO: page navigation if supported by API
-            }}>Next</button>
+            disabled={meta.page >= meta.totalPages || loading} onClick={() => setPage(Math.min(meta.totalPages, meta.page + 1))}>Next</button>
         </div>
       )}
 

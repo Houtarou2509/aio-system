@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma';
 import * as crypto from 'crypto';
 import { classifySeverity, generateSummary } from '../utils/auditHelpers';
 import { parseTemplate } from '../utils/templateParser';
-import { makeDocumentNumber } from './agreement.service';
+import { FALLBACK_AGREEMENT_TEMPLATE, FALLBACK_AGREEMENT_TITLE, makeDocumentNumber } from './agreement.service';
 
 
 
@@ -693,16 +693,13 @@ export async function resolveTemplate(params: {
   // For backward compat, also expose the first asset as singular
   const asset = assets[0];
 
-  // Fetch template (default or specified)
+  // Fetch the requested template or the explicit default. Do not use arbitrary "most recent" templates.
   let template;
   if (templateId) {
     template = await prisma.agreementTemplate.findUnique({ where: { id: templateId } });
   }
   if (!template) {
     template = await prisma.agreementTemplate.findFirst({ where: { isDefault: true } });
-  }
-  if (!template) {
-    template = await prisma.agreementTemplate.findFirst({ orderBy: { createdAt: 'desc' } });
   }
 
   // Prefer FK lookup names over scalar fields for template resolution
@@ -715,76 +712,14 @@ export async function resolveTemplate(params: {
   const resolvedProject = project;
   const resolvedInstitution = institution;
 
-  const templateContent = template?.content ?? '';
-  const templateVersionRecord = template
+  const usingFallbackTemplate = !template?.content?.trim();
+  const templateContent = usingFallbackTemplate ? FALLBACK_AGREEMENT_TEMPLATE : (template?.content ?? FALLBACK_AGREEMENT_TEMPLATE);
+  const templateVersionRecord = template && !usingFallbackTemplate
     ? await prisma.agreementTemplateVersion.findUnique({
         where: { templateId_versionNumber: { templateId: template.id, versionNumber: template.currentVersion } },
         select: { id: true, versionNumber: true },
       })
     : null;
-
-  // If no template exists, generate a default agreement text
-  if (!templateContent) {
-    const formattedDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    const resolvedText = `ISSUANCE AND ACCOUNTABILITY AGREEMENT
-
-Date: ${formattedDate}
-
-This certifies that ${personnel.fullName}${resolvedDesignation ? `, ${resolvedDesignation}` : ''}${resolvedInstitution ? ` of ${resolvedInstitution}` : ''}${resolvedProject ? ` (${resolvedProject})` : ''} has been issued the following asset for official use:
-
-Asset: ${asset.name}${asset.serialNumber ? `\nSerial Number: ${asset.serialNumber}` : ''}${asset.propertyNumber ? `\nProperty Number: ${asset.propertyNumber}` : ''}
-
-Terms and Conditions:
-1. The issued asset shall be used solely for official business purposes.
-2. The recipient shall exercise due diligence in the care and protection of the asset.
-3. The asset shall not be transferred to another individual without proper documentation.
-4. Any damage, loss, or theft must be reported immediately to the Property Officer.
-5. The asset shall be returned upon resignation, transfer, or upon request by management.
-6. The recipient assumes full accountability for the asset during the period of possession.
-
-By signing below, the recipient acknowledges receipt and accepts the terms stated above.
-
-________________________________________
-${personnel.fullName} (Recipient)
-
-________________________________________
-Property Officer
-
-________________________________________
-Authorized Representative`;
-
-    return {
-      resolvedText,
-      templateName: null,
-      templateId: null,
-      templateVersion: null,
-      templateVersionId: null,
-      templateTitle: null,
-      defaultPropertyOfficer: null,
-      defaultAuthorizedRep: null,
-      headerLogo: null,
-      resolvedData: {
-        personnelName: personnel.fullName,
-        designation: resolvedDesignation,
-        project: resolvedProject,
-        institution: resolvedInstitution,
-        assetName: asset.name,
-        serialNumber: asset.serialNumber,
-        propertyNumber: asset.propertyNumber,
-        condition: condition || 'Good',
-        ...(assets.length > 1 ? {
-          assets: assets.map(a => ({
-            id: a.id,
-            name: a.name,
-            serialNumber: a.serialNumber,
-            propertyNumber: a.propertyNumber,
-            condition: condition || 'Good',
-          })),
-        } : {}),
-        assetCount: assets.length,
-      },
-    };
-  }
 
   // Use parseTemplate to resolve placeholders
   const resolved = parseTemplate(templateContent, {
@@ -808,14 +743,14 @@ Authorized Representative`;
 
   return {
     resolvedText: resolved,
-    templateName: template?.name ?? null,
-    templateId: template?.id ?? null,
-    templateVersion: templateVersionRecord?.versionNumber ?? template?.currentVersion ?? null,
-    templateVersionId: templateVersionRecord?.id ?? null,
-    templateTitle: template?.title ?? null,
-    defaultPropertyOfficer: template?.defaultPropertyOfficer ?? null,
-    defaultAuthorizedRep: template?.defaultAuthorizedRep ?? null,
-    headerLogo: template?.headerLogo ?? null,
+    templateName: usingFallbackTemplate ? null : template?.name ?? null,
+    templateId: usingFallbackTemplate ? null : template?.id ?? null,
+    templateVersion: usingFallbackTemplate ? null : templateVersionRecord?.versionNumber ?? template?.currentVersion ?? null,
+    templateVersionId: usingFallbackTemplate ? null : templateVersionRecord?.id ?? null,
+    templateTitle: usingFallbackTemplate ? FALLBACK_AGREEMENT_TITLE : template?.title ?? null,
+    defaultPropertyOfficer: usingFallbackTemplate ? null : template?.defaultPropertyOfficer ?? null,
+    defaultAuthorizedRep: usingFallbackTemplate ? null : template?.defaultAuthorizedRep ?? null,
+    headerLogo: usingFallbackTemplate ? null : template?.headerLogo ?? null,
     // Also return the resolved data so the client can show a preview
     resolvedData: {
       personnelName: personnel.fullName,
