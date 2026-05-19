@@ -4,7 +4,7 @@ import { useSavedFilters } from '../../hooks/useSavedFilters';
 import { useLookupOptions } from '@/hooks/useLookupOptions';
 
 const ASSET_TYPES = ['DESKTOP', 'LAPTOP', 'FURNITURE', 'EQUIPMENT', 'PERIPHERAL', 'OTHER'];
-const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
+const ASSET_STATUSES = ['AVAILABLE', 'PENDING_ASSIGNMENT', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
 
 interface Props {
   filters: AssetFilters;

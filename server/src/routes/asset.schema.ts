@@ -7,7 +7,7 @@ export const createAssetSchema = z.object({
   serialNumber: z.string().optional(),
   purchasePrice: z.coerce.number().nonnegative().optional(),
   purchaseDate: z.string().optional().transform(v => v ? new Date(v).toISOString() : undefined),
-  status: z.enum(['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST']).default('AVAILABLE'),
+  status: z.enum(['AVAILABLE', 'PENDING_ASSIGNMENT', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST']).default('AVAILABLE'),
   location: z.string().optional(),
   assignedTo: z.string().optional(),
   propertyNumber: z.string().optional(),
@@ -32,7 +32,7 @@ export const listAssetsQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
   type: z.string().optional(),
-  status: z.enum(['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST']).optional(),
+  status: z.enum(['AVAILABLE', 'PENDING_ASSIGNMENT', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST']).optional(),
   location: z.string().optional(),
   assignedTo: z.string().optional(),
   search: z.string().optional(),
@@ -72,7 +72,7 @@ export const bulkReturnSchema = z.object({
 export const bulkUpdateSchema = z.object({
   assetIds: z.array(z.string().uuid()).min(1).max(100),
   location: z.string().optional(),
-  status: z.enum(['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST']).optional(),
+  status: z.enum(['AVAILABLE', 'PENDING_ASSIGNMENT', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST']).optional(),
 }).refine((data) => data.location || data.status, {
   message: 'At least one of location or status is required',
 });

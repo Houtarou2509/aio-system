@@ -25,6 +25,7 @@ interface AgreementTemplate {
 interface PlaceholderRef {
   key: string;
   description: string;
+  group?: string;
 }
 
 type ToastType = 'success' | 'error' | 'info';
@@ -49,6 +50,10 @@ const SAMPLE_DATA: Record<string, string> = {
   '{{serialNumber}}': 'SN-DL-2026-00123',
   '{{propertyNumber}}': 'PN-2026-000456',
   '{{condition}}': 'Good',
+  '{{assetCount}}': '3',
+  '{{assetParagraph}}': 'Asset: Dell Latitude 5540\nSerial Number: SN-DL-2026-00123\nProperty Number: PN-2026-000456\nCondition: Good',
+  '{{assetTable}}': 'No.  Asset Name                 Serial Number          Property Number        Condition\n───  ─────────────────────────  ─────────────────────  ─────────────────────  ─────────\n1    Dell Latitude 5540         SN-DL-2026-00123       PN-2026-000456         Good\n2    HP LaserJet Pro            SN-HP-2026-00077       PN-2026-000457         Good\n3    Logitech Dock              SN-LG-2026-00088       PN-2026-000458         Good',
+  '{{assetSection}}': 'No.  Asset Name                 Serial Number          Property Number        Condition\n───  ─────────────────────────  ─────────────────────  ─────────────────────  ─────────\n1    Dell Latitude 5540         SN-DL-2026-00123       PN-2026-000456         Good\n2    HP LaserJet Pro            SN-HP-2026-00077       PN-2026-000457         Good\n3    Logitech Dock              SN-LG-2026-00088       PN-2026-000458         Good',
   '{{date}}': new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
 };
 
@@ -104,6 +109,7 @@ export default function AccountabilityTemplatesPage() {
   const [isNew, setIsNew] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const contentInputRef = useRef<HTMLTextAreaElement>(null);
 
   /* ─── Toast helper ─── */
 
@@ -274,24 +280,34 @@ export default function AccountabilityTemplatesPage() {
     }
   }
 
-  /* ─── Copy placeholder ─── */
+  /* ─── Visual variable picker ─── */
 
-  async function copyPlaceholder(key: string) {
-    try {
-      await navigator.clipboard.writeText(key);
-      setCopiedKey(key);
-      setTimeout(() => setCopiedKey(null), 1500);
-    } catch {
-      // fallback
-      const ta = document.createElement('textarea');
-      ta.value = key;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      setCopiedKey(key);
-      setTimeout(() => setCopiedKey(null), 1500);
+  function insertPlaceholder(key: string) {
+    const textarea = contentInputRef.current;
+    const insert = key;
+    if (!textarea) {
+      setEditContent(prev => `${prev}${insert}`);
+      return;
     }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    setEditContent(prev => `${prev.slice(0, start)}${insert}${prev.slice(end)}`);
+    setCopiedKey(key);
+    setTimeout(() => {
+      textarea.focus();
+      const cursor = start + insert.length;
+      textarea.setSelectionRange(cursor, cursor);
+    }, 0);
+    setTimeout(() => setCopiedKey(null), 1200);
+  }
+
+  function placeholdersByGroup() {
+    return placeholders.reduce<Record<string, PlaceholderRef[]>>((acc, ph) => {
+      const group = ph.group || 'General';
+      if (!acc[group]) acc[group] = [];
+      acc[group].push(ph);
+      return acc;
+    }, {});
   }
 
   /* ─── Preview helpers ─── */
@@ -299,6 +315,9 @@ export default function AccountabilityTemplatesPage() {
   function getPreviewContent(): string {
     let result = editContent;
     if (!result) return '';
+    result = result
+      .replace(/\{\{#ifSingleAsset\}\}([\s\S]*?)\{\{\/ifSingleAsset\}\}/g, '')
+      .replace(/\{\{#ifMultipleAssets\}\}([\s\S]*?)\{\{\/ifMultipleAssets\}\}/g, '$1');
     for (const [key, value] of Object.entries(SAMPLE_DATA)) {
       result = result.split(key).join(value);
     }
@@ -562,9 +581,10 @@ export default function AccountabilityTemplatesPage() {
                 </label>
                 <div className="relative">
                   <textarea
+                    ref={contentInputRef}
                     value={editContent}
                     onChange={e => setEditContent(e.target.value)}
-                    placeholder={`Dear {{fullName}}{{designationComma}},\n\nThis letter serves as confirmation that you have been issued the following asset...\n\nAsset: {{assetName}}\nSerial Number: {{serialNumber}}\nProperty Number: {{propertyNumber}}\nCondition: {{condition}}\n\nIssued on: {{date}}\n\nSignature: _______________`}
+                    placeholder={`Dear {{fullName}}{{designationComma}},\n\nThis letter confirms that you have been issued the following asset(s):\n\n{{assetSection}}\n\nIssued on: {{date}}`}
                     rows={16}
                     className="w-full px-4 py-3 text-sm font-mono border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow resize-y leading-relaxed"
                   />
@@ -603,35 +623,40 @@ export default function AccountabilityTemplatesPage() {
                 </div>
               </div>
 
-              {/* Placeholder Legend */}
+              {/* Visual Variable Picker */}
               <div>
                 <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                  Available Placeholders
+                  Visual Variable Picker
                 </label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {placeholders.map(ph => (
-                    <button
-                      key={ph.key}
-                      onClick={() => copyPlaceholder(ph.key)}
-                      className="group flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 dark:bg-slate-700/40 transition-colors"
-                    >
-                      <code className="text-[11px] font-mono font-semibold text-[#012061] dark:text-slate-100 bg-[#012061]/8 px-1.5 py-0.5 rounded select-none">
-                        {ph.key}
-                      </code>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate flex-1">{ph.description}</span>
-                      {copiedKey === ph.key ? (
-                        <Check className="h-3 w-3 text-green-500 shrink-0" />
-                      ) : (
-                        <Copy className="h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
-                      )}
-                    </button>
+                <div className="space-y-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3">
+                  {Object.entries(placeholdersByGroup()).map(([group, items]) => (
+                    <div key={group}>
+                      <div className="mb-1.5 flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#f8931f]" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-[#012061] dark:text-slate-100">{group}</span>
+                      </div>
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-1.5">
+                        {items.map(ph => (
+                          <button
+                            key={ph.key}
+                            onClick={() => insertPlaceholder(ph.key)}
+                            className="group flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 transition-colors"
+                          >
+                            <code className="text-[11px] font-mono font-semibold text-[#012061] dark:text-slate-100 bg-[#012061]/8 px-1.5 py-0.5 rounded select-none truncate max-w-[210px]">
+                              {ph.key}
+                            </code>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate flex-1">{ph.description}</span>
+                            {copiedKey === ph.key ? <Check className="h-3 w-3 text-green-500 shrink-0" /> : <Copy className="h-3 w-3 text-slate-300 opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
                 <div className="mt-3 flex items-start gap-2 p-3 rounded-md bg-[#f8931f]/5 border border-[#f8931f]/20">
                   <Wand2 className="h-4 w-4 text-[#f8931f] shrink-0 mt-0.5" />
                   <p className="text-xs text-slate-600 dark:text-slate-400">
-                    Click any placeholder to copy it to your clipboard, then paste it into the letter body above.
-                    Use <code className="text-[11px] bg-slate-200 dark:bg-slate-700 px-1 rounded">{'{{designationComma}}'}</code> to add a comma before the title when it exists (empty otherwise).
+                    Click a variable to insert it at the cursor. Use <code className="text-[11px] bg-slate-200 dark:bg-slate-700 px-1 rounded">{'{{assetSection}}'}</code> for automatic 1-asset paragraph vs multi-asset table rendering, or wrap custom copy in the single/multiple conditional blocks.
                   </p>
                 </div>
               </div>

@@ -273,7 +273,42 @@ export async function updatePersonnel(
   return personnel;
 }
 
-/* ─── Delete personnel (soft — set status inactive) ─── */
+/* ─── Toggle personnel readiness for issuance ─── */
+export async function togglePersonnelReadiness(
+  id: string,
+  isReady: boolean,
+  performedById: string,
+  ipAddress?: string,
+  userAgent?: string,
+) {
+  const existing = await prisma.personnel.findUnique({ where: { id } });
+  if (!existing) throw new Error('Personnel not found');
+
+  const personnel = await prisma.personnel.update({
+    where: { id },
+    data: { isReadyForIssuance: isReady },
+  });
+
+  if (existing.isReadyForIssuance !== isReady) {
+    await prisma.auditLog.create({
+      data: {
+        entityType: 'Personnel',
+        entityId: id,
+        action: 'UPDATE',
+        performedById,
+        ipAddress,
+        userAgent,
+        field: 'isReadyForIssuance',
+        oldValue: String(existing.isReadyForIssuance),
+        newValue: String(isReady),
+        severity: 'MEDIUM',
+        summary: `${existing.fullName} marked ${isReady ? 'ready' : 'not ready'} for issuance`,
+      },
+    });
+  }
+
+  return personnel;
+}
 export async function deletePersonnel(
   id: string,
   performedById: string,

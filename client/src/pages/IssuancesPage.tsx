@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch, ApiError } from '../lib/api';
-import { useDebounce } from '../hooks/useDebounce';
 import { PermissionGate } from '../components/auth';
 import {
   FileSignature, PlusCircle, Search, Loader2, X, ArrowRightLeft, RotateCcw,
-  Package, FileText, QrCode, CheckCircle2, ChevronRight, Calendar, CheckCircle,
+  Package, FileText, QrCode, CheckCircle2, Calendar, CheckCircle, PenLine,
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import QRReturnScanner from '../components/issuances/QRReturnScanner';
@@ -12,304 +11,13 @@ import PDFPreviewModal from '../components/issuances/PDFPreviewModal';
 import BulkIssuanceWizard from '../components/issuances/BulkIssuanceWizard';
 
 /* ─── Types ─── */
-interface AssetOption { id: string; name: string; serialNumber: string | null; propertyNumber: string | null; type: string; manufacturer: string | null }
-interface PersonnelOption { id: string; fullName: string; position: string | null; project: string | null; department: string | null; designation: string | null; designationLookup: { name: string } | null }
 interface Issuance {
   id: string; assetId: string; personnelId: string | null; assignedTo: string | null; assignedAt: string; returnedAt: string | null;
-  condition: string | null; notes: string | null; agreementId: string | null; bulkBatchId: string | null;
+  condition: string | null; notes: string | null; agreementText: string | null; agreementId: string | null; bulkBatchId: string | null;
+  recipientSignedAt: string | null; recipientSignatureName: string | null;
+  agreementDocument: { id: string; documentNumber: string; status: string; signedPdfPath: string | null; title: string; resolvedText: string | null; propertyOfficerName: string | null; authorizedRepName: string | null } | null;
   asset: { id: string; name: string; serialNumber: string | null; propertyNumber: string | null; status: string } | null;
   personnel: { id: string; fullName: string; position: string | null; project: string | null; department: string | null; designation: string | null; designationLookup: { name: string } | null } | null;
-}
-interface TemplateOption { id: string; name: string; content: string; headerLogo: string | null; isDefault: boolean; defaultPropertyOfficer?: string | null; defaultAuthorizedRep?: string | null }
-
-/* ─── New Issuance Wizard ─── */
-function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: { onClose: () => void; onSave: () => void; onPreviewPdf: (params: Record<string, any>) => void }) {
-  const [step, setStep] = useState(1);
-  const [assetSearch, setAssetSearch] = useState('');
-  const [personnelSearch, setPersonnelSearch] = useState('');
-  const debouncedAssetSearch = useDebounce(assetSearch, 300);
-  const debouncedPersonnelSearch = useDebounce(personnelSearch, 300);
-  const [assets, setAssets] = useState<AssetOption[]>([]);
-  const [personnel, setPersonnel] = useState<PersonnelOption[]>([]);
-  const [selectedAsset, setSelectedAsset] = useState<AssetOption | null>(null);
-  const [selectedPersonnel, setSelectedPersonnel] = useState<PersonnelOption | null>(null);
-  const [condition, setCondition] = useState('Good');
-  const [agreement, setAgreement] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const [templates, setTemplates] = useState<TemplateOption[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState('');
-  const [templatesLoading, setTemplatesLoading] = useState(false);
-  const [propertyOfficerName, setPropertyOfficerName] = useState('');
-  const [authorizedRepName, setAuthorizedRepName] = useState('');
-
-  // Debounced asset search — loads all assets on mount
-  useEffect(() => {
-    apiFetch(`/issuances/assets/available${debouncedAssetSearch ? `?search=${debouncedAssetSearch}` : ''}`)
-      .then(res => setAssets(res.data || []))
-      .catch(() => {});
-  }, [debouncedAssetSearch]);
-
-  // Debounced personnel search
-  useEffect(() => {
-    apiFetch(`/issuances/personnel/active${debouncedPersonnelSearch ? `?search=${debouncedPersonnelSearch}` : ''}`)
-      .then(res => setPersonnel(res.data || []))
-      .catch(() => {});
-  }, [debouncedPersonnelSearch]);
-
-  useEffect(() => {
-    async function loadTemplates() {
-      setTemplatesLoading(true);
-      try {
-        const res = await apiFetch('/agreements/templates');
-        const list: TemplateOption[] = res.data ?? res;
-        setTemplates(list);
-        const def = list.find(t => t.isDefault) ?? list[0] ?? null;
-        if (def) {
-          setSelectedTemplateId(def.id);
-          setPropertyOfficerName(def.defaultPropertyOfficer || '');
-          setAuthorizedRepName(def.defaultAuthorizedRep || '');
-        }
-      } catch {}
-      finally { setTemplatesLoading(false); }
-    }
-    loadTemplates();
-  }, []);
-
-  useEffect(() => {
-    if (!selectedAsset || !selectedPersonnel) return;
-    const template = templates.find(t => t.id === selectedTemplateId);
-    const templateContent = template?.content;
-    if (!templateContent) {
-      const fallback = `ISSUANCE AND ACCOUNTABILITY AGREEMENT\n\nDate: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}\n\nThis certifies that ${selectedPersonnel.fullName}${selectedPersonnel.position ? `, ${selectedPersonnel.position}` : ''}${selectedPersonnel.department ? ` of ${selectedPersonnel.department}` : ''}${selectedPersonnel.project ? ` (${selectedPersonnel.project})` : ''} has been issued the following asset for official use:\n\nAsset: ${selectedAsset.name}${selectedAsset.serialNumber ? `\nSerial Number: ${selectedAsset.serialNumber}` : ''}${selectedAsset.propertyNumber ? `\nProperty Number: ${selectedAsset.propertyNumber}` : ''}\n\nTerms and Conditions:\n1. The issued asset shall be used solely for official business purposes.\n2. The recipient shall exercise due diligence in the care and protection of the asset.\n3. The asset shall not be transferred to another individual without proper documentation.\n4. Any damage, loss, or theft must be reported immediately to the Property Officer.\n5. The asset shall be returned upon resignation, transfer, or upon request by management.\n6. The recipient assumes full accountability for the asset during the period of possession.\n\n________________________________________\n${selectedPersonnel.fullName} (Recipient)\n\n________________________________________\nProperty Officer\n\n________________________________________\nAuthorized Representative`;
-      setAgreement(fallback);
-      return;
-    }
-    const position = selectedPersonnel.position || '';
-    const department = selectedPersonnel.department || '';
-    const project = selectedPersonnel.project || '';
-    const placeholderMap: Record<string, string> = {
-      '{{date}}': new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-      '{{fullName}}': selectedPersonnel.fullName,
-      '{{personnelName}}': selectedPersonnel.fullName,
-      '{{designation}}': position,
-      '{{position}}': position,
-      '{{designationComma}}': position ? `, ${position}` : '',
-      '{{positionComma}}': position ? `, ${position}` : '',
-      '{{department}}': department,
-      '{{departmentText}}': department ? ` of ${department}` : '',
-      '{{project}}': project,
-      '{{projectText}}': project ? ` (${project})` : '',
-      '{{assetName}}': selectedAsset.name,
-      '{{serialNumber}}': selectedAsset.serialNumber || 'N/A',
-      '{{propertyNumber}}': selectedAsset.propertyNumber || 'N/A',
-      '{{condition}}': condition,
-    };
-    const filled = templateContent.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) => {
-      return placeholderMap[`{{${key}}}`] !== undefined ? placeholderMap[`{{${key}}}`] : `{{${key}}}`;
-    });
-    setAgreement(filled);
-  }, [selectedAsset, selectedPersonnel, selectedTemplateId, condition, templates]);
-
-  const handleIssue = async () => {
-    if (!selectedAsset || !selectedPersonnel) return;
-    setSaving(true);
-    try {
-      await apiFetch('/issuances', {
-        method: 'POST',
-        body: {
-          assetId: selectedAsset.id,
-          personnelId: selectedPersonnel.id,
-          condition,
-          agreementText: agreement,
-        },
-      });
-      onSave();
-      onClose();
-    } catch (e: any) { alert(e instanceof ApiError ? e.message : 'An unexpected error occurred'); } finally { setSaving(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-8 overflow-y-auto" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl mb-10" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b rounded-t-xl" style={{ background: '#012061' }}>
-          <div className="flex items-center gap-2">
-            <FileSignature className="w-5 h-5 text-[#f8931f]" />
-            <h2 className="text-sm font-bold text-white">New Issuance</h2>
-          </div>
-          <button onClick={onClose} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
-        </div>
-        <div className="flex items-center gap-1 px-5 py-3 bg-slate-50 border-b">
-          {[1, 2, 3].map(s => (
-            <div key={s} className="flex items-center gap-1">
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${step >= s ? 'bg-[#f8931f] text-white' : 'bg-slate-200 text-slate-500'}`}>{s}</span>
-              <span className="text-[10px] text-slate-500">{s === 1 ? 'Asset' : s === 2 ? 'Personnel' : 'Agreement'}</span>
-              {s < 3 && <ChevronRight className="w-3 h-3 text-slate-300" />}
-            </div>
-          ))}
-        </div>
-        <div className="p-5">
-          {step === 1 && (
-            <div className="space-y-3">
-              <label className="text-xs font-semibold text-slate-700">Select Available Asset</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input value={assetSearch} onChange={e => setAssetSearch(e.target.value)}
-                  placeholder="Search assets by name, serial, property #..."
-                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
-              </div>
-              <div className="max-h-60 overflow-y-auto border rounded-lg divide-y">
-                {assets.length === 0 ? <p className="p-4 text-xs text-slate-400 text-center">No available assets</p> : assets.map(a => (
-                  <button key={a.id} onClick={() => { setSelectedAsset(a); setStep(2); }}
-                    className={`w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors ${selectedAsset?.id === a.id ? 'bg-[#f8931f]/5 border-l-2 border-[#f8931f]' : ''}`}>
-                    <p className="text-sm font-semibold" style={{ color: '#012061' }}>{a.name}</p>
-                    <p className="text-[10px] text-slate-500">{a.type} • {a.manufacturer || '—'} • S/N: {a.serialNumber || '—'}</p>
-                  </button>
-                ))}
-              </div>
-              {selectedAsset && (
-                <div className="flex items-center gap-2 bg-emerald-50 px-3 py-2 rounded-lg">
-                  <Package className="w-4 h-4 text-emerald-600" />
-                  <span className="text-xs font-medium text-emerald-700">Selected: {selectedAsset.name}</span>
-                </div>
-              )}
-            </div>
-          )}
-          {step === 2 && (
-            <div className="space-y-3">
-              <button onClick={() => setStep(1)} className="text-xs text-slate-500 hover:text-slate-700 mb-1">← Back to Asset</button>
-              <label className="text-xs font-semibold text-slate-700">Select Personnel</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input value={personnelSearch} onChange={e => setPersonnelSearch(e.target.value)}
-                  placeholder="Search by name, position, project..."
-                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
-              </div>
-              <div className="max-h-60 overflow-y-auto border rounded-lg divide-y">
-                {personnel.length === 0 ? <p className="p-4 text-xs text-slate-400 text-center">No active personnel</p> : personnel.map(p => (
-                  <button key={p.id} onClick={() => { setSelectedPersonnel(p); setStep(3); }}
-                    className={`w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors ${selectedPersonnel?.id === p.id ? 'bg-[#f8931f]/5 border-l-2 border-[#f8931f]' : ''}`}>
-                    <p className="text-sm font-semibold" style={{ color: '#012061' }}>{p.fullName}</p>
-                    <p className="text-[10px] text-slate-500">{p.position || '—'} • {p.department || '—'} • {p.project || '—'}</p>
-                  </button>
-                ))}
-              </div>
-              {selectedPersonnel && (
-                <div className="flex items-center gap-2 bg-emerald-50 px-3 py-2 rounded-lg">
-                  <CheckCircle className="w-4 h-4 text-emerald-600" />
-                  <span className="text-xs font-medium text-emerald-700">Selected: {selectedPersonnel.fullName}</span>
-                </div>
-              )}
-            </div>
-          )}
-          {step === 3 && (
-            <div className="flex flex-col" style={{ minHeight: '60vh' }}>
-              <button onClick={() => setStep(2)} className="text-xs text-slate-500 hover:text-slate-700 mb-4">← Back to Personnel</button>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5 flex-1">
-                <div className="space-y-3">
-                  <div className="bg-slate-50 rounded-lg p-4">
-                    <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Asset</p>
-                    <p className="text-sm font-semibold" style={{ color: '#012061' }}>{selectedAsset?.name}</p>
-                    {selectedAsset?.serialNumber && <p className="text-[10px] text-slate-500 mt-1">S/N: {selectedAsset.serialNumber}</p>}
-                    {selectedAsset?.propertyNumber && <p className="text-[10px] text-slate-500">Prop #: {selectedAsset.propertyNumber}</p>}
-                    {selectedAsset?.type && <p className="text-[10px] text-slate-500">{selectedAsset.type}{selectedAsset.manufacturer ? ` • ${selectedAsset.manufacturer}` : ''}</p>}
-                  </div>
-                  <div className="bg-slate-50 rounded-lg p-4">
-                    <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Personnel</p>
-                    <p className="text-sm font-semibold" style={{ color: '#012061' }}>{selectedPersonnel?.fullName}</p>
-                    {selectedPersonnel?.position && <p className="text-[10px] text-slate-500 mt-1">{selectedPersonnel.position}</p>}
-                    {selectedPersonnel?.department && <p className="text-[10px] text-slate-500">{selectedPersonnel.department}</p>}
-                    {selectedPersonnel?.project && <p className="text-[10px] text-slate-500">{selectedPersonnel.project}</p>}
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Agreement Template</label>
-                    <div className="relative mt-1">
-                      <select
-                        value={selectedTemplateId}
-                        onChange={e => {
-                          setSelectedTemplateId(e.target.value);
-                          const tpl = templates.find(t => t.id === e.target.value);
-                          setPropertyOfficerName(tpl?.defaultPropertyOfficer || '');
-                          setAuthorizedRepName(tpl?.defaultAuthorizedRep || '');
-                        }}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent appearance-none bg-white"
-                      >
-                        {templatesLoading ? (
-                          <option value="">Loading templates...</option>
-                        ) : templates.length === 0 ? (
-                          <option value="">No templates available</option>
-                        ) : (
-                          templates.map(t => (
-                            <option key={t.id} value={t.id}>{t.name}{t.isDefault ? ' (Default)' : ''}</option>
-                          ))
-                        )}
-                      </select>
-                      {templatesLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 animate-spin" />}
-                    </div>
-                    {selectedTemplateId && <p className="text-[10px] text-slate-400 mt-1">Template content applied below — you can edit before issuing</p>}
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Condition at Issuance</label>
-                    <select value={condition} onChange={e => setCondition(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mt-1 focus:ring-2 focus:ring-[#f8931f] focus:border-transparent">
-                      <option>New</option><option>Good</option><option>Fair</option><option>Poor</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Signatories</label>
-                    <div className="space-y-2 mt-1">
-                      <input type="text" value={propertyOfficerName} onChange={e => setPropertyOfficerName(e.target.value)}
-                        placeholder="Property Officer name"
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
-                      <input type="text" value={authorizedRepName} onChange={e => setAuthorizedRepName(e.target.value)}
-                        placeholder="Authorized Representative name"
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
-                    </div>
-                  </div>
-                </div>
-                <div className="md:col-span-2 flex flex-col">
-                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1.5">
-                    <FileText className="w-3.5 h-3.5 text-[#f8931f]" />Agreement Letter
-                  </label>
-                  <textarea value={agreement} onChange={e => setAgreement(e.target.value)}
-                    className="flex-1 w-full rounded-lg border border-slate-200 px-4 py-3 text-xs font-mono leading-relaxed focus:ring-2 focus:ring-[#f8931f] focus:border-transparent resize-y"
-                    style={{ minHeight: '400px' }} />
-                </div>
-              </div>
-              <div className="sticky bottom-0 bg-white border-t mt-4 pt-4 flex flex-col sm:flex-row gap-3">
-                <button
-                  onClick={() => {
-                    if (!selectedAsset || !selectedPersonnel) return;
-                    onPreviewPdf({
-                      personnelName: selectedPersonnel.fullName,
-                      position: selectedPersonnel.position || undefined,
-                      department: selectedPersonnel.department || undefined,
-                      project: selectedPersonnel.project || undefined,
-                      assetName: selectedAsset.name,
-                      serialNumber: selectedAsset.serialNumber || undefined,
-                      propertyNumber: selectedAsset.propertyNumber || undefined,
-                      condition,
-                      templateId: selectedTemplateId || undefined,
-                      propertyOfficerName: propertyOfficerName || undefined,
-                      authorizedRepName: authorizedRepName || undefined,
-                    });
-                  }}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold border-2 border-[#012061] text-[#012061] hover:bg-[#012061] hover:text-white transition-colors flex items-center justify-center gap-2"
-                >
-                  <FileText className="w-4 h-4" /> Generate & Preview PDF
-                </button>
-                <button onClick={handleIssue} disabled={saving}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white bg-[#f8931f] hover:bg-[#e07e0a] disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
-                  {saving ? 'Issuing...' : 'Confirm Issuance'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 /* ─── Return Station ─── */
@@ -426,10 +134,12 @@ export default function IssuancesPage() {
   const [searchParams] = useSearchParams();
   const preFilterPersonnel = searchParams.get('personnel');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'returned'>(preFilterPersonnel ? 'active' : 'all');
-  const [showWizard, setShowWizard] = useState(false);
   const [showReturn, setShowReturn] = useState(false);
   const [showQRReturn, setShowQRReturn] = useState(false);
   const [showBulkWizard, setShowBulkWizard] = useState(false);
+  const [signingTarget, setSigningTarget] = useState<Issuance | null>(null);
+  const [signerName, setSignerName] = useState('');
+  const [signing, setSigning] = useState(false);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -533,11 +243,13 @@ export default function IssuancesPage() {
   const [pdfPreview, setPdfPreview] = useState<{ blobUrl: string | null; loading: boolean; filename: string }>({ blobUrl: null, loading: false, filename: 'agreement.pdf' });
   const [pdfPersonnelId, setPdfPersonnelId] = useState<string | undefined>(undefined);
   const [pdfPersonnelName, setPdfPersonnelName] = useState<string | undefined>(undefined);
+  const [pdfAgreementDocumentId, setPdfAgreementDocumentId] = useState<string | undefined>(undefined);
 
   const openAgreementPreview = useCallback(async (params: Record<string, any>) => {
     setPdfPreview({ blobUrl: null, loading: true, filename: 'agreement.pdf' });
     setPdfPersonnelId(params.personnelId || undefined);
     setPdfPersonnelName(params.personnelName || undefined);
+    setPdfAgreementDocumentId(params.agreementDocumentId || undefined);
     try {
       const token = localStorage.getItem('accessToken');
       let res = await fetch('/api/agreements/pdf', {
@@ -589,7 +301,29 @@ export default function IssuancesPage() {
     setPdfPreview({ blobUrl: null, loading: false, filename: 'agreement.pdf' });
     setPdfPersonnelId(undefined);
     setPdfPersonnelName(undefined);
+    setPdfAgreementDocumentId(undefined);
   }, []);
+
+  const openSignModal = (iss: Issuance) => {
+    setSigningTarget(iss);
+    setSignerName(iss.personnel?.fullName || iss.assignedTo || '');
+  };
+
+  const submitSignOff = async () => {
+    if (!signingTarget || !signerName.trim()) return;
+    setSigning(true);
+    try {
+      await apiFetch(`/issuances/${signingTarget.id}/sign`, { method: 'POST', body: { signerName: signerName.trim() } });
+      showToast(signingTarget.bulkBatchId ? 'Batch digitally signed' : 'Issuance digitally signed');
+      setSigningTarget(null);
+      setSignerName('');
+      fetchIssuances();
+    } catch (e: any) {
+      showToast(e instanceof ApiError ? e.message : 'Sign-off failed');
+    } finally {
+      setSigning(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
@@ -609,10 +343,7 @@ export default function IssuancesPage() {
               <QrCode className="h-3.5 w-3.5" /> QR Return
             </button>
             <PermissionGate permissions={['issuances:create']}>
-              <button onClick={() => setShowBulkWizard(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors">
-                <Package className="h-3.5 w-3.5" /> Bulk Issuance
-              </button>
-              <button onClick={() => setShowWizard(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors">
+              <button onClick={() => setShowBulkWizard(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors">
                 <PlusCircle className="h-3.5 w-3.5" /> New Issuance
               </button>
             </PermissionGate>
@@ -709,7 +440,7 @@ export default function IssuancesPage() {
         {loading ? (
           <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 text-slate-400 animate-spin" /></div>
         ) : issuances.length === 0 ? (
-          <EmptyState onAdd={() => setShowWizard(true)} />
+          <EmptyState onAdd={() => setShowBulkWizard(true)} />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
             <table className="w-full text-sm">
@@ -791,6 +522,11 @@ export default function IssuancesPage() {
                             <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Active</span>
                           </div>
                         )}
+                        {iss.recipientSignedAt && (
+                          <div className="mt-1 text-[10px] font-semibold text-[#012061] dark:text-slate-200">
+                            Signed by {iss.recipientSignatureName || 'recipient'}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
@@ -811,6 +547,17 @@ export default function IssuancesPage() {
                               </button>
                             </PermissionGate>
                           )}
+                          {!iss.returnedAt && !iss.recipientSignedAt && (
+                            <PermissionGate permissions={['issuances:edit']}>
+                              <button
+                                onClick={() => openSignModal(iss)}
+                                className="p-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all group-hover:shadow-sm"
+                                title="Digital Sign-off"
+                              >
+                                <PenLine className="w-4 h-4" />
+                              </button>
+                            </PermissionGate>
+                          )}
                           <button
                             onClick={() => openAgreementPreview({
                               personnelName: iss.personnel?.fullName,
@@ -822,7 +569,15 @@ export default function IssuancesPage() {
                               propertyNumber: iss.asset?.propertyNumber || undefined,
                               condition: iss.condition,
                               templateId: iss.agreementId || undefined,
+                              agreementText: iss.agreementDocument?.resolvedText || iss.agreementText || undefined,
+                              title: iss.agreementDocument?.title || undefined,
+                              documentNumber: iss.agreementDocument?.documentNumber || undefined,
+                              propertyOfficerName: iss.agreementDocument?.propertyOfficerName || undefined,
+                              authorizedRepName: iss.agreementDocument?.authorizedRepName || undefined,
+                              agreementDocumentId: iss.agreementDocument?.id || undefined,
                               personnelId: iss.personnelId || undefined,
+                              recipientSignedAt: iss.recipientSignedAt || undefined,
+                              recipientSignatureName: iss.recipientSignatureName || undefined,
                             })}
                             className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#012061] dark:hover:text-white transition-all group-hover:shadow-sm"
                             title="View Agreement"
@@ -901,8 +656,25 @@ export default function IssuancesPage() {
                             <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Active</span>
                           </div>
                         )}
+                        {first.recipientSignedAt && (
+                          <div className="mt-1 text-[10px] font-semibold text-[#012061] dark:text-slate-200">
+                            Signed by {first.recipientSignatureName || 'recipient'}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-center align-top pt-5">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {!allReturned && !first.recipientSignedAt && (
+                            <PermissionGate permissions={['issuances:edit']}>
+                              <button
+                                onClick={() => openSignModal(first)}
+                                className="p-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all group-hover:shadow-sm"
+                                title="Digital Sign-off Batch"
+                              >
+                                <PenLine className="w-4 h-4" />
+                              </button>
+                            </PermissionGate>
+                          )}
                         <button
                           onClick={() => openAgreementPreview({
                             personnelName: first.personnel?.fullName,
@@ -914,18 +686,27 @@ export default function IssuancesPage() {
                             propertyNumber: undefined,
                             condition: first.condition,
                             templateId: first.agreementId || undefined,
+                            agreementText: first.agreementDocument?.resolvedText || first.agreementText || undefined,
+                            title: first.agreementDocument?.title || undefined,
+                            documentNumber: first.agreementDocument?.documentNumber || undefined,
+                            propertyOfficerName: first.agreementDocument?.propertyOfficerName || undefined,
+                            authorizedRepName: first.agreementDocument?.authorizedRepName || undefined,
+                            agreementDocumentId: first.agreementDocument?.id || undefined,
                             personnelId: first.personnelId || undefined,
                             assets: batchItems.map(bi => ({
                               name: bi.asset?.name || '—',
                               serialNumber: bi.asset?.serialNumber || undefined,
                               propertyNumber: bi.asset?.propertyNumber || undefined,
                             })),
+                            recipientSignedAt: first.recipientSignedAt || undefined,
+                            recipientSignatureName: first.recipientSignatureName || undefined,
                           })}
                           className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#012061] dark:hover:text-white transition-all group-hover:shadow-sm"
                           title="View Agreement"
                         >
                           <FileText className="w-4 h-4" />
                         </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -952,11 +733,39 @@ export default function IssuancesPage() {
       )}
 
       {/* ═══ MODALS ════════════════════════════════════════ */}
-      {showWizard && <NewIssuanceWizard onClose={() => setShowWizard(false)} onSave={fetchIssuances} onPreviewPdf={openAgreementPreview} />}
+      {showBulkWizard && <BulkIssuanceWizard onClose={() => setShowBulkWizard(false)} onSave={fetchIssuances} onPreviewPdf={openAgreementPreview} />}
       <ReturnStationModal open={showReturn} onClose={() => setShowReturn(false)} onSave={fetchIssuances} />
       <QRReturnScanner open={showQRReturn} onClose={() => setShowQRReturn(false)} onReturned={fetchIssuances} />
-      {showBulkWizard && <BulkIssuanceWizard onClose={() => setShowBulkWizard(false)} onSave={fetchIssuances} onPreviewPdf={openAgreementPreview} />}
-      <PDFPreviewModal open={!!(pdfPreview.blobUrl || pdfPreview.loading)} onClose={closePdfPreview} blobUrl={pdfPreview.blobUrl} loading={pdfPreview.loading} downloadFilename={pdfPreview.filename} personnelId={pdfPersonnelId} personnelName={pdfPersonnelName} />
+      {signingTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setSigningTarget(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b rounded-t-xl" style={{ background: '#012061' }}>
+              <div className="flex items-center gap-2">
+                <PenLine className="w-5 h-5 text-[#f8931f]" />
+                <h2 className="text-sm font-bold text-white">Digital Recipient Sign-off</h2>
+              </div>
+              <button onClick={() => setSigningTarget(null)} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-xs text-slate-500">Typed sign-off records the recipient acknowledgement timestamp and signer name. For a batch, all active assignments in the batch are signed together.</p>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Signer Name</label>
+                <input value={signerName} onChange={e => setSignerName(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" autoFocus />
+              </div>
+              <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-500">
+                Asset: <span className="font-semibold text-[#012061]">{signingTarget.asset?.name || (signingTarget.bulkBatchId ? 'Batch issuance' : '—')}</span>
+              </div>
+              <button onClick={submitSignOff} disabled={signing || !signerName.trim()}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#012061] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#001a4d] disabled:opacity-50">
+                {signing ? <Loader2 className="h-4 w-4 animate-spin" /> : <PenLine className="h-4 w-4" />}
+                Confirm Digital Sign-off
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <PDFPreviewModal open={!!(pdfPreview.blobUrl || pdfPreview.loading)} onClose={closePdfPreview} blobUrl={pdfPreview.blobUrl} loading={pdfPreview.loading} downloadFilename={pdfPreview.filename} personnelId={pdfPersonnelId} personnelName={pdfPersonnelName} agreementDocumentId={pdfAgreementDocumentId} />
       </div>{/* close content area */}
     </div>
   );

@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
 import * as issuanceService from '../services/issuance.service';
-import { authenticate, requireRole } from '../middleware/auth';
+import { authenticate, hasPermission } from '../middleware/auth';
 import { success, error } from '../utils/response';
 import { validate } from '../middleware/validate';
-import { createIssuanceSchema, returnIssuanceSchema, resolveTemplateSchema, bulkIssuanceSchema, resolveBulkTemplateSchema } from './issuance.schema';
+import { createIssuanceSchema, returnIssuanceSchema, resolveTemplateSchema, bulkIssuanceSchema, resolveBulkTemplateSchema, assetLockSchema, signIssuanceSchema } from './issuance.schema';
 
 const router = Router();
 
@@ -50,7 +50,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 });
 
 /* ─── Create issuance ─── */
-router.post('/', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), validate(createIssuanceSchema), async (req: Request, res: Response) => {
+router.post('/', authenticate, hasPermission('issuances:create'), validate(createIssuanceSchema), async (req: Request, res: Response) => {
   try {
     const result = await issuanceService.createIssuance(
       req.body,
@@ -65,7 +65,7 @@ router.post('/', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), validate(c
 });
 
 /* ─── Return issuance ─── */
-router.post('/:id/return', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), validate(returnIssuanceSchema), async (req: Request, res: Response) => {
+router.post('/:id/return', authenticate, hasPermission('issuances:edit'), validate(returnIssuanceSchema), async (req: Request, res: Response) => {
   try {
     const result = await issuanceService.returnIssuance(
       String(req.params.id),
@@ -79,6 +79,53 @@ router.post('/:id/return', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), 
   } catch (e: any) {
     if (e.message === 'Issuance not found') error(res, e.message, 404);
     else error(res, e.message, 400);
+  }
+});
+
+/* ─── Recipient digital sign-off ─── */
+router.post('/:id/sign', authenticate, hasPermission('issuances:edit'), validate(signIssuanceSchema), async (req: Request, res: Response) => {
+  try {
+    const result = await issuanceService.signIssuance(
+      String(req.params.id),
+      req.body.signerName,
+      req.user!.id,
+      getClientIp(req),
+      getUA(req),
+    );
+    success(res, result);
+  } catch (e: any) {
+    const status = e.message.includes('not found') ? 404 : 400;
+    error(res, e.message, status);
+  }
+});
+
+/* ─── Lock selected assets while issuance wizard is in progress ─── */
+router.post('/assets/lock', authenticate, hasPermission('issuances:create'), validate(assetLockSchema), async (req: Request, res: Response) => {
+  try {
+    const result = await issuanceService.lockAssetsForIssuance(
+      req.body.assetIds,
+      req.user!.id,
+      getClientIp(req),
+      getUA(req),
+    );
+    success(res, result);
+  } catch (e: any) {
+    error(res, e.message, 400);
+  }
+});
+
+/* ─── Release selected assets if issuance wizard is cancelled/backed out ─── */
+router.post('/assets/release', authenticate, hasPermission('issuances:create'), validate(assetLockSchema), async (req: Request, res: Response) => {
+  try {
+    const result = await issuanceService.releaseAssetsFromIssuance(
+      req.body.assetIds,
+      req.user!.id,
+      getClientIp(req),
+      getUA(req),
+    );
+    success(res, result);
+  } catch (e: any) {
+    error(res, e.message, 400);
   }
 });
 
@@ -113,7 +160,7 @@ router.post('/agreement', authenticate, (req: Request, res: Response) => {
 });
 
 /* ─── Resolve template placeholders server-side ─── */
-router.post('/resolve-template', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), validate(resolveTemplateSchema), async (req: Request, res: Response) => {
+router.post('/resolve-template', authenticate, hasPermission('issuances:create'), validate(resolveTemplateSchema), async (req: Request, res: Response) => {
   try {
     const result = await issuanceService.resolveTemplate(req.body);
     success(res, result);
@@ -124,7 +171,7 @@ router.post('/resolve-template', authenticate, requireRole(['ADMIN', 'STAFF_ADMI
 });
 
 /* ─── Resolve template for multi-asset preview ─── */
-router.post('/resolve-template/bulk', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), validate(resolveBulkTemplateSchema), async (req: Request, res: Response) => {
+router.post('/resolve-template/bulk', authenticate, hasPermission('issuances:create'), validate(resolveBulkTemplateSchema), async (req: Request, res: Response) => {
   try {
     const { assetIds, ...rest } = req.body;
     const result = await issuanceService.resolveTemplate({
@@ -140,7 +187,7 @@ router.post('/resolve-template/bulk', authenticate, requireRole(['ADMIN', 'STAFF
 });
 
 /* ─── Bulk issuance (multi-asset) ─── */
-router.post('/bulk', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']), validate(bulkIssuanceSchema), async (req: Request, res: Response) => {
+router.post('/bulk', authenticate, hasPermission('issuances:create'), validate(bulkIssuanceSchema), async (req: Request, res: Response) => {
   try {
     const result = await issuanceService.bulkIssueAssets(
       req.body,

@@ -20,6 +20,7 @@ function getImageUrl(url: string | null | undefined): string {
 
 const STATUS_COLORS: Record<string, string> = {
   AVAILABLE: 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border border-emerald-200',
+  PENDING_ASSIGNMENT: 'bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-200 border border-amber-200',
   ASSIGNED: 'bg-[#012061]/10 dark:bg-slate-700/50 text-[#012061] dark:text-slate-100 border border-[#012061]/20',
   MAINTENANCE: 'bg-[#f8931f]/10 text-[#f8931f] border border-[#012061]/30',
   RETIRED: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700',

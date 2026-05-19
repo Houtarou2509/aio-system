@@ -127,6 +127,78 @@ export async function deleteTemplate(id: string) {
 }
 
 /* ═══════════════════════════════════════════════════════
+   TEMPLATE PREVIEW / VALIDATION
+   ═══════════════════════════════════════════════════════ */
+
+export function previewTemplate(content: string, mode: 'single' | 'multiple' = 'single') {
+  const assets = mode === 'multiple'
+    ? [
+        { name: 'Dell Latitude 5540', serialNumber: 'SN-DL-2026-00123', propertyNumber: 'PN-2026-000456', condition: 'Good' },
+        { name: 'HP LaserJet Pro', serialNumber: 'SN-HP-2026-00077', propertyNumber: 'PN-2026-000457', condition: 'Good' },
+        { name: 'Logitech Dock', serialNumber: 'SN-LG-2026-00088', propertyNumber: 'PN-2026-000458', condition: 'Good' },
+      ]
+    : [{ name: 'Dell Latitude 5540', serialNumber: 'SN-DL-2026-00123', propertyNumber: 'PN-2026-000456', condition: 'Good' }];
+
+  const resolvedText = parseTemplate(content, {
+    personnelName: 'Juan Dela Cruz',
+    designation: 'Software Engineer',
+    institution: 'DOST',
+    project: 'AIO System',
+    assetName: assets[0].name,
+    serialNumber: assets[0].serialNumber,
+    propertyNumber: assets[0].propertyNumber,
+    condition: 'Good',
+    assets: mode === 'multiple' ? assets : undefined,
+  });
+  return { resolvedText, mode };
+}
+
+export { validateTemplateContent } from '../utils/templateParser';
+
+/* ═══════════════════════════════════════════════════════
+   AGREEMENT DOCUMENTS
+   ═══════════════════════════════════════════════════════ */
+
+export function makeDocumentNumber(prefix = 'AGR') {
+  const d = new Date();
+  const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `${prefix}-${stamp}-${rand}`;
+}
+
+export async function listAgreementDocuments(params: { personnelId?: string; assignmentId?: string; bulkBatchId?: string }) {
+  const where: any = {};
+  if (params.personnelId) where.personnelId = params.personnelId;
+  if (params.bulkBatchId) where.bulkBatchId = params.bulkBatchId;
+  if (params.assignmentId) where.assignments = { some: { id: params.assignmentId } };
+
+  return prisma.agreementDocument.findMany({
+    where,
+    orderBy: { issuedAt: 'desc' },
+    include: {
+      assignments: { select: { id: true, asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true } } } },
+      template: { select: { id: true, name: true, title: true } },
+      issuedBy: { select: { id: true, username: true, fullName: true } },
+    },
+  });
+}
+
+export async function attachSignedAgreementDocument(documentId: string, signedPdfPath: string, uploadedById: string) {
+  const existing = await prisma.agreementDocument.findUnique({ where: { id: documentId } });
+  if (!existing) throw new Error('Agreement document not found');
+
+  return prisma.agreementDocument.update({
+    where: { id: documentId },
+    data: {
+      signedPdfPath,
+      signedUploadedAt: new Date(),
+      signedUploadedById: uploadedById,
+      status: existing.recipientSignedAt ? 'signed_uploaded' : 'uploaded',
+    },
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
    PDF GENERATION ENGINE
    ═══════════════════════════════════════════════════════ */
 
@@ -138,15 +210,12 @@ function stripSignatureSection(text: string): string {
     const trimmed = line.trim();
     if (/^_{5,}/.test(trimmed)) break;
     if (trimmed.startsWith('____')) break;
-    if (trimmed === 'By signing below, the recipient acknowledges receipt and accepts the terms stated above.')
-      break;
     if (trimmed.includes('By signing below')) break;
     result.push(line);
   }
   return result.join('\n');
 }
 
-/** Parse body text into structured segments with styling info. */
 interface TextSegment {
   text: string;
   fontSize: number;
@@ -182,12 +251,7 @@ function parseBodySegments(filled: string): TextSegment[] {
       color = '#444444';
       indent = 50;
       align = 'justify';
-    } else if (
-      ln.startsWith('Asset:') ||
-      ln.startsWith('Serial') ||
-      ln.startsWith('Property') ||
-      ln.startsWith('Condition')
-    ) {
+    } else if (ln.startsWith('Asset:') || ln.startsWith('Serial') || ln.startsWith('Property') || ln.startsWith('Condition')) {
       indent = 54;
     }
 
@@ -197,230 +261,170 @@ function parseBodySegments(filled: string): TextSegment[] {
   return segments;
 }
 
-/** Try to load a logo image from disk and return its data for embedding. */
 function loadLogoImage(logoPath: string | null | undefined): Buffer | null {
   if (!logoPath) return null;
   const fullPath = path.resolve(__dirname, '../..', logoPath.replace(/^\/+/, ''));
   try {
     if (fs.existsSync(fullPath)) return fs.readFileSync(fullPath);
-  } catch {
-    // silently skip broken logo paths
-  }
+  } catch {}
   return null;
 }
 
 export async function generateAgreementPdf(p: {
   personnelName: string;
-  designation?: string;
-  project?: string;
-  institution?: string;
+  designation?: string | null;
+  position?: string | null;
+  project?: string | null;
+  institution?: string | null;
   assetName: string;
-  serialNumber?: string;
-  propertyNumber?: string;
-  condition?: string;
-  templateId?: string;
-  propertyOfficerName?: string;
-  authorizedRepName?: string;
-  /** For bulk batches: all assets in this agreement */
+  serialNumber?: string | null;
+  propertyNumber?: string | null;
+  condition?: string | null;
+  templateId?: string | null;
+  agreementText?: string | null;
+  title?: string | null;
+  propertyOfficerName?: string | null;
+  authorizedRepName?: string | null;
   assets?: Array<{ name: string; serialNumber?: string | null; propertyNumber?: string | null }>;
+  recipientSignedAt?: string | Date | null;
+  recipientSignatureName?: string | null;
+  documentNumber?: string | null;
 }): Promise<Buffer> {
   const {
-    personnelName, designation, project, institution, assetName, serialNumber,
-    propertyNumber, condition, templateId,
-    propertyOfficerName, authorizedRepName, assets,
+    personnelName, designation, position, project, institution, assetName, serialNumber,
+    propertyNumber, condition, templateId, agreementText,
+    propertyOfficerName, authorizedRepName, assets, recipientSignedAt, recipientSignatureName, documentNumber,
   } = p;
 
   const tmpl = templateId
     ? (await prisma.agreementTemplate.findUnique({ where: { id: templateId } })) || (await getDefaultTemplate())
     : await getDefaultTemplate();
 
-  const filled = parseTemplate(tmpl?.content ?? '', {
-    personnelName,
-    designation,
-    project,
-    institution,
-    assetName,
-    serialNumber: serialNumber || undefined,
-    propertyNumber: propertyNumber || undefined,
-    condition: condition || undefined,
-    assets: assets?.map(a => ({
-      name: a.name,
-      serialNumber: a.serialNumber || undefined,
-      propertyNumber: a.propertyNumber || undefined,
-      condition: condition || undefined,
-    })) || undefined,
-  });
+  const titleText = p.title || tmpl?.title || 'ISSUANCE & ACCOUNTABILITY AGREEMENT';
+  const filled = agreementText && agreementText.trim().length > 0
+    ? agreementText
+    : parseTemplate(tmpl?.content ?? '', {
+        personnelName,
+        designation: designation || position || undefined,
+        project: project || undefined,
+        institution: institution || undefined,
+        assetName,
+        serialNumber: serialNumber || undefined,
+        propertyNumber: propertyNumber || undefined,
+        condition: condition || undefined,
+        assets: assets?.map(a => ({
+          name: a.name,
+          serialNumber: a.serialNumber || undefined,
+          propertyNumber: a.propertyNumber || undefined,
+          condition: condition || undefined,
+        })) || undefined,
+      });
 
   const cleanBody = stripSignatureSection(filled).replace(/\r\n?/g, '\n');
   const segments = parseBodySegments(cleanBody);
-
-  // Load logo if configured on template
   const logoData = loadLogoImage(tmpl?.headerLogo ?? null);
 
-  // A4 dimensions in pt
   const PW = 595.28;
   const PH = 841.89;
-  const M = 36;                     // 0.5" horizontal margin
-  const CW = PW - 72;               // content width
-
-  // 1" = 72pt letterhead buffer
+  const M = 36;
+  const CW = PW - 72;
   const LETTERHEAD_TOP = 72;
-
-  // Split-level header: logo left, title center — both at same Y
-  const HEADER_Y = LETTERHEAD_TOP;                    // 72pt = 1"
-  const TITLE_Y = 105;                                // more breathing room below letterhead (was 85)
-  const LOGO_W = 95;                                   // logo width
-  const BODY_START_Y = 180;                            // clear the title row with comfortable spacing (was 160)
-
-  // Signature block — anchored with generous bottom margin
-  const SIG_BLOCK_TOP = PH - 100;   // ~1.4" from bottom for footer breathing room (was PH - 80)
-  const SIG_LINE_Y = SIG_BLOCK_TOP;
-  const SIG_LABEL_Y = SIG_LINE_Y + 16;
-  const MAX_BODY_Y = SIG_BLOCK_TOP - 40;               // 40pt breathing room before signatures
+  const HEADER_Y = LETTERHEAD_TOP;
+  const TITLE_Y = 105;
+  const LOGO_W = 95;
+  const BODY_START_Y = 180;
+  const FOOTER_Y = PH - 34;
+  const PAGE_BODY_MAX_Y = PH - 78;
+  const SIG_BLOCK_HEIGHT = 72;
 
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({
       size: 'A4',
       margins: { top: 36, bottom: 36, left: 36, right: 36 },
-      bufferPages: false,
+      bufferPages: true,
     });
 
     doc.on('data', (c: Buffer) => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    /* ── Helper ── */
-    function textAbs(
-      text: string,
-      x: number,
-      y: number,
-      opts: {
-        width?: number;
-        align?: string;
-        fontSize?: number;
-        font?: string;
-        color?: string;
-        lineBreak?: boolean;
-      } = {},
-    ) {
+    function textAbs(text: string, x: number, y: number, opts: { width?: number; align?: string; fontSize?: number; font?: string; color?: string; lineBreak?: boolean } = {}) {
       if (opts.font) doc.font(opts.font);
       if (opts.fontSize != null) doc.fontSize(opts.fontSize);
       if (opts.color) doc.fillColor(opts.color);
-      doc.text(text, x, y, {
-        width: opts.width ?? CW,
-        align: (opts.align as any) ?? 'left',
-        lineBreak: opts.lineBreak ?? false,
-      });
+      doc.text(text, x, y, { width: opts.width ?? CW, align: (opts.align as any) ?? 'left', lineBreak: opts.lineBreak ?? false });
       doc.y = 0;
     }
 
-    /* ══════════════════════════════════════
-       SPLIT-LEVEL HEADER (no digital bars)
-       Logo left, Title center, same Y = 108
-       ══════════════════════════════════════ */
-    if (logoData) {
-      try {
-        doc.image(logoData, M, HEADER_Y, { width: LOGO_W });
-        doc.y = 0;
-      } catch {
-        // corrupt image — skip
+    function renderHeader() {
+      if (logoData) {
+        try { doc.image(logoData, M, HEADER_Y, { width: LOGO_W }); doc.y = 0; } catch {}
       }
+      let titleFontSize = 16;
+      let titleWidth = doc.font('Helvetica-Bold').fontSize(titleFontSize).widthOfString(titleText);
+      while (titleWidth > CW && titleFontSize > 10) {
+        titleFontSize -= 0.5;
+        titleWidth = doc.font('Helvetica-Bold').fontSize(titleFontSize).widthOfString(titleText);
+      }
+      textAbs(titleText, M, TITLE_Y, { width: CW, align: 'center', fontSize: titleFontSize, font: 'Helvetica-Bold', color: '#222222' });
+      doc.roundedRect(M, 134, CW, 24, 3).fillAndStroke('#f8fafc', '#dbe3ef');
+      doc.y = 0;
+      const issuedDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+      textAbs(`Issued: ${issuedDate}`, M + 8, 141, { width: 100, fontSize: 7.5, color: '#475569', font: 'Helvetica-Bold' });
+      textAbs(`Doc: ${documentNumber || '—'}`, M + 112, 141, { width: 92, fontSize: 7.5, color: '#475569' });
+      textAbs(`Recipient: ${personnelName || '—'}`, M + 208, 141, { width: 160, fontSize: 7.5, color: '#475569' });
+      textAbs(`Assets: ${assets?.length || 1}`, M + 374, 141, { width: 56, fontSize: 7.5, color: '#475569' });
+      textAbs(recipientSignedAt ? 'Digitally signed' : 'Pending sign-off', M + 430, 141, { width: 86, fontSize: 7.5, color: recipientSignedAt ? '#047857' : '#b45309', font: 'Helvetica-Bold' });
     }
 
-    // Title centered at same level (slightly offset to visually center with logo)
-    // Auto-shrink title font to fit single line
-    const titleText = tmpl?.title ?? 'ISSUANCE & ACCOUNTABILITY AGREEMENT';
-    let titleFontSize = 16;
-    let titleWidth = doc.font('Helvetica-Bold').fontSize(titleFontSize).widthOfString(titleText);
-    while (titleWidth > CW && titleFontSize > 10) {
-      titleFontSize -= 0.5;
-      titleWidth = doc.font('Helvetica-Bold').fontSize(titleFontSize).widthOfString(titleText);
+    function addFooter(page: number, total: number) {
+      doc.font('Helvetica').fontSize(7).fillColor('#94a3b8');
+      doc.text(`Page ${page} of ${total}`, M, FOOTER_Y, { width: CW, align: 'center', lineBreak: false });
+      if (documentNumber) doc.text(documentNumber, M, FOOTER_Y, { width: CW, align: 'right', lineBreak: false });
+      doc.y = 0;
     }
-    textAbs(titleText, M, TITLE_Y, {
-      width: CW, align: 'center', fontSize: titleFontSize,
-      font: 'Helvetica-Bold', color: '#222222',
-    });
 
-    /* ══════════════════════════════════════
-       BODY
-       ══════════════════════════════════════ */
+    function addContinuationPage() {
+      doc.addPage();
+      renderHeader();
+      return BODY_START_Y;
+    }
+
+    renderHeader();
     let y = BODY_START_Y;
-    const availableBodyHeight = MAX_BODY_Y - BODY_START_Y;
 
-    let totalMeasuredHeight = 0;
     for (const seg of segments) {
       const width = PW - M - seg.indent;
       const font = seg.bold ? 'Helvetica-Bold' : 'Helvetica';
-      const h = doc.font(font).fontSize(seg.fontSize).heightOfString(seg.text, {
-        width, align: seg.align as any, lineBreak: true,
-      });
-      totalMeasuredHeight += h + 2;
-    }
-
-    const scale =
-      totalMeasuredHeight > availableBodyHeight
-        ? Math.max(0.85, availableBodyHeight / totalMeasuredHeight)
-        : 1;
-
-    for (const seg of segments) {
-      const effectiveFontSize = Math.round(seg.fontSize * scale * 10) / 10;
-      const width = PW - M - seg.indent;
-      const font = seg.bold ? 'Helvetica-Bold' : 'Helvetica';
-
-      const h = doc.font(font).fontSize(effectiveFontSize).heightOfString(seg.text, {
-        width, align: seg.align as any, lineBreak: true,
-      });
-      const lh = h + 2;
-
-      if (y + lh > MAX_BODY_Y) break;
-
-      textAbs(seg.text, seg.indent, y, {
-        width, fontSize: effectiveFontSize, font,
-        color: seg.color, align: seg.align, lineBreak: true,
-      });
-
+      const h = doc.font(font).fontSize(seg.fontSize).heightOfString(seg.text, { width, align: seg.align as any, lineBreak: true });
+      const lh = h + 3;
+      if (y + lh > PAGE_BODY_MAX_Y) y = addContinuationPage();
+      textAbs(seg.text, seg.indent, y, { width, fontSize: seg.fontSize, font, color: seg.color, align: seg.align, lineBreak: true });
       y += lh;
     }
 
-    /* ══════════════════════════════════════
-       SIGNATURES — no intro text, dynamic names
-       ══════════════════════════════════════ */
+    if (y + SIG_BLOCK_HEIGHT > PAGE_BODY_MAX_Y) y = addContinuationPage();
+    const sigLineY = Math.max(y + 24, PH - 118);
+    const sigLabelY = sigLineY + 16;
     const colW = (CW - 20) / 3;
-
     const sigCols = [
-      {
-        x: M,
-        label: personnelName || '_________________',
-        subtitle: 'Recipient',
-      },
-      {
-        x: M + colW + 10,
-        label: propertyOfficerName || tmpl?.defaultPropertyOfficer || '_________________',
-        subtitle: 'Property Officer',
-      },
-      {
-        x: M + (colW + 10) * 2,
-        label: authorizedRepName || tmpl?.defaultAuthorizedRep || '_________________',
-        subtitle: 'Authorized Representative',
-      },
+      { x: M, label: recipientSignatureName || personnelName || '_________________', subtitle: recipientSignedAt ? `Digitally signed ${new Date(recipientSignedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Recipient' },
+      { x: M + colW + 10, label: propertyOfficerName || tmpl?.defaultPropertyOfficer || '_________________', subtitle: 'Property Officer' },
+      { x: M + (colW + 10) * 2, label: authorizedRepName || tmpl?.defaultAuthorizedRep || '_________________', subtitle: 'Authorized Representative' },
     ];
 
     for (const col of sigCols) {
-      doc
-        .moveTo(col.x, SIG_LINE_Y)
-        .lineTo(col.x + colW, SIG_LINE_Y)
-        .strokeColor('#bbbbbb').lineWidth(0.4).stroke();
+      doc.moveTo(col.x, sigLineY).lineTo(col.x + colW, sigLineY).strokeColor('#bbbbbb').lineWidth(0.4).stroke();
       doc.y = 0;
+      textAbs(col.label, col.x, sigLineY + 4, { width: colW, align: 'center', fontSize: 8, color: '#333333' });
+      textAbs(col.subtitle, col.x, sigLabelY, { width: colW, align: 'center', fontSize: 7, color: '#888888', font: 'Helvetica-Bold' });
+    }
 
-      textAbs(col.label, col.x, SIG_LINE_Y + 4, {
-        width: colW, align: 'center', fontSize: 8, color: '#333333',
-      });
-
-      textAbs(col.subtitle, col.x, SIG_LABEL_Y, {
-        width: colW, align: 'center', fontSize: 7,
-        color: '#888888', font: 'Helvetica-Bold',
-      });
+    const range = doc.bufferedPageRange();
+    for (let i = 0; i < range.count; i++) {
+      doc.switchToPage(range.start + i);
+      addFooter(i + 1, range.count);
     }
 
     doc.end();

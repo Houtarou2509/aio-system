@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { apiFetch, ApiError } from '../../lib/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import {
@@ -53,6 +53,9 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
   const [agreement, setAgreement] = useState('');
   const [saving, setSaving] = useState(false);
   const [showChangePersonnel, setShowChangePersonnel] = useState(false);
+  const [lockingAssets, setLockingAssets] = useState(false);
+  const lockedAssetIdsRef = useRef<string[]>([]);
+  const finalizedRef = useRef(false);
 
   // Debounced search
   const [assetSearch, setAssetSearch] = useState('');
@@ -85,6 +88,16 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
       .then(res => setPersonnel(res.data || []))
       .catch(() => {});
   }, [debouncedPersonnelSearch]);
+
+  useEffect(() => {
+    return () => {
+      if (!finalizedRef.current && lockedAssetIdsRef.current.length > 0) {
+        const assetIds = lockedAssetIdsRef.current;
+        lockedAssetIdsRef.current = [];
+        apiFetch('/issuances/assets/release', { method: 'POST', body: { assetIds } }).catch(() => {});
+      }
+    };
+  }, []);
 
   // Fetch templates when wizard opens
   useEffect(() => {
@@ -135,6 +148,46 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
       if (exists) return prev.filter(a => a.id !== asset.id);
       return [...prev, asset];
     });
+  };
+
+  const releaseLockedAssets = async () => {
+    if (finalizedRef.current || lockedAssetIdsRef.current.length === 0) return;
+    const assetIds = lockedAssetIdsRef.current;
+    lockedAssetIdsRef.current = [];
+    try {
+      await apiFetch('/issuances/assets/release', { method: 'POST', body: { assetIds } });
+    } catch { /* best effort unlock; backend also protects issue path */ }
+  };
+
+  const handleClose = async () => {
+    await releaseLockedAssets();
+    onClose();
+  };
+
+  const proceedAfterAssetSelection = async () => {
+    if (selectedAssets.length === 0) return;
+    setLockingAssets(true);
+    try {
+      const assetIds = selectedAssets.map(a => a.id);
+      const res = await apiFetch('/issuances/assets/lock', { method: 'POST', body: { assetIds } });
+      const errors = res.data?.errors || [];
+      if (errors.length > 0) {
+        alert(`Some assets could not be locked for issuance:\n${errors.map((e: any) => `${e.assetId}: ${e.reason}`).join('\n')}`);
+      }
+      lockedAssetIdsRef.current = (res.data?.locked || []).map((a: AssetOption) => a.id);
+      if (lockedAssetIdsRef.current.length === 0) return;
+      setSelectedAssets(prev => prev.filter(a => lockedAssetIdsRef.current.includes(a.id)));
+      setStep(2);
+    } catch (e: any) {
+      alert(e instanceof ApiError ? e.message : 'Failed to lock selected assets');
+    } finally {
+      setLockingAssets(false);
+    }
+  };
+
+  const backToAssets = async () => {
+    await releaseLockedAssets();
+    setStep(1);
   };
 
   // Resolve agreement when assets + personnel are selected
@@ -189,6 +242,7 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
           condition,
           notes: null,
           agreementTemplateId: selectedTemplateId || undefined,
+          agreementText: agreement,
           propertyOfficerName: propertyOfficerName || undefined,
           authorizedRepName: authorizedRepName || undefined,
         },
@@ -198,6 +252,8 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
         const errMsg = data.errors.map((e: any) => `${e.assetId}: ${e.reason}`).join('\n');
         alert(`Some assets could not be issued:\n${errMsg}`);
       }
+      finalizedRef.current = true;
+      lockedAssetIdsRef.current = [];
       onSave();
       onClose();
     } catch (e: any) {
@@ -213,10 +269,15 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
       designation: selectedPersonnel?.designationLookup?.name || selectedPersonnel?.designation || undefined,
       project: selectedPersonnel?.projectLookup?.name || selectedPersonnel?.project || undefined,
       institution: selectedPersonnel?.institution?.name || undefined,
-      // For PDF preview, pass the first asset name + asset list in agreement text
       assetName: selectedAssets.length === 1 ? selectedAssets[0].name : `${selectedAssets.length} assets`,
       serialNumber: selectedAssets.length === 1 ? (selectedAssets[0].serialNumber || undefined) : undefined,
       propertyNumber: selectedAssets.length === 1 ? (selectedAssets[0].propertyNumber || undefined) : undefined,
+      assets: selectedAssets.map(a => ({
+        name: a.name,
+        serialNumber: a.serialNumber || undefined,
+        propertyNumber: a.propertyNumber || undefined,
+      })),
+      agreementText: agreement,
       condition,
       templateId: selectedTemplateId || undefined,
       propertyOfficerName: propertyOfficerName || undefined,
@@ -226,15 +287,15 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-8 overflow-y-auto" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-8 overflow-y-auto" onMouseDown={e => { if (e.target === e.currentTarget) handleClose(); }}>
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl mb-10" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b rounded-t-xl" style={{ background: '#012061' }}>
           <div className="flex items-center gap-2">
             <FileSignature className="w-5 h-5 text-[#f8931f]" />
-            <h2 className="text-sm font-bold text-white">Bulk Issuance</h2>
+            <h2 className="text-sm font-bold text-white">Unified Issuance Wizard</h2>
           </div>
-          <button onClick={onClose} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
+          <button onClick={handleClose} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
         </div>
 
         {/* Steps indicator */}
@@ -292,9 +353,9 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
               </div>
 
               {selectedAssets.length > 0 && (
-                <button onClick={() => setStep(2)}
-                  className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-[#f8931f] hover:bg-[#e07e0a] transition-colors">
-                  Continue with {selectedAssets.length} asset(s) →
+                <button onClick={proceedAfterAssetSelection} disabled={lockingAssets}
+                  className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-[#f8931f] hover:bg-[#e07e0a] disabled:opacity-50 transition-colors">
+                  {lockingAssets ? 'Locking assets...' : `Continue with ${selectedAssets.length} asset(s) →`}
                 </button>
               )}
             </div>
@@ -303,7 +364,7 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
           {/* Step 2: Select Personnel */}
           {step === 2 && (
             <div className="space-y-3">
-              <button onClick={() => setStep(1)} className="text-xs text-slate-500 hover:text-slate-700 mb-1">← Back to Assets</button>
+              <button onClick={backToAssets} className="text-xs text-slate-500 hover:text-slate-700 mb-1">← Back to Assets</button>
               <label className="text-xs font-semibold text-slate-700">Select Personnel</label>
 
               {/* Pre-selected personnel confirmation card */}

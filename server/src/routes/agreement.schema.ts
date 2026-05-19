@@ -19,3 +19,39 @@ export const updateAgreementTemplateSchema = z.object({
 }).refine(d => Object.keys(d).length > 0, {
   message: 'Provide at least one field to update',
 });
+
+const pdfAssetSchema = z.object({
+  name: z.string().min(1).max(500),
+  serialNumber: z.string().max(200).optional().nullable(),
+  propertyNumber: z.string().max(200).optional().nullable(),
+});
+
+export const agreementPdfSchema = z.object({
+  personnelName: z.string().min(1).max(500),
+  designation: z.string().max(500).optional().nullable(),
+  position: z.string().max(500).optional().nullable(),
+  project: z.string().max(500).optional().nullable(),
+  institution: z.string().max(500).optional().nullable(),
+  assetName: z.string().min(1).max(500),
+  serialNumber: z.string().max(200).optional().nullable(),
+  propertyNumber: z.string().max(200).optional().nullable(),
+  condition: z.string().max(100).optional().nullable(),
+  templateId: z.string().uuid().optional().nullable(),
+  agreementText: z.string().max(100000).optional().nullable(),
+  title: z.string().max(500).optional().nullable(),
+  propertyOfficerName: z.string().max(200).optional().nullable(),
+  authorizedRepName: z.string().max(200).optional().nullable(),
+  assets: z.array(pdfAssetSchema).max(100).optional(),
+  recipientSignedAt: z.union([z.string(), z.date()]).optional().nullable(),
+  recipientSignatureName: z.string().max(200).optional().nullable(),
+  documentNumber: z.string().max(100).optional().nullable(),
+});
+
+export const templatePreviewSchema = z.object({
+  content: z.string().max(50000),
+  mode: z.enum(['single', 'multiple']).default('single'),
+});
+
+export const templateValidationSchema = z.object({
+  content: z.string().max(50000),
+});

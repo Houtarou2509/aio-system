@@ -4,10 +4,10 @@ import fs from 'fs';
 import multer from 'multer';
 import * as agreementService from '../services/agreement.service';
 import { getPlaceholderReference } from '../utils/templateParser';
-import { authenticate, requireRole } from '../middleware/auth';
+import { authenticate, hasPermission } from '../middleware/auth';
 import { success, error } from '../utils/response';
 import { validate } from '../middleware/validate';
-import { createAgreementTemplateSchema, updateAgreementTemplateSchema } from './agreement.schema';
+import { createAgreementTemplateSchema, updateAgreementTemplateSchema, agreementPdfSchema, templatePreviewSchema, templateValidationSchema } from './agreement.schema';
 
 const router = Router();
 
@@ -38,6 +38,26 @@ const logoUpload = multer({
   },
 });
 
+const signedAgreementDir = path.resolve(__dirname, '../../uploads/signed-agreements');
+if (!fs.existsSync(signedAgreementDir)) {
+  fs.mkdirSync(signedAgreementDir, { recursive: true });
+}
+const signedAgreementUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, signedAgreementDir),
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      const ext = path.extname(file.originalname).toLowerCase() || '.pdf';
+      cb(null, `signed-agreement-${uniqueSuffix}${ext}`);
+    },
+  }),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, file.mimetype === 'application/pdf' || ext === '.pdf');
+  },
+});
+
 /* ═══════════════════════════════════════════════════════
    TEMPLATES CRUD
    ═══════════════════════════════════════════════════════ */
@@ -46,7 +66,7 @@ const logoUpload = multer({
 router.get(
   '/templates',
   authenticate,
-  requireRole(['ADMIN', 'STAFF_ADMIN']),
+  hasPermission('issuances:view'),
   async (_req: Request, res: Response) => {
     try {
       const templates = await agreementService.listTemplates();
@@ -61,7 +81,7 @@ router.get(
 router.get(
   '/templates/:id',
   authenticate,
-  requireRole(['ADMIN', 'STAFF_ADMIN']),
+  hasPermission('issuances:view'),
   async (req: Request, res: Response) => {
     try {
       const template = await agreementService.getTemplate(String(req.params.id));
@@ -77,7 +97,7 @@ router.get(
 router.post(
   '/templates',
   authenticate,
-  requireRole(['ADMIN']),
+  hasPermission('settings:view'),
   logoUpload.single('headerLogo'),
   validate(createAgreementTemplateSchema),
   async (req: Request, res: Response) => {
@@ -106,7 +126,7 @@ router.post(
 router.patch(
   '/templates/:id',
   authenticate,
-  requireRole(['ADMIN']),
+  hasPermission('settings:view'),
   logoUpload.single('headerLogo'),
   validate(updateAgreementTemplateSchema),
   async (req: Request, res: Response) => {
@@ -137,7 +157,7 @@ router.patch(
 router.delete(
   '/templates/:id',
   authenticate,
-  requireRole(['ADMIN']),
+  hasPermission('settings:view'),
   async (req: Request, res: Response) => {
     try {
       await agreementService.deleteTemplate(String(req.params.id));
@@ -156,7 +176,7 @@ router.delete(
 router.post(
   '/upload-logo',
   authenticate,
-  requireRole(['ADMIN']),
+  hasPermission('settings:view'),
   logoUpload.single('logo'),
   async (req: Request, res: Response) => {
     try {
@@ -183,6 +203,77 @@ router.get(
 );
 
 /* ═══════════════════════════════════════════════════════
+   TEMPLATE PREVIEW + VALIDATION
+   ═══════════════════════════════════════════════════════ */
+
+router.post(
+  '/templates/preview',
+  authenticate,
+  hasPermission('settings:view'),
+  validate(templatePreviewSchema),
+  (req: Request, res: Response) => {
+    try {
+      success(res, agreementService.previewTemplate(req.body.content, req.body.mode));
+    } catch (e: any) {
+      error(res, e.message, 400);
+    }
+  },
+);
+
+router.post(
+  '/templates/validate',
+  authenticate,
+  hasPermission('settings:view'),
+  validate(templateValidationSchema),
+  (req: Request, res: Response) => {
+    try {
+      success(res, agreementService.validateTemplateContent(req.body.content));
+    } catch (e: any) {
+      error(res, e.message, 400);
+    }
+  },
+);
+
+/* ═══════════════════════════════════════════════════════
+   AGREEMENT DOCUMENT HISTORY
+   ═══════════════════════════════════════════════════════ */
+
+router.get(
+  '/documents',
+  authenticate,
+  hasPermission('issuances:view'),
+  async (req: Request, res: Response) => {
+    try {
+      const docs = await agreementService.listAgreementDocuments({
+        personnelId: req.query.personnelId as string | undefined,
+        assignmentId: req.query.assignmentId as string | undefined,
+        bulkBatchId: req.query.bulkBatchId as string | undefined,
+      });
+      success(res, docs);
+    } catch (e: any) {
+      error(res, e.message, 500);
+    }
+  },
+);
+
+router.post(
+  '/documents/:id/signed-copy',
+  authenticate,
+  hasPermission('issuances:edit'),
+  signedAgreementUpload.single('file'),
+  async (req: Request, res: Response) => {
+    try {
+      if (!req.file) return error(res, 'No PDF file provided, or file is not a valid PDF', 400);
+      const filePath = `/uploads/signed-agreements/${req.file.filename}`;
+      const document = await agreementService.attachSignedAgreementDocument(String(req.params.id), filePath, (req as any).user.id);
+      success(res, document, 201);
+    } catch (e: any) {
+      error(res, e.message, e.message === 'Agreement document not found' ? 404 : 400);
+    }
+  },
+);
+
+/* ═══════════════════════════════════════════════════════
    PDF GENERATION
    ═══════════════════════════════════════════════════════ */
 
@@ -190,7 +281,8 @@ router.get(
 router.post(
   '/pdf',
   authenticate,
-  requireRole(['ADMIN', 'STAFF_ADMIN']),
+  hasPermission('issuances:view'),
+  validate(agreementPdfSchema),
   async (req: Request, res: Response) => {
     try {
       const pdfBuffer = await agreementService.generateAgreementPdf(req.body);

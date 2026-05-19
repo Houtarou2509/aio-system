@@ -9,9 +9,10 @@ interface PDFPreviewModalProps {
   downloadFilename?: string;
   personnelId?: string;
   personnelName?: string;
+  agreementDocumentId?: string;
 }
 
-export default function PDFPreviewModal({ open, onClose, blobUrl, loading, downloadFilename, personnelId, personnelName }: PDFPreviewModalProps) {
+export default function PDFPreviewModal({ open, onClose, blobUrl, loading, downloadFilename, personnelId, personnelName, agreementDocumentId }: PDFPreviewModalProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeKey, setIframeKey] = useState(0);
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
@@ -71,7 +72,7 @@ export default function PDFPreviewModal({ open, onClose, blobUrl, loading, downl
 
   const handleUploadSigned = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !personnelId) return;
+    if (!file || (!personnelId && !agreementDocumentId)) return;
     if (file.type !== 'application/pdf') {
       setUploadError('Please upload a PDF file only.');
       setUploadPhase('error');
@@ -83,7 +84,10 @@ export default function PDFPreviewModal({ open, onClose, blobUrl, loading, downl
       const formData = new FormData();
       formData.append('file', file);
       const token = localStorage.getItem('accessToken');
-      const res = await fetch(`/api/personnel/${personnelId}/signed-agreement`, {
+      const uploadUrl = agreementDocumentId
+        ? `/api/agreements/documents/${agreementDocumentId}/signed-copy`
+        : `/api/personnel/${personnelId}/signed-agreement`;
+      const res = await fetch(uploadUrl, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,

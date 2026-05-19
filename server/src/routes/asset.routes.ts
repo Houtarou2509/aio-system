@@ -110,7 +110,7 @@ router.post('/', hasPermission('assets:create'), upload.single('image'), async (
 });
 
 // POST /api/assets/import — CSV bulk import
-const VALID_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED'];
+const VALID_STATUSES = ['AVAILABLE', 'PENDING_ASSIGNMENT', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
 
 router.post('/import', hasPermission('assets:create'), importUpload.single('file'), async (req: Request, res: Response) => {
   try {

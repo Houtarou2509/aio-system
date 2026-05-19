@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import BulkIssuanceWizard from '../components/issuances/BulkIssuanceWizard';
 import PDFPreviewModal from '../components/issuances/PDFPreviewModal';
+import { PermissionGate } from '../components/auth/PermissionGate';
 
 /* ─── Types ─── */
 interface Personnel {
@@ -18,6 +19,7 @@ interface Personnel {
   hiredDate: string | null;
   employmentHistory: string | null;
   status: string;
+  isReadyForIssuance: boolean;
   createdAt: string;
   activeAssignments: number;
   personnelType: string;
@@ -525,7 +527,12 @@ function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail
               <UserCircle className="w-8 h-8 text-[#f8931f]" />
               <div>
                 <h2 className="text-base font-bold text-white">{personnel.fullName}</h2>
-                <p className="text-[10px] text-[#f8931f] tracking-widest uppercase">{personnel.status}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-[10px] text-[#f8931f] tracking-widest uppercase">{personnel.status}</p>
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${personnel.isReadyForIssuance ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                {personnel.isReadyForIssuance ? 'READY' : 'NOT READY'}
+              </span>
+            </div>
               </div>
             </div>
             <button onClick={onClose} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
@@ -587,7 +594,9 @@ function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail
           ) : personnel.assignments.filter(a => !a.returnedAt).length > 0 ? (
             <div>
               <p className="text-xs text-slate-400 italic mb-2">No signed agreement uploaded yet.</p>
-              <UploadSignedAgreement personnelId={personnel.id} />
+              <PermissionGate permissions={['issuances:edit']}>
+                <UploadSignedAgreement personnelId={personnel.id} />
+              </PermissionGate>
             </div>
           ) : (
             <p className="text-xs text-slate-400 italic">No active possessions — no agreement needed.</p>
@@ -801,6 +810,25 @@ export default function ProfilesPage() {
     }
   };
 
+  const handleToggleReadiness = async (p: Personnel) => {
+    const nextReady = !p.isReadyForIssuance;
+    try {
+      await apiFetch(`/personnel/${p.id}/readiness`, {
+        method: 'PATCH',
+        body: { isReady: nextReady },
+      });
+      setPersonnel(prev => prev.map(item => item.id === p.id ? { ...item, isReadyForIssuance: nextReady } : item));
+      setDetail(prev => prev && prev.id === p.id ? { ...prev, isReadyForIssuance: nextReady } : prev);
+      showToast('success', `${p.fullName} marked ${nextReady ? 'ready' : 'not ready'} for issuance.`);
+    } catch (err: any) {
+      if (err instanceof ApiError) {
+        showToast('error', err.message);
+      } else {
+        showToast('error', 'Failed to update readiness.');
+      }
+    }
+  };
+
   const handleBulkPreviewPdf = useCallback(async (params: Record<string, any>) => {
     setPdfPreview({
       blobUrl: null,
@@ -938,6 +966,7 @@ export default function ProfilesPage() {
                   <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Project</th>
                   <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Year</th>
                   <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Active Items</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Readiness</th>
                   <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Status</th>
                   <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase text-right">Actions</th>
                 </tr>
@@ -979,16 +1008,48 @@ export default function ProfilesPage() {
                       ) : <span className="text-xs text-slate-400">0</span>}
                     </td>
                     <td className="px-4 py-3">
+                      <PermissionGate
+                        permissions={['issuances:edit']}
+                        fallback={(
+                          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold tracking-wide ${
+                            p.isReadyForIssuance
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                              : 'border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                          }`}>
+                            {p.isReadyForIssuance ? <CheckCircle2 className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                            {p.isReadyForIssuance ? 'READY' : 'NOT READY'}
+                          </span>
+                        )}
+                      >
+                        <button
+                          onClick={() => handleToggleReadiness(p)}
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold tracking-wide transition-colors ${
+                            p.isReadyForIssuance
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                              : 'border-slate-200 bg-slate-100 text-slate-500 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                          }`}
+                          title="Toggle issuance readiness"
+                        >
+                          {p.isReadyForIssuance ? <CheckCircle2 className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                          {p.isReadyForIssuance ? 'READY' : 'NOT READY'}
+                        </button>
+                      </PermissionGate>
+                    </td>
+                    <td className="px-4 py-3">
                       <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide ${p.status === 'active' ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border border-emerald-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700'}`}>
                         {p.status.toUpperCase()}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => { setBulkWizardPersonnelId(p.id); setShowBulkWizard(true); }}
-                          className="p-1.5 rounded-lg hover:bg-[#f8931f]/10 text-slate-400 hover:text-[#f8931f] transition-colors" title="Issue Assets">
-                          <Package className="w-3.5 h-3.5" />
-                        </button>
+                        <PermissionGate permissions={['issuances:create']}>
+                          <button onClick={() => { if (p.isReadyForIssuance) { setBulkWizardPersonnelId(p.id); setShowBulkWizard(true); } }}
+                            disabled={!p.isReadyForIssuance}
+                            className={`p-1.5 rounded-lg transition-colors ${p.isReadyForIssuance ? 'hover:bg-[#f8931f]/10 text-slate-400 hover:text-[#f8931f]' : 'text-slate-300 cursor-not-allowed opacity-50'}`}
+                            title={p.isReadyForIssuance ? 'Issue Assets' : 'Mark profile ready before issuing assets'}>
+                            <Package className="w-3.5 h-3.5" />
+                          </button>
+                        </PermissionGate>
                         <button onClick={() => openDetail(p)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-[#012061] dark:hover:text-slate-100 transition-colors" title="View">
                           <Eye className="w-3.5 h-3.5" />
                         </button>

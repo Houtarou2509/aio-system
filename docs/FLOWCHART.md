@@ -242,8 +242,8 @@ aio-system/
 │       │   │   ├── GuestTokenManager.tsx # Create/revoke guest share tokens
 │       │   │   └── index.ts
 │       │   ├── issuances/               # ★ Issuance workflow components
-│       │   │   ├── NewIssuanceWizard.tsx # NOT USED — wizard is inline in IssuancesPage.tsx
-│       │   │   ├── BulkIssuanceWizard.tsx # ★ Multi-asset issue wizard (preselected personnel support)
+│       │   │   ├── NewIssuanceWizard.tsx # LEGACY / not used — unified wizard uses BulkIssuanceWizard.tsx
+│       │   │   ├── BulkIssuanceWizard.tsx # ★ Unified 1 -> N issue wizard (single or multi-asset, preselected personnel support)
 │       │   │   ├── QRReturnScanner.tsx  # QR scan → find active issuance → return
 │       │   │   └── PDFPreviewModal.tsx  # Embedded PDF iframe preview (agreements + labels)
 │       │   ├── labels/
@@ -336,7 +336,7 @@ aio-system/
 - `email` (unique), `phone`, `hiredDate`, `employmentHistory`
 - `personnelType` (employee/contractor), `contractDurationMonths`, `contractStartDate`, `contractEndDate`
 - `signedAgreementPath` (uploaded PDF)
-- `status` (active/inactive/resigned)
+- `status` (active/inactive/resigned), `isReadyForIssuance` readiness flag
 - `institutionId` → InstitutionLookup, `projectId` → ProjectLookup, `designationId` → DesignationLookup
 - Relations: assignments[], historyLogs[] (ProfileHistory)
 
@@ -540,15 +540,19 @@ AuditSeverity: LOW | MEDIUM | HIGH
 | GET | `/api/personnel/:id` | Any | Single record with detailed assignments |
 | POST | `/api/personnel` | Admin | Create |
 | PATCH | `/api/personnel/:id` | Admin | Update |
+| PATCH | `/api/personnel/:id/readiness` | Admin/StaffAdmin | Toggle issuance readiness (`isReadyForIssuance`) |
 | DELETE | `/api/personnel/:id` | Admin | Soft-delete (blocks if active issuances) |
 
 ### Issuances
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api/issuances` | Any | List (filter: status/search/personnelId, paginate) |
-| POST | `/api/issuances` | Admin/StaffAdmin | Single issuance (assetId, personnelId, condition, agreementText) |
-| POST | `/api/issuances/bulk` | Admin/StaffAdmin | Bulk issuance (multiple assetIds → one personnel) |
-| POST | `/api/issuances/:id/return` | Admin/StaffAdmin | Return asset (sets returnedAt, condition) |
+| POST | `/api/issuances` | `issuances:create` | Legacy single issuance endpoint; backend validates ready personnel and AVAILABLE/PENDING_ASSIGNMENT assets |
+| POST | `/api/issuances/bulk` | `issuances:create` | Unified 1 -> N issuance flow (one or many assetIds → one personnel) |
+| POST | `/api/issuances/assets/lock` | `issuances:create` | Lock selected AVAILABLE assets as PENDING_ASSIGNMENT while wizard is in progress |
+| POST | `/api/issuances/assets/release` | `issuances:create` | Release cancelled/backed-out PENDING_ASSIGNMENT assets back to AVAILABLE |
+| POST | `/api/issuances/:id/return` | `issuances:edit` | Return asset (sets returnedAt, condition) |
+| POST | `/api/issuances/:id/sign` | `issuances:edit` | Recipient typed digital sign-off; signs whole active batch when the assignment has bulkBatchId |
 | GET | `/api/issuances/assets/available` | Any | Available assets for wizard (status=AVAILABLE, no deletedAt) |
 | GET | `/api/issuances/personnel/active` | Any | Active personnel for wizard |
 | POST | `/api/issuances/resolve-template/bulk` | Any | Resolve agreement text for bulk issuance |
@@ -827,9 +831,32 @@ npm run db:seed           # prisma db seed
 - **Roles:** ADMIN → STAFF_ADMIN → STAFF → GUEST (hierarchical, ADMIN has all)
 - **API response format:** `{success: boolean, data: any, error: {message} | null, meta: {page, limit, total, totalPages} | null}`
 - **Soft delete:** Assets have `deletedAt` timestamp. Personnel set `status=inactive`. Never hard-delete.
-- **Assets enum values use Prisma Enums:** AVAILABLE, ASSIGNED, MAINTENANCE, RETIRED, LOST
+- **Assets enum values use Prisma Enums:** AVAILABLE, PENDING_ASSIGNMENT, ASSIGNED, MAINTENANCE, RETIRED, LOST
 - **Table pattern:** `overflow-x-auto rounded-lg border bg-white` wrapper with `bg-[#012061]` thead, `bg-white` tbody rows
 - **Brand colors:** Navy `#012061` (headers, accents), Orange `#f8931f` (buttons, highlights, KPIs), Red `#7B1113` (destructive)
 - **Font:** Geist Variable imported at `client/src/index.css`
 - **Dark mode:** `ThemeContext` toggles `.dark` on `<html>`, all components use `dark:` variants
 - **New Issuance Bug History:** Wizard had shared timer bug causing empty asset list. Fixed by using separate `useDebounce` hooks. If assets don't appear, check that `useDebounce` is called once per search field (not a shared `timerRef`).
+
+### Intelligent Template Engine Notes
+
+Template bodies support standard placeholders plus smart blocks:
+
+- `{{assetSection}}` renders a single-asset paragraph for one asset, or a fixed-width table for multiple assets.
+- `{{assetParagraph}}` always renders the paragraph variant.
+- `{{assetTable}}` always renders the table variant.
+- `{{#ifSingleAsset}}...{{/ifSingleAsset}}` only renders for a one-asset document.
+- `{{#ifMultipleAssets}}...{{/ifMultipleAssets}}` only renders for multi-asset documents.
+
+Recipient digital sign-off is stored on assignments via `recipientSignedAt`, `recipientSignatureName`, `recipientSignatureMethod`, and `recipientSignatureIp`. Batch sign-off updates all unsigned active assignments in the same `bulkBatchId`.
+
+## 13. Current Project Roadmap (Issuance System Overhaul)
+
+This section tracks the multi-phase upgrade of the asset issuance flow. (Last Updated: 2026-05-18)
+
+| Phase | Title | Status | Description |
+|-------|-------|--------|-------------|
+| **1** | **Foundation & Profiles** | ✅ Done | Added isReadyForIssuance flag to Personnel model, migration, backend readiness toggle endpoint, audit logging, and Profile UI readiness badges/toggle. |
+| **2** | **Unified Issuance Wizard** | ✅ Done | Consolidated Single vs Bulk issuance into the unified 1 -> N asset wizard. Added PENDING_ASSIGNMENT enum/migration plus lock/release endpoints and wizard-side locking cleanup. |
+| **3** | **Intelligent Template Engine** | ✅ Done | Added Visual Variable Picker with grouped insert-at-cursor variables, smart asset placeholders, and conditional blocks for 1-asset paragraph vs multi-asset table rendering. |
+| **4** | **Final Document & Sign-off** | ✅ Done | Enhanced PDF traceability with document metadata/sign-off status and added recipient typed digital sign-off fields, migration, endpoint, audit log, and issuance UI flow. |

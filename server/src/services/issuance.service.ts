@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import * as crypto from 'crypto';
 import { classifySeverity, generateSummary } from '../utils/auditHelpers';
 import { parseTemplate } from '../utils/templateParser';
+import { makeDocumentNumber } from './agreement.service';
 
 
 
@@ -15,6 +16,7 @@ export async function getActiveIssuanceForAsset(assetId: string) {
       asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
       personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
       agreement: { select: { id: true, name: true, title: true } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
     },
   });
 }
@@ -54,6 +56,7 @@ export async function listIssuances(params: {
         asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
         personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
         agreement: { select: { id: true, name: true, title: true } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
       },
     }),
     prisma.assignment.count({ where }),
@@ -79,12 +82,13 @@ export async function createIssuance(params: {
   // Verify asset is available
   const asset = await prisma.asset.findUnique({ where: { id: assetId } });
   if (!asset) throw new Error('Asset not found');
-  if (asset.status !== 'AVAILABLE') throw new Error(`Asset is not available (current status: ${asset.status})`);
+  if (!['AVAILABLE', 'PENDING_ASSIGNMENT'].includes(asset.status)) throw new Error(`Asset is not available (current status: ${asset.status})`);
 
   // Verify personnel exists and is active
   const personnel = await prisma.personnel.findUnique({ where: { id: personnelId } });
   if (!personnel) throw new Error('Personnel not found');
   if (personnel.status !== 'active') throw new Error('Personnel is not active');
+  if (!personnel.isReadyForIssuance) throw new Error('Personnel is not ready for issuance');
 
   // Validate agreementId references an existing template (if provided)
   if (agreementId) {
@@ -92,8 +96,25 @@ export async function createIssuance(params: {
     if (!tmpl) throw new Error('Agreement template not found');
   }
 
-  // Create assignment + update asset status in a transaction
+  // Create immutable agreement document + assignment, then update asset status in a transaction
   const assignment = await prisma.$transaction(async (tx) => {
+    const designationSnapshot = personnel.designation || null;
+    const projectSnapshot = personnel.project || null;
+    const document = await tx.agreementDocument.create({
+      data: {
+        documentNumber: makeDocumentNumber(),
+        templateId: agreementId || null,
+        title: 'ISSUANCE & ACCOUNTABILITY AGREEMENT',
+        resolvedText: agreementText || '',
+        personnelId,
+        personnelNameSnapshot: personnel.fullName,
+        designationSnapshot,
+        projectSnapshot,
+        assetSnapshot: [{ id: asset.id, name: asset.name, serialNumber: asset.serialNumber, propertyNumber: asset.propertyNumber, condition: condition || 'Good' }],
+        issuedById: performedById,
+      },
+    });
+
     const a = await tx.assignment.create({
       data: {
         assetId,
@@ -103,11 +124,13 @@ export async function createIssuance(params: {
         notes: notes || null,
         agreementText: agreementText || null,
         agreementId: agreementId || null,
+        agreementDocumentId: document.id,
       },
       include: {
         asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
         personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
         agreement: { select: { id: true, name: true, title: true } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
       },
     });
 
@@ -141,7 +164,7 @@ export async function createIssuance(params: {
       ipAddress,
       userAgent,
       field: 'status',
-      oldValue: 'AVAILABLE',
+      oldValue: asset.status,
       newValue: 'ASSIGNED',
       severity: 'HIGH',
       summary: generateSummary({ action: 'CHECKOUT', entityType: 'Asset', assetName: asset.name, serialNumber: asset.serialNumber, newValue: personnel.fullName }),
@@ -159,6 +182,7 @@ export async function bulkIssueAssets(
     condition?: string;
     notes?: string;
     agreementTemplateId?: string;
+    agreementText?: string;
     propertyOfficerName?: string;
     authorizedRepName?: string;
   },
@@ -166,7 +190,7 @@ export async function bulkIssueAssets(
   ipAddress?: string,
   userAgent?: string,
 ) {
-  const { personnelId, assetIds, condition, notes, agreementTemplateId, propertyOfficerName, authorizedRepName } = params;
+  const { personnelId, assetIds, condition, notes, agreementTemplateId, agreementText: suppliedAgreementText, propertyOfficerName, authorizedRepName } = params;
   const errors: Array<{ assetId: string; reason: string }> = [];
 
   // Generate a single batch ID for all assignments in this bulk operation
@@ -176,8 +200,9 @@ export async function bulkIssueAssets(
   const personnel = await prisma.personnel.findUnique({ where: { id: personnelId } });
   if (!personnel) throw new Error('Personnel not found');
   if (personnel.status !== 'active') throw new Error('Personnel is not active');
+  if (!personnel.isReadyForIssuance) throw new Error('Personnel is not ready for issuance');
 
-  // Verify all assets exist and are AVAILABLE
+  // Verify all assets exist and are AVAILABLE/PENDING_ASSIGNMENT
   const assets = await prisma.asset.findMany({
     where: { id: { in: assetIds } },
     select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true },
@@ -189,7 +214,7 @@ export async function bulkIssueAssets(
   for (const aid of assetIds) {
     const a = assetMap.get(aid);
     if (!a) { errors.push({ assetId: aid, reason: 'Asset not found' }); continue; }
-    if (a.status !== 'AVAILABLE') { errors.push({ assetId: aid, reason: `Asset is ${a.status}` }); continue; }
+    if (!['AVAILABLE', 'PENDING_ASSIGNMENT'].includes(a.status)) { errors.push({ assetId: aid, reason: `Asset is ${a.status}` }); continue; }
     validAssetIds.push(aid);
   }
 
@@ -211,7 +236,7 @@ export async function bulkIssueAssets(
     resolvedTemplate = { resolvedText: null, templateId: null };
   }
 
-  const agreementText = resolvedTemplate.resolvedText;
+  const agreementText = suppliedAgreementText?.trim() || resolvedTemplate.resolvedText;
   const agreementId = resolvedTemplate.templateId;
 
   // Validate agreementId references an existing template (if provided)
@@ -220,11 +245,33 @@ export async function bulkIssueAssets(
     if (!tmpl) throw new Error('Agreement template not found');
   }
 
-  // Create assignments + update asset statuses in a transaction
+  // Create one immutable agreement document for the batch, then link all assignments to it.
   const assignments = await prisma.$transaction(async (tx) => {
+    const designationSnapshot = personnel.designation || null;
+    const projectSnapshot = personnel.project || null;
+    const document = await tx.agreementDocument.create({
+      data: {
+        documentNumber: makeDocumentNumber(),
+        templateId: agreementId || null,
+        title: 'ISSUANCE & ACCOUNTABILITY AGREEMENT',
+        resolvedText: agreementText || '',
+        bulkBatchId,
+        personnelId,
+        personnelNameSnapshot: personnel.fullName,
+        designationSnapshot,
+        projectSnapshot,
+        assetSnapshot: validAssetIds.map((aid) => {
+          const ad = assetMap.get(aid)!;
+          return { id: ad.id, name: ad.name, serialNumber: ad.serialNumber, propertyNumber: ad.propertyNumber, condition: condition || 'Good' };
+        }),
+        propertyOfficerName: propertyOfficerName || null,
+        authorizedRepName: authorizedRepName || null,
+        issuedById: performedById,
+      },
+    });
+
     const results = [];
     for (const aid of validAssetIds) {
-      const assetData = assetMap.get(aid)!;
       const a = await tx.assignment.create({
         data: {
           assetId: aid,
@@ -235,11 +282,13 @@ export async function bulkIssueAssets(
           agreementText: agreementText || null,
           agreementId: agreementId || null,
           bulkBatchId,
+          agreementDocumentId: document.id,
         },
         include: {
           asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
           personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
           agreement: { select: { id: true, name: true, title: true } },
+          agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
         },
       });
 
@@ -278,7 +327,7 @@ export async function bulkIssueAssets(
         ipAddress,
         userAgent,
         field: 'status',
-        oldValue: 'AVAILABLE',
+        oldValue: assetData?.status || 'AVAILABLE',
         newValue: 'ASSIGNED',
         severity: 'HIGH',
         summary: generateSummary({ action: 'CHECKOUT', entityType: 'Asset', assetName }),
@@ -292,6 +341,67 @@ export async function bulkIssueAssets(
     agreementId,
     errors: errors.length > 0 ? errors : undefined,
   };
+}
+
+
+/* ─── Recipient digital sign-off ─── */
+export async function signIssuance(assignmentId: string, signerName: string, performedById: string, ipAddress?: string, userAgent?: string) {
+  const assignment = await prisma.assignment.findUnique({
+    where: { id: assignmentId },
+    include: { asset: true, personnel: true },
+  });
+  if (!assignment) throw new Error('Issuance not found');
+  if (assignment.returnedAt) throw new Error('Returned issuances cannot be signed');
+  if (assignment.recipientSignedAt) throw new Error('Issuance is already signed');
+
+  const trimmedName = signerName.trim();
+  if (!trimmedName) throw new Error('Signer name is required');
+
+  const where: Prisma.AssignmentWhereInput = assignment.bulkBatchId
+    ? { bulkBatchId: assignment.bulkBatchId, returnedAt: null, recipientSignedAt: null }
+    : { id: assignmentId };
+
+  const signedAt = new Date();
+  const result = await prisma.assignment.updateMany({
+    where,
+    data: {
+      recipientSignedAt: signedAt,
+      recipientSignatureName: trimmedName,
+      recipientSignatureMethod: 'typed',
+      recipientSignatureIp: ipAddress || null,
+    },
+  });
+
+  if (assignment.agreementDocumentId) {
+    await prisma.agreementDocument.update({
+      where: { id: assignment.agreementDocumentId },
+      data: {
+        status: 'signed',
+        recipientSignedAt: signedAt,
+        recipientSignatureName: trimmedName,
+        recipientSignatureMethod: 'typed',
+        recipientSignatureIp: ipAddress || null,
+      },
+    });
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      entityType: 'Assignment',
+      entityId: assignmentId,
+      action: 'DIGITAL_SIGNOFF',
+      performedById,
+      ipAddress,
+      userAgent,
+      field: 'recipientSignedAt',
+      oldValue: 'null',
+      newValue: signedAt.toISOString(),
+      severity: 'HIGH',
+      summary: generateSummary({ action: 'UPDATED', entityType: 'Assignment', assetName: assignment.asset.name, serialNumber: assignment.asset.serialNumber, newValue: `Signed by ${trimmedName}` }),
+    },
+  });
+
+  return { signed: result.count, signedAt, signerName: trimmedName, batchId: assignment.bulkBatchId };
 }
 
 /* ─── Return issuance ─── */
@@ -321,6 +431,7 @@ export async function returnIssuance(
         asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
         personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
         agreement: { select: { id: true, name: true, title: true } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
       },
     });
 
@@ -399,7 +510,7 @@ export async function getAvailableAssets(search?: string) {
 
 /* ─── Get active personnel for issuance wizard ─── */
 export async function getActivePersonnel(search?: string) {
-  const where: Prisma.PersonnelWhereInput = { status: 'active' };
+  const where: Prisma.PersonnelWhereInput = { status: 'active', isReadyForIssuance: true };
   if (search) {
     where.OR = [
       { fullName: { contains: search, mode: 'insensitive' } },
@@ -409,10 +520,90 @@ export async function getActivePersonnel(search?: string) {
   }
   return prisma.personnel.findMany({
     where,
-    select: { id: true, fullName: true, designation: true, project: true, designationId: true, projectId: true, institutionId: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } },
+    select: { id: true, fullName: true, designation: true, project: true, isReadyForIssuance: true, designationId: true, projectId: true, institutionId: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } },
     orderBy: { fullName: 'asc' },
     take: 50,
   });
+}
+
+/* ─── Asset locking for issuance wizard ─── */
+export async function lockAssetsForIssuance(assetIds: string[], performedById: string, ipAddress?: string, userAgent?: string) {
+  const assets = await prisma.asset.findMany({
+    where: { id: { in: assetIds }, deletedAt: null },
+    select: { id: true, name: true, serialNumber: true, status: true },
+  });
+  const assetMap = new Map(assets.map(a => [a.id, a]));
+  const locked: typeof assets = [];
+  const errors: Array<{ assetId: string; reason: string }> = [];
+
+  await prisma.$transaction(async (tx) => {
+    for (const assetId of assetIds) {
+      const asset = assetMap.get(assetId);
+      if (!asset) { errors.push({ assetId, reason: 'Asset not found' }); continue; }
+      if (asset.status !== 'AVAILABLE') { errors.push({ assetId, reason: `Asset is ${asset.status}` }); continue; }
+
+      const result = await tx.asset.updateMany({
+        where: { id: assetId, status: 'AVAILABLE', deletedAt: null },
+        data: { status: 'PENDING_ASSIGNMENT' },
+      });
+      if (result.count === 1) {
+        locked.push({ ...asset, status: 'PENDING_ASSIGNMENT' });
+        await tx.auditLog.create({
+          data: {
+            entityType: 'Asset',
+            entityId: assetId,
+            action: 'ISSUANCE_LOCK',
+            performedById,
+            ipAddress,
+            userAgent,
+            field: 'status',
+            oldValue: 'AVAILABLE',
+            newValue: 'PENDING_ASSIGNMENT',
+            severity: 'MEDIUM',
+            summary: generateSummary({ action: 'UPDATED', entityType: 'Asset', assetName: asset.name, serialNumber: asset.serialNumber, oldValue: 'AVAILABLE', newValue: 'PENDING_ASSIGNMENT' }),
+          },
+        });
+      } else {
+        errors.push({ assetId, reason: 'Asset was locked by another issuance flow' });
+      }
+    }
+  });
+
+  return { locked, errors: errors.length > 0 ? errors : undefined };
+}
+
+export async function releaseAssetsFromIssuance(assetIds: string[], performedById: string, ipAddress?: string, userAgent?: string) {
+  const assets = await prisma.asset.findMany({
+    where: { id: { in: assetIds }, status: 'PENDING_ASSIGNMENT', deletedAt: null },
+    select: { id: true, name: true, serialNumber: true },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.asset.updateMany({
+      where: { id: { in: assets.map(a => a.id) }, status: 'PENDING_ASSIGNMENT', deletedAt: null },
+      data: { status: 'AVAILABLE' },
+    });
+
+    for (const asset of assets) {
+      await tx.auditLog.create({
+        data: {
+          entityType: 'Asset',
+          entityId: asset.id,
+          action: 'ISSUANCE_UNLOCK',
+          performedById,
+          ipAddress,
+          userAgent,
+          field: 'status',
+          oldValue: 'PENDING_ASSIGNMENT',
+          newValue: 'AVAILABLE',
+          severity: 'LOW',
+          summary: generateSummary({ action: 'UPDATED', entityType: 'Asset', assetName: asset.name, serialNumber: asset.serialNumber, oldValue: 'PENDING_ASSIGNMENT', newValue: 'AVAILABLE' }),
+        },
+      });
+    }
+  });
+
+  return { released: assets };
 }
 
 /* ─── Generate agreement letter text ─── */

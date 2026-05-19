@@ -41,3 +41,7 @@ export const updatePersonnelSchema = z.object({
 }).refine(d => Object.keys(d).length > 0, {
   message: 'Provide at least one field to update',
 });
+
+export const updatePersonnelReadinessSchema = z.object({
+  isReady: z.boolean(),
+});

@@ -24,6 +24,8 @@ model User {
   updatedAt       DateTime  @updatedAt
 
   assignments        Assignment[]
+  issuedAgreementDocuments AgreementDocument[] @relation("AgreementDocumentIssuedBy")
+  uploadedAgreementDocuments AgreementDocument[] @relation("AgreementDocumentSignedUploadedBy")
   auditLogs          AuditLog[]         @relation("PerformedBy")
   labelTemplates     LabelTemplate[]
   purchaseRequests   PurchaseRequest[]  @relation("PurchaseRequests")
@@ -85,6 +87,12 @@ model Assignment {
   agreementText String?          // Resolved agreement content (separate from general notes)
   agreementId   String?          // FK to the template used for this issuance
   bulkBatchId   String?          // Groups multiple assets issued together (1 agreement → N assets)
+  recipientSignedAt DateTime?    // Digital recipient sign-off timestamp
+  recipientSignatureName String? // Typed recipient sign-off name
+  recipientSignatureMethod String? // typed, qr, imported
+  recipientSignatureIp String?   // IP address captured during sign-off
+  agreementDocumentId String?     // Immutable agreement document snapshot
+  agreementDocument   AgreementDocument? @relation(fields: [agreementDocumentId], references: [id], onDelete: SetNull)
   asset         Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
   user          User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
   personnel     Personnel?       @relation("PersonnelAssignments", fields: [personnelId], references: [id], onDelete: SetNull)
@@ -193,6 +201,7 @@ enum Role {
 
 enum AssetStatus {
   AVAILABLE
+  PENDING_ASSIGNMENT
   ASSIGNED
   MAINTENANCE
   RETIRED
@@ -255,8 +264,10 @@ model Personnel {
   contractEndDate        DateTime?
   signedAgreementPath    String?
   status            String   @default("active")  // active, inactive, resigned
+  isReadyForIssuance Boolean @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
 
   institutionId     Int?
   institution       InstitutionLookup? @relation("PersonnelInstitution", fields: [institutionId], references: [id])
@@ -266,6 +277,7 @@ model Personnel {
   designationLookup DesignationLookup? @relation("PersonnelDesignation", fields: [designationId], references: [id])
 
   assignments       Assignment[] @relation("PersonnelAssignments")
+  agreementDocuments AgreementDocument[] @relation("AgreementDocumentPersonnel")
   historyLogs       ProfileHistory[] @relation("PersonnelHistory")
 
   @@map("personnel")
@@ -324,8 +336,51 @@ model AgreementTemplate {
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
   assignments            Assignment[] @relation("AssignmentAgreement")
+  documents              AgreementDocument[] @relation("AgreementDocumentTemplate")
 
   @@map("agreement_templates")
+}
+
+model AgreementDocument {
+  id                         String   @id @default(uuid())
+  documentNumber             String   @unique
+  templateId                 String?
+  templateVersion            Int?
+  title                      String
+  resolvedText               String   @db.Text
+  headerLogo                 String?
+  bulkBatchId                String?
+  personnelId                String?
+  personnelNameSnapshot      String
+  designationSnapshot        String?
+  projectSnapshot            String?
+  institutionSnapshot        String?
+  assetSnapshot              Json
+  propertyOfficerName        String?
+  authorizedRepName          String?
+  status                     String   @default("issued")
+  issuedAt                   DateTime @default(now())
+  issuedById                 String
+  recipientSignedAt          DateTime?
+  recipientSignatureName     String?
+  recipientSignatureMethod   String?
+  recipientSignatureIp       String?
+  signedPdfPath              String?
+  signedUploadedAt           DateTime?
+  signedUploadedById         String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  template                   AgreementTemplate? @relation("AgreementDocumentTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  personnel                  Personnel? @relation("AgreementDocumentPersonnel", fields: [personnelId], references: [id], onDelete: SetNull)
+  issuedBy                   User @relation("AgreementDocumentIssuedBy", fields: [issuedById], references: [id])
+  signedUploadedBy           User? @relation("AgreementDocumentSignedUploadedBy", fields: [signedUploadedById], references: [id], onDelete: SetNull)
+  assignments                Assignment[]
+
+  @@index([bulkBatchId])
+  @@index([personnelId])
+  @@index([issuedAt])
+  @@map("agreement_documents")
 }
 
 model MaintenanceSchedule {

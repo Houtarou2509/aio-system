@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
 import * as personnelService from '../services/personnel.service';
-import { authenticate, requireRole } from '../middleware/auth';
+import { authenticate, hasPermission, requireRole } from '../middleware/auth';
 import { success, error } from '../utils/response';
 import { validate } from '../middleware/validate';
-import { createPersonnelSchema, updatePersonnelSchema } from './personnel.schema';
+import { createPersonnelSchema, updatePersonnelSchema, updatePersonnelReadinessSchema } from './personnel.schema';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -63,6 +63,23 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     success(res, result.data, 200, result.meta);
   } catch (e: any) {
     error(res, e.message, 500);
+  }
+});
+
+/* ─── Toggle readiness for issuance ─── */
+router.patch('/:id/readiness', authenticate, hasPermission('issuances:edit'), validate(updatePersonnelReadinessSchema), async (req: Request, res: Response) => {
+  try {
+    const result = await personnelService.togglePersonnelReadiness(
+      String(req.params.id),
+      Boolean(req.body.isReady),
+      req.user!.id,
+      getClientIp(req),
+      getUA(req),
+    );
+    success(res, result);
+  } catch (e: any) {
+    if (e.message === 'Personnel not found') error(res, e.message, 404);
+    else error(res, e.message, 400);
   }
 });
 
@@ -164,7 +181,7 @@ router.delete('/:id', authenticate, requireRole(['ADMIN']), async (req: Request,
 });
 
 /* ─── Upload signed agreement PDF ─── */
-router.post('/:id/signed-agreement', authenticate, requireRole(['ADMIN', 'STAFF_ADMIN']),
+router.post('/:id/signed-agreement', authenticate, hasPermission('issuances:edit'),
   signedAgreementUpload.single('file'),
   async (req: Request, res: Response) => {
     try {
