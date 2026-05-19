@@ -568,6 +568,9 @@ AuditSeverity: LOW | MEDIUM | HIGH
 | POST | `/api/agreements/upload-logo` | Admin | Upload logo for reuse |
 | GET | `/api/agreements/placeholders` | Any | Template placeholder reference |
 | POST | `/api/agreements/pdf` | Admin/StaffAdmin | Generate PDF (returns application/pdf binary) |
+| GET | `/api/agreements/documents` | `issuances:view` | List immutable agreement document snapshots |
+| POST | `/api/agreements/documents/backfill` | `issuances:edit` | Backfill immutable snapshots for historical assignments (supports dryRun) |
+| POST | `/api/agreements/documents/:id/signed-copy` | `issuances:edit` | Attach signed PDF copy to an agreement document |
 
 ### Institutions / Projects
 | Method | Endpoint | Auth | Description |

@@ -7,7 +7,7 @@ import { getPlaceholderReference } from '../utils/templateParser';
 import { authenticate, hasPermission } from '../middleware/auth';
 import { success, error } from '../utils/response';
 import { validate } from '../middleware/validate';
-import { createAgreementTemplateSchema, updateAgreementTemplateSchema, agreementPdfSchema, templatePreviewSchema, templateValidationSchema } from './agreement.schema';
+import { createAgreementTemplateSchema, updateAgreementTemplateSchema, agreementPdfSchema, templatePreviewSchema, templateValidationSchema, backfillAgreementDocumentsSchema } from './agreement.schema';
 
 const router = Router();
 
@@ -252,6 +252,24 @@ router.get(
       success(res, docs);
     } catch (e: any) {
       error(res, e.message, 500);
+    }
+  },
+);
+
+router.post(
+  '/documents/backfill',
+  authenticate,
+  hasPermission('issuances:edit'),
+  validate(backfillAgreementDocumentsSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const result = await agreementService.backfillAgreementDocuments({
+        performedById: (req as any).user.id,
+        dryRun: Boolean(req.body.dryRun),
+      });
+      success(res, result);
+    } catch (e: any) {
+      error(res, e.message, 400);
     }
   },
 );

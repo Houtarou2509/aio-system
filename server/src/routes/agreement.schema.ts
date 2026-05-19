@@ -55,3 +55,7 @@ export const templatePreviewSchema = z.object({
 export const templateValidationSchema = z.object({
   content: z.string().max(50000),
 });
+
+export const backfillAgreementDocumentsSchema = z.object({
+  dryRun: z.boolean().optional().default(false),
+});

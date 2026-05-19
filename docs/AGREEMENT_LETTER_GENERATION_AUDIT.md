@@ -11,13 +11,14 @@ The current implementation now covers the critical MVP requirements for a real a
 
 Remaining hardening items:
 
-1. Backfill `AgreementDocument` snapshots for historical assignments created before this feature.
-2. Add document-level signed-copy management UX beyond the current upload action in PDF preview/profile flows.
-3. Add template versioning so each document can point to an explicit template revision number.
-4. Add automated tests for lock/release cleanup, multi-asset template parsing, PDF generation, and batch sign-off.
-5. Improve the default/fallback template quality when an admin has not created a production-ready default template.
+1. Add document-level signed-copy management UX beyond the current upload action in PDF preview/profile flows.
+2. Add template versioning so each document can point to an explicit template revision number.
+3. Add automated tests for lock/release cleanup, multi-asset template parsing, PDF generation, batch sign-off, and historical document backfill.
+4. Improve the default/fallback template quality when an admin has not created a production-ready default template.
 
-Recommendation: treat the current version as the operational MVP, then harden it with historical backfill, template versioning, and automated regression coverage before relying on it as a permanent official document archive.
+Completed hardening: historical `AgreementDocument` backfill is now implemented through `POST /api/agreement/documents/backfill` with dry-run support, per-document audit logging, batch grouping, and signed-state preservation. Local verification backfilled 9 historical assignments into 8 immutable documents.
+
+Recommendation: treat the current version as the operational MVP, then harden it with document-level signed-copy UX, template versioning, and automated regression coverage before relying on it as a permanent official document archive.
 
 ## Current System Map
 

@@ -198,6 +198,175 @@ export async function attachSignedAgreementDocument(documentId: string, signedPd
   });
 }
 
+function buildHistoricalAgreementText(assignment: any, assets: any[]) {
+  if (assignment.agreementText?.trim()) return assignment.agreementText.trim();
+
+  const recipient = assignment.personnel?.fullName || assignment.assignedTo || 'Unknown recipient';
+  const assetLines = assets.map((a, index) => {
+    const serial = a.serialNumber ? `Serial: ${a.serialNumber}` : 'Serial: N/A';
+    const property = a.propertyNumber ? `Property No.: ${a.propertyNumber}` : 'Property No.: N/A';
+    const condition = a.condition ? `Condition: ${a.condition}` : 'Condition: Good';
+    return `${index + 1}. ${a.name || 'Unnamed asset'} — ${serial}; ${property}; ${condition}`;
+  }).join('\n');
+
+  return [
+    'ISSUANCE AND ACCOUNTABILITY AGREEMENT',
+    '',
+    `This historical accountability record confirms that the following asset${assets.length > 1 ? 's were' : ' was'} issued to ${recipient}.`,
+    '',
+    assetLines,
+    '',
+    'This document was generated as a backfilled immutable snapshot from existing assignment records.',
+  ].join('\n');
+}
+
+function getDocumentStatus(assignments: any[]) {
+  const hasSignedCopy = assignments.some(a => a.personnel?.signedAgreementPath);
+  const hasRecipientSignature = assignments.some(a => a.recipientSignedAt);
+  if (hasSignedCopy && hasRecipientSignature) return 'signed_uploaded';
+  if (hasSignedCopy) return 'uploaded';
+  if (hasRecipientSignature) return 'signed';
+  return 'issued';
+}
+
+export async function backfillAgreementDocuments(params: { performedById: string; dryRun?: boolean }) {
+  const missingAssignments = await prisma.assignment.findMany({
+    where: { agreementDocumentId: null },
+    orderBy: { assignedAt: 'asc' },
+    include: {
+      asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true } },
+      personnel: {
+        select: {
+          id: true,
+          fullName: true,
+          designation: true,
+          project: true,
+          signedAgreementPath: true,
+          designationLookup: { select: { name: true } },
+          projectLookup: { select: { name: true } },
+          institution: { select: { name: true } },
+        },
+      },
+      agreement: { select: { id: true, name: true, title: true, headerLogo: true, defaultPropertyOfficer: true, defaultAuthorizedRep: true } },
+    },
+  });
+
+  const groups = new Map<string, typeof missingAssignments>();
+  for (const assignment of missingAssignments) {
+    const key = assignment.bulkBatchId ? `batch:${assignment.bulkBatchId}` : `assignment:${assignment.id}`;
+    const current = groups.get(key) || [];
+    current.push(assignment);
+    groups.set(key, current);
+  }
+
+  const planned = Array.from(groups.entries()).map(([key, assignments]) => ({
+    key,
+    assignmentIds: assignments.map(a => a.id),
+    bulkBatchId: assignments[0].bulkBatchId,
+    personnelId: assignments[0].personnelId,
+    personnelName: assignments[0].personnel?.fullName || assignments[0].assignedTo || 'Unknown recipient',
+    assetCount: assignments.length,
+    hasAgreementText: assignments.some(a => !!a.agreementText?.trim()),
+  }));
+
+  if (params.dryRun) {
+    return { dryRun: true, missingAssignments: missingAssignments.length, groups: planned.length, planned };
+  }
+
+  let documentsCreated = 0;
+  let assignmentsLinked = 0;
+  const documents: Array<{ id: string; documentNumber: string; assignmentIds: string[]; bulkBatchId: string | null }> = [];
+
+  for (const assignments of Array.from(groups.values())) {
+    const first = assignments[0];
+    const assets = assignments.map(a => ({
+      id: a.asset.id,
+      name: a.asset.name,
+      serialNumber: a.asset.serialNumber,
+      propertyNumber: a.asset.propertyNumber,
+      condition: a.condition || 'Good',
+    }));
+
+    const existingBatchDocument = first.bulkBatchId
+      ? await prisma.agreementDocument.findFirst({ where: { bulkBatchId: first.bulkBatchId } })
+      : null;
+
+    if (existingBatchDocument) {
+      const updateResult = await prisma.assignment.updateMany({
+        where: { id: { in: assignments.map(a => a.id) }, agreementDocumentId: null },
+        data: { agreementDocumentId: existingBatchDocument.id },
+      });
+      assignmentsLinked += updateResult.count;
+      documents.push({ id: existingBatchDocument.id, documentNumber: existingBatchDocument.documentNumber, assignmentIds: assignments.map(a => a.id), bulkBatchId: first.bulkBatchId });
+      continue;
+    }
+
+    const signedAssignment = assignments.find(a => a.recipientSignedAt) || first;
+    const signedCopyAssignment = assignments.find(a => a.personnel?.signedAgreementPath);
+    const document = await prisma.$transaction(async (tx) => {
+      const created = await tx.agreementDocument.create({
+        data: {
+          documentNumber: makeDocumentNumber('AGR-BF'),
+          templateId: first.agreementId || null,
+          title: first.agreement?.title || 'ISSUANCE & ACCOUNTABILITY AGREEMENT',
+          resolvedText: buildHistoricalAgreementText(first, assets),
+          headerLogo: first.agreement?.headerLogo || null,
+          bulkBatchId: first.bulkBatchId || null,
+          personnelId: first.personnelId || null,
+          personnelNameSnapshot: first.personnel?.fullName || first.assignedTo || 'Unknown recipient',
+          designationSnapshot: first.personnel?.designationLookup?.name || first.personnel?.designation || null,
+          projectSnapshot: first.personnel?.projectLookup?.name || first.personnel?.project || null,
+          institutionSnapshot: first.personnel?.institution?.name || null,
+          assetSnapshot: assets,
+          propertyOfficerName: first.agreement?.defaultPropertyOfficer || null,
+          authorizedRepName: first.agreement?.defaultAuthorizedRep || null,
+          status: getDocumentStatus(assignments),
+          issuedAt: first.assignedAt,
+          issuedById: first.userId || params.performedById,
+          recipientSignedAt: signedAssignment.recipientSignedAt || null,
+          recipientSignatureName: signedAssignment.recipientSignatureName || null,
+          recipientSignatureMethod: signedAssignment.recipientSignatureMethod || null,
+          recipientSignatureIp: signedAssignment.recipientSignatureIp || null,
+          signedPdfPath: signedCopyAssignment?.personnel?.signedAgreementPath || null,
+        },
+      });
+
+      const linked = await tx.assignment.updateMany({
+        where: { id: { in: assignments.map(a => a.id) }, agreementDocumentId: null },
+        data: { agreementDocumentId: created.id },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          entityType: 'AgreementDocument',
+          entityId: created.id,
+          action: 'BACKFILL',
+          performedById: params.performedById,
+          field: 'agreementDocumentId',
+          newValue: `${linked.count} historical assignment(s) linked`,
+          severity: 'MEDIUM',
+          summary: `Backfilled agreement document ${created.documentNumber} for ${linked.count} historical assignment(s)`,
+        },
+      });
+
+      return { created, linkedCount: linked.count };
+    });
+
+    documentsCreated += 1;
+    assignmentsLinked += document.linkedCount;
+    documents.push({ id: document.created.id, documentNumber: document.created.documentNumber, assignmentIds: assignments.map(a => a.id), bulkBatchId: first.bulkBatchId });
+  }
+
+  return {
+    dryRun: false,
+    missingAssignments: missingAssignments.length,
+    groups: groups.size,
+    documentsCreated,
+    assignmentsLinked,
+    documents,
+  };
+}
+
 /* ═══════════════════════════════════════════════════════
    PDF GENERATION ENGINE
    ═══════════════════════════════════════════════════════ */
