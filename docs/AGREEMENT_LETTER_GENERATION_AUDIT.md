@@ -7,16 +7,17 @@ Scope: AIO System accountability agreement templates, issuance agreement resolut
 
 The agreement-letter system is functional and has the correct foundation: templates are stored in the database, placeholders are resolved server-side, the issuance wizard supports single and multi-asset agreements, generated PDFs include metadata/sign-off status, and recipient digital sign-off is persisted on assignment records.
 
-However, the current implementation is not yet strong enough for a real accountability-document workflow. The main risks are:
+The current implementation now covers the critical MVP requirements for a real accountability-document workflow: issuance resolves once, stores the resolved agreement text, creates immutable `AgreementDocument` rows, persists batch signatories, supports multi-page PDF output, uses the backend parser for preview, and stores recipient sign-off metadata.
 
-1. The actual generated PDF does not preserve the exact resolved agreement text saved during issuance.
-2. The PDF body rendering can silently truncate content when the body exceeds the fixed one-page area.
-3. Template preview in the template editor is not using the same parser/data path as final PDF generation.
-4. Signatory names entered during issuance are not persisted, so regenerated PDFs can lose the actual signatories used at issuance time.
-5. The system mixes three concepts: template content, resolved agreement text, and final PDF rendering. These need a cleaner document lifecycle.
-6. The fallback/default behavior can generate poor output when the default template is test/sample content.
+Remaining hardening items:
 
-Recommendation: before adding more visual polish, stabilize the document lifecycle: resolve once, snapshot the resolved document, persist signatories and document metadata, and generate PDFs from that immutable snapshot instead of reconstructing from current template/personnel/asset state.
+1. Backfill `AgreementDocument` snapshots for historical assignments created before this feature.
+2. Add document-level signed-copy management UX beyond the current upload action in PDF preview/profile flows.
+3. Add template versioning so each document can point to an explicit template revision number.
+4. Add automated tests for lock/release cleanup, multi-asset template parsing, PDF generation, and batch sign-off.
+5. Improve the default/fallback template quality when an admin has not created a production-ready default template.
+
+Recommendation: treat the current version as the operational MVP, then harden it with historical backfill, template versioning, and automated regression coverage before relying on it as a permanent official document archive.
 
 ## Current System Map
 
