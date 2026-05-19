@@ -11,14 +11,16 @@ The current implementation now covers the critical MVP requirements for a real a
 
 Remaining hardening items:
 
-1. Add document-level signed-copy management UX beyond the current upload action in PDF preview/profile flows.
-2. Add template versioning so each document can point to an explicit template revision number.
-3. Add automated tests for lock/release cleanup, multi-asset template parsing, PDF generation, batch sign-off, and historical document backfill.
-4. Improve the default/fallback template quality when an admin has not created a production-ready default template.
+1. Add template versioning so each document can point to an explicit template revision number.
+2. Add automated tests for lock/release cleanup, multi-asset template parsing, PDF generation, batch sign-off, historical document backfill, and document signed-copy management.
+3. Improve the default/fallback template quality when an admin has not created a production-ready default template.
 
-Completed hardening: historical `AgreementDocument` backfill is now implemented through `POST /api/agreement/documents/backfill` with dry-run support, per-document audit logging, batch grouping, and signed-state preservation. Local verification backfilled 9 historical assignments into 8 immutable documents.
+Completed hardening:
 
-Recommendation: treat the current version as the operational MVP, then harden it with document-level signed-copy UX, template versioning, and automated regression coverage before relying on it as a permanent official document archive.
+- Historical `AgreementDocument` backfill is implemented through `POST /api/agreements/documents/backfill` with dry-run support, per-document audit logging, batch grouping, and signed-state preservation. Local verification backfilled 9 historical assignments into 8 immutable documents.
+- Document-level signed-copy UX is implemented in the Issuances PDF preview flow: rows show when a scanned signed PDF is on file, users can view signed copies directly, and the PDF preview modal provides document-level status, view/download, upload, and replace controls backed by `POST /api/agreements/documents/:id/signed-copy`. Signed-copy uploads/replacements now write `AgreementDocument` audit logs.
+
+Recommendation: treat the current version as the operational MVP, then harden it with template versioning and automated regression coverage before relying on it as a permanent official document archive.
 
 ## Current System Map
 
@@ -91,7 +93,7 @@ Current frontend behavior:
 4. Wizard can preview generated PDF before issuing.
 5. Issuances page groups bulk batches into one row.
 6. Issuances page can preview the agreement PDF and trigger digital sign-off.
-7. PDF preview modal supports print, download, and uploading a signed copy to the personnel profile.
+7. PDF preview modal supports print/download plus document-level signed-copy management: status, view, download, upload, and replace when an `AgreementDocument` is linked; legacy profile upload remains available as a fallback.
 
 ## Verification Performed
 

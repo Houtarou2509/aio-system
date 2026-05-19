@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { X, Printer, Download, Loader2, FileText, CheckCircle2 } from 'lucide-react';
+import { PermissionGate } from '../auth';
 
 interface PDFPreviewModalProps {
   open: boolean;
@@ -10,13 +11,53 @@ interface PDFPreviewModalProps {
   personnelId?: string;
   personnelName?: string;
   agreementDocumentId?: string;
+  signedPdfPath?: string | null;
+  signedUploadedAt?: string | null;
+  onSignedCopyUploaded?: (document: any) => void;
 }
 
-export default function PDFPreviewModal({ open, onClose, blobUrl, loading, downloadFilename, personnelId, personnelName, agreementDocumentId }: PDFPreviewModalProps) {
+function toPublicFileUrl(path?: string | null) {
+  if (!path) return null;
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function downloadFile(url: string, filename: string) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+export default function PDFPreviewModal({
+  open,
+  onClose,
+  blobUrl,
+  loading,
+  downloadFilename,
+  personnelId,
+  personnelName,
+  agreementDocumentId,
+  signedPdfPath,
+  signedUploadedAt,
+  onSignedCopyUploaded,
+}: PDFPreviewModalProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [iframeKey, setIframeKey] = useState(0);
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
   const [uploadError, setUploadError] = useState('');
+  const [currentSignedPdfPath, setCurrentSignedPdfPath] = useState<string | null>(signedPdfPath || null);
+  const [currentSignedUploadedAt, setCurrentSignedUploadedAt] = useState<string | null>(signedUploadedAt || null);
+
+  useEffect(() => {
+    setCurrentSignedPdfPath(signedPdfPath || null);
+    setCurrentSignedUploadedAt(signedUploadedAt || null);
+    setUploadPhase('idle');
+    setUploadError('');
+  }, [signedPdfPath, signedUploadedAt, agreementDocumentId]);
 
   // Force iframe reload when blobUrl changes or modal opens
   useEffect(() => {
@@ -54,6 +95,10 @@ export default function PDFPreviewModal({ open, onClose, blobUrl, loading, downl
 
   if (!open) return null;
 
+  const signedCopyUrl = toPublicFileUrl(currentSignedPdfPath);
+  const canUploadSignedCopy = Boolean(agreementDocumentId || personnelId);
+  const isDocumentLevel = Boolean(agreementDocumentId);
+
   const handlePrint = () => {
     if (iframeRef.current?.contentWindow) {
       iframeRef.current.contentWindow.print();
@@ -62,17 +107,12 @@ export default function PDFPreviewModal({ open, onClose, blobUrl, loading, downl
 
   const handleDownload = () => {
     if (!blobUrl) return;
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = downloadFilename || 'agreement.pdf';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    downloadFile(blobUrl, downloadFilename || 'agreement.pdf');
   };
 
   const handleUploadSigned = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || (!personnelId && !agreementDocumentId)) return;
+    if (!file || !canUploadSignedCopy) return;
     if (file.type !== 'application/pdf') {
       setUploadError('Please upload a PDF file only.');
       setUploadPhase('error');
@@ -94,17 +134,23 @@ export default function PDFPreviewModal({ open, onClose, blobUrl, loading, downl
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error?.message || 'Upload failed');
+      const document = data.data;
+      if (document?.signedPdfPath) setCurrentSignedPdfPath(document.signedPdfPath);
+      if (document?.signedUploadedAt) setCurrentSignedUploadedAt(document.signedUploadedAt);
       setUploadPhase('done');
+      onSignedCopyUploaded?.(document);
     } catch (err: any) {
       setUploadError(err.message || 'Upload failed');
       setUploadPhase('error');
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onMouseDown={e => { if (e.target === e.currentTarget) handleClose(); }}>
       <div
-        className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-5xl mx-4 flex flex-col relative"
+        className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-6xl mx-4 flex flex-col relative"
         style={{ height: '90vh' }}
         onClick={e => e.stopPropagation()}
       >
@@ -136,49 +182,103 @@ export default function PDFPreviewModal({ open, onClose, blobUrl, loading, downl
           </button>
         </div>
 
-        {/* Upload Signed Copy — shown when personnelId is provided */}
-        {personnelId && (
-          <div className="absolute top-12 left-3 z-10 flex flex-col gap-2">
-            {uploadPhase === 'done' ? (
-              <div className="rounded-lg bg-emerald-500 shadow px-3 py-2 text-xs font-semibold text-white flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Signed copy uploaded
+        {/* Document-level signed copy manager */}
+        {canUploadSignedCopy && (
+          <div className="absolute top-12 left-3 z-10 w-72 rounded-xl border border-white/20 bg-white/95 dark:bg-slate-900/95 shadow-xl backdrop-blur p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#012061] dark:text-white">
+                  {isDocumentLevel ? 'Document Signed Copy' : 'Profile Signed Copy'}
+                </p>
+                <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                  {personnelName ? `For ${personnelName}` : 'Upload a scanned signed PDF'}
+                </p>
               </div>
-            ) : uploadPhase === 'error' ? (
-              <div className="flex flex-col gap-1">
-                <div className="rounded-lg bg-red-500 shadow px-3 py-2 text-xs font-medium text-white">
-                  {uploadError}
+              {signedCopyUrl ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  <CheckCircle2 className="h-3 w-3" /> On file
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                  Missing
+                </span>
+              )}
+            </div>
+
+            {signedCopyUrl ? (
+              <div className="mt-3 space-y-2">
+                {currentSignedUploadedAt && (
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Uploaded {new Date(currentSignedUploadedAt).toLocaleString()}
+                  </p>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => window.open(signedCopyUrl, '_blank', 'noopener,noreferrer')}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#012061] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#001a4d]"
+                  >
+                    <FileText className="h-3.5 w-3.5" /> View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadFile(signedCopyUrl, `signed-${downloadFilename || 'agreement.pdf'}`)}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Download
+                  </button>
                 </div>
-                <button onClick={() => setUploadPhase('idle')}
-                  className="rounded-lg bg-white shadow px-3 py-1.5 text-xs font-semibold text-[#f8931f] hover:bg-[#f8931f]/10">
-                  Try again
-                </button>
               </div>
             ) : (
-              <label className={`inline-flex items-center gap-1.5 rounded-lg shadow px-3 py-1.5 text-xs font-semibold cursor-pointer transition-colors ${
-                uploadPhase === 'uploading'
-                  ? 'bg-slate-500 text-white'
-                  : 'bg-[#012061] text-white hover:bg-[#001a4d]'
-              }`}>
-                {uploadPhase === 'uploading' ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
+              <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-800">
+                No scanned signed PDF is attached to this {isDocumentLevel ? 'agreement document' : 'profile'} yet.
+              </p>
+            )}
+
+            <PermissionGate permissions={['issuances:edit']}>
+              <div className="mt-3">
+                {uploadPhase === 'done' ? (
+                  <div className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Signed copy saved
+                  </div>
+                ) : uploadPhase === 'error' ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="rounded-lg bg-red-500 px-3 py-2 text-xs font-medium text-white">
+                      {uploadError}
+                    </div>
+                    <button onClick={() => setUploadPhase('idle')}
+                      className="rounded-lg bg-white border border-slate-200 px-3 py-1.5 text-xs font-semibold text-[#f8931f] hover:bg-[#f8931f]/10">
+                      Try again
+                    </button>
+                  </div>
                 ) : (
-                  <FileText className="w-3 h-3" />
+                  <label className={`inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold cursor-pointer transition-colors ${
+                    uploadPhase === 'uploading'
+                      ? 'bg-slate-500 text-white'
+                      : signedCopyUrl
+                        ? 'bg-[#f8931f] text-white hover:bg-[#e0841a]'
+                        : 'bg-[#012061] text-white hover:bg-[#001a4d]'
+                  }`}>
+                    {uploadPhase === 'uploading' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : signedCopyUrl ? (
+                      <FileText className="w-3.5 h-3.5" />
+                    ) : (
+                      <FileText className="w-3.5 h-3.5" />
+                    )}
+                    {uploadPhase === 'uploading' ? 'Uploading...' : signedCopyUrl ? 'Replace Signed Copy' : 'Upload Signed Copy'}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf"
+                      onChange={handleUploadSigned}
+                      className="hidden"
+                      disabled={uploadPhase === 'uploading'}
+                    />
+                  </label>
                 )}
-                {uploadPhase === 'uploading' ? 'Uploading...' : 'Upload Signed Copy'}
-                <input
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleUploadSigned}
-                  className="hidden"
-                  disabled={uploadPhase === 'uploading'}
-                />
-              </label>
-            )}
-            {personnelName && (
-              <span className="text-[10px] text-white/80 bg-white/10 rounded px-2 py-0.5 backdrop-blur">
-                For: {personnelName}
-              </span>
-            )}
+              </div>
+            </PermissionGate>
           </div>
         )}
 

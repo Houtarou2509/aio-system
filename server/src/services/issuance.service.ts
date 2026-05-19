@@ -16,7 +16,7 @@ export async function getActiveIssuanceForAsset(assetId: string) {
       asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
       personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
       agreement: { select: { id: true, name: true, title: true } },
-        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
     },
   });
 }
@@ -56,7 +56,7 @@ export async function listIssuances(params: {
         asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
         personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
         agreement: { select: { id: true, name: true, title: true } },
-        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
       },
     }),
     prisma.assignment.count({ where }),
@@ -130,7 +130,7 @@ export async function createIssuance(params: {
         asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
         personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
         agreement: { select: { id: true, name: true, title: true } },
-        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
       },
     });
 
@@ -288,7 +288,7 @@ export async function bulkIssueAssets(
           asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
           personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
           agreement: { select: { id: true, name: true, title: true } },
-          agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
+          agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
         },
       });
 
@@ -431,7 +431,7 @@ export async function returnIssuance(
         asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
         personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
         agreement: { select: { id: true, name: true, title: true } },
-        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true } },
       },
     });
 

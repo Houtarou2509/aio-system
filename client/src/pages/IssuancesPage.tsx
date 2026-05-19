@@ -15,7 +15,7 @@ interface Issuance {
   id: string; assetId: string; personnelId: string | null; assignedTo: string | null; assignedAt: string; returnedAt: string | null;
   condition: string | null; notes: string | null; agreementText: string | null; agreementId: string | null; bulkBatchId: string | null;
   recipientSignedAt: string | null; recipientSignatureName: string | null;
-  agreementDocument: { id: string; documentNumber: string; status: string; signedPdfPath: string | null; title: string; resolvedText: string | null; propertyOfficerName: string | null; authorizedRepName: string | null } | null;
+  agreementDocument: { id: string; documentNumber: string; status: string; signedPdfPath: string | null; signedUploadedAt: string | null; title: string; resolvedText: string | null; propertyOfficerName: string | null; authorizedRepName: string | null } | null;
   asset: { id: string; name: string; serialNumber: string | null; propertyNumber: string | null; status: string } | null;
   personnel: { id: string; fullName: string; position: string | null; project: string | null; department: string | null; designation: string | null; designationLookup: { name: string } | null } | null;
 }
@@ -244,12 +244,22 @@ export default function IssuancesPage() {
   const [pdfPersonnelId, setPdfPersonnelId] = useState<string | undefined>(undefined);
   const [pdfPersonnelName, setPdfPersonnelName] = useState<string | undefined>(undefined);
   const [pdfAgreementDocumentId, setPdfAgreementDocumentId] = useState<string | undefined>(undefined);
+  const [pdfSignedPdfPath, setPdfSignedPdfPath] = useState<string | null>(null);
+  const [pdfSignedUploadedAt, setPdfSignedUploadedAt] = useState<string | null>(null);
+
+  const toPublicFileUrl = (path?: string | null) => {
+    if (!path) return null;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    return path.startsWith('/') ? path : `/${path}`;
+  };
 
   const openAgreementPreview = useCallback(async (params: Record<string, any>) => {
     setPdfPreview({ blobUrl: null, loading: true, filename: 'agreement.pdf' });
     setPdfPersonnelId(params.personnelId || undefined);
     setPdfPersonnelName(params.personnelName || undefined);
     setPdfAgreementDocumentId(params.agreementDocumentId || undefined);
+    setPdfSignedPdfPath(params.signedPdfPath || null);
+    setPdfSignedUploadedAt(params.signedUploadedAt || null);
     try {
       const token = localStorage.getItem('accessToken');
       let res = await fetch('/api/agreements/pdf', {
@@ -302,6 +312,8 @@ export default function IssuancesPage() {
     setPdfPersonnelId(undefined);
     setPdfPersonnelName(undefined);
     setPdfAgreementDocumentId(undefined);
+    setPdfSignedPdfPath(null);
+    setPdfSignedUploadedAt(null);
   }, []);
 
   const openSignModal = (iss: Issuance) => {
@@ -527,6 +539,11 @@ export default function IssuancesPage() {
                             Signed by {iss.recipientSignatureName || 'recipient'}
                           </div>
                         )}
+                        {iss.agreementDocument?.signedPdfPath && (
+                          <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                            <CheckCircle2 className="h-3 w-3" /> Signed PDF on file
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
@@ -558,6 +575,18 @@ export default function IssuancesPage() {
                               </button>
                             </PermissionGate>
                           )}
+                          {iss.agreementDocument?.signedPdfPath && (
+                            <button
+                              onClick={() => {
+                                const url = toPublicFileUrl(iss.agreementDocument?.signedPdfPath);
+                                if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                              }}
+                              className="p-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all group-hover:shadow-sm"
+                              title="View Signed Copy"
+                            >
+                              <FileText className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => openAgreementPreview({
                               personnelName: iss.personnel?.fullName,
@@ -575,6 +604,8 @@ export default function IssuancesPage() {
                               propertyOfficerName: iss.agreementDocument?.propertyOfficerName || undefined,
                               authorizedRepName: iss.agreementDocument?.authorizedRepName || undefined,
                               agreementDocumentId: iss.agreementDocument?.id || undefined,
+                              signedPdfPath: iss.agreementDocument?.signedPdfPath || undefined,
+                              signedUploadedAt: iss.agreementDocument?.signedUploadedAt || undefined,
                               personnelId: iss.personnelId || undefined,
                               recipientSignedAt: iss.recipientSignedAt || undefined,
                               recipientSignatureName: iss.recipientSignatureName || undefined,
@@ -661,6 +692,11 @@ export default function IssuancesPage() {
                             Signed by {first.recipientSignatureName || 'recipient'}
                           </div>
                         )}
+                        {first.agreementDocument?.signedPdfPath && (
+                          <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                            <CheckCircle2 className="h-3 w-3" /> Signed PDF on file
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-center align-top pt-5">
                         <div className="flex items-center justify-center gap-1.5">
@@ -675,6 +711,18 @@ export default function IssuancesPage() {
                               </button>
                             </PermissionGate>
                           )}
+                        {first.agreementDocument?.signedPdfPath && (
+                          <button
+                            onClick={() => {
+                              const url = toPublicFileUrl(first.agreementDocument?.signedPdfPath);
+                              if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                            }}
+                            className="p-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all group-hover:shadow-sm"
+                            title="View Signed Copy"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => openAgreementPreview({
                             personnelName: first.personnel?.fullName,
@@ -692,6 +740,8 @@ export default function IssuancesPage() {
                             propertyOfficerName: first.agreementDocument?.propertyOfficerName || undefined,
                             authorizedRepName: first.agreementDocument?.authorizedRepName || undefined,
                             agreementDocumentId: first.agreementDocument?.id || undefined,
+                            signedPdfPath: first.agreementDocument?.signedPdfPath || undefined,
+                            signedUploadedAt: first.agreementDocument?.signedUploadedAt || undefined,
                             personnelId: first.personnelId || undefined,
                             assets: batchItems.map(bi => ({
                               name: bi.asset?.name || '—',
@@ -765,7 +815,23 @@ export default function IssuancesPage() {
           </div>
         </div>
       )}
-      <PDFPreviewModal open={!!(pdfPreview.blobUrl || pdfPreview.loading)} onClose={closePdfPreview} blobUrl={pdfPreview.blobUrl} loading={pdfPreview.loading} downloadFilename={pdfPreview.filename} personnelId={pdfPersonnelId} personnelName={pdfPersonnelName} agreementDocumentId={pdfAgreementDocumentId} />
+      <PDFPreviewModal
+        open={!!(pdfPreview.blobUrl || pdfPreview.loading)}
+        onClose={closePdfPreview}
+        blobUrl={pdfPreview.blobUrl}
+        loading={pdfPreview.loading}
+        downloadFilename={pdfPreview.filename}
+        personnelId={pdfPersonnelId}
+        personnelName={pdfPersonnelName}
+        agreementDocumentId={pdfAgreementDocumentId}
+        signedPdfPath={pdfSignedPdfPath}
+        signedUploadedAt={pdfSignedUploadedAt}
+        onSignedCopyUploaded={(document) => {
+          setPdfSignedPdfPath(document?.signedPdfPath || null);
+          setPdfSignedUploadedAt(document?.signedUploadedAt || null);
+          fetchIssuances();
+        }}
+      />
       </div>{/* close content area */}
     </div>
   );

@@ -94,7 +94,7 @@ define(['./workbox-42c9ad5b'], (function (workbox) { 'use strict';
     "revision": "e8f30e44b239f9e4bcab424df6e176e7"
   }, {
     "url": "index.html",
-    "revision": "a1fb229dfaebce4032db32419b14ef7e"
+    "revision": "2337cb934dde918748b3407314fe52a1"
   }, {
     "url": "icons.svg",
     "revision": "3b4fcfcf393eca4d264dca4a4663bc37"
@@ -102,10 +102,10 @@ define(['./workbox-42c9ad5b'], (function (workbox) { 'use strict';
     "url": "favicon.svg",
     "revision": "7e840862161341271697daa99a40d76b"
   }, {
-    "url": "assets/index-DxsGX92o.css",
+    "url": "assets/index-DGgmKEBm.js",
     "revision": null
   }, {
-    "url": "assets/index-Ckx8uEET.js",
+    "url": "assets/index-D4KffMMq.css",
     "revision": null
   }, {
     "url": "assets/geist-latin-wght-normal-Dm3htQBi.woff2",

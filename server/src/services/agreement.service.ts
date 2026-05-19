@@ -187,14 +187,32 @@ export async function attachSignedAgreementDocument(documentId: string, signedPd
   const existing = await prisma.agreementDocument.findUnique({ where: { id: documentId } });
   if (!existing) throw new Error('Agreement document not found');
 
-  return prisma.agreementDocument.update({
-    where: { id: documentId },
-    data: {
-      signedPdfPath,
-      signedUploadedAt: new Date(),
-      signedUploadedById: uploadedById,
-      status: existing.recipientSignedAt ? 'signed_uploaded' : 'uploaded',
-    },
+  return prisma.$transaction(async (tx) => {
+    const document = await tx.agreementDocument.update({
+      where: { id: documentId },
+      data: {
+        signedPdfPath,
+        signedUploadedAt: new Date(),
+        signedUploadedById: uploadedById,
+        status: existing.recipientSignedAt ? 'signed_uploaded' : 'uploaded',
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        entityType: 'AgreementDocument',
+        entityId: document.id,
+        action: existing.signedPdfPath ? 'REPLACE_SIGNED_COPY' : 'UPLOAD_SIGNED_COPY',
+        performedById: uploadedById,
+        field: 'signedPdfPath',
+        oldValue: existing.signedPdfPath || null,
+        newValue: signedPdfPath,
+        severity: 'MEDIUM',
+        summary: `${existing.signedPdfPath ? 'Replaced' : 'Uploaded'} signed PDF copy for ${document.documentNumber}`,
+      },
+    });
+
+    return document;
   });
 }
 
