@@ -45,6 +45,14 @@ interface PlaceholderRef {
   group?: string;
 }
 
+interface TemplatePreviewState {
+  resolvedText: string;
+  warnings: string[];
+  unresolved: string[];
+  valid: boolean;
+}
+
+type PreviewMode = 'single' | 'multiple';
 type ToastType = 'success' | 'error' | 'info';
 
 interface Toast {
@@ -52,27 +60,6 @@ interface Toast {
   type: ToastType;
   message: string;
 }
-
-/* ─── Sample data for preview ─── */
-const SAMPLE_DATA: Record<string, string> = {
-  '{{fullName}}': 'Juan Dela Cruz',
-  '{{personnelName}}': 'Juan Dela Cruz',
-  '{{designation}}': 'Software Engineer',
-  '{{designationComma}}': ', Software Engineer',
-  '{{institution}}': 'DOST',
-  '{{institutionText}}': ' of DOST',
-  '{{project}}': 'AIO System',
-  '{{projectText}}': ' (AIO System)',
-  '{{assetName}}': 'Dell Latitude 5540',
-  '{{serialNumber}}': 'SN-DL-2026-00123',
-  '{{propertyNumber}}': 'PN-2026-000456',
-  '{{condition}}': 'Good',
-  '{{assetCount}}': '3',
-  '{{assetParagraph}}': 'Asset: Dell Latitude 5540\nSerial Number: SN-DL-2026-00123\nProperty Number: PN-2026-000456\nCondition: Good',
-  '{{assetTable}}': 'No.  Asset Name                 Serial Number          Property Number        Condition\n───  ─────────────────────────  ─────────────────────  ─────────────────────  ─────────\n1    Dell Latitude 5540         SN-DL-2026-00123       PN-2026-000456         Good\n2    HP LaserJet Pro            SN-HP-2026-00077       PN-2026-000457         Good\n3    Logitech Dock              SN-LG-2026-00088       PN-2026-000458         Good',
-  '{{assetSection}}': 'No.  Asset Name                 Serial Number          Property Number        Condition\n───  ─────────────────────────  ─────────────────────  ─────────────────────  ─────────\n1    Dell Latitude 5540         SN-DL-2026-00123       PN-2026-000456         Good\n2    HP LaserJet Pro            SN-HP-2026-00077       PN-2026-000457         Good\n3    Logitech Dock              SN-LG-2026-00088       PN-2026-000458         Good',
-  '{{date}}': new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-};
 
 /* ─── Helpers ─── */
 
@@ -113,6 +100,15 @@ export default function AccountabilityTemplatesPage() {
   const [versionHistory, setVersionHistory] = useState<AgreementTemplateVersion[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('single');
+  const [previewState, setPreviewState] = useState<TemplatePreviewState>({
+    resolvedText: '',
+    warnings: [],
+    unresolved: [],
+    valid: true,
+  });
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   // Editor state
   const [editName, setEditName] = useState('');
@@ -350,19 +346,48 @@ export default function AccountabilityTemplatesPage() {
     }, {});
   }
 
-  /* ─── Preview helpers ─── */
+  /* ─── Backend preview/validation — same parser as PDFs ─── */
 
-  function getPreviewContent(): string {
-    let result = editContent;
-    if (!result) return '';
-    result = result
-      .replace(/\{\{#ifSingleAsset\}\}([\s\S]*?)\{\{\/ifSingleAsset\}\}/g, '')
-      .replace(/\{\{#ifMultipleAssets\}\}([\s\S]*?)\{\{\/ifMultipleAssets\}\}/g, '$1');
-    for (const [key, value] of Object.entries(SAMPLE_DATA)) {
-      result = result.split(key).join(value);
+  useEffect(() => {
+    if (!editContent.trim()) {
+      setPreviewState({ resolvedText: '', warnings: [], unresolved: [], valid: true });
+      setPreviewError(null);
+      setPreviewLoading(false);
+      return;
     }
-    return result;
-  }
+
+    let cancelled = false;
+    const timeout = window.setTimeout(async () => {
+      try {
+        setPreviewLoading(true);
+        setPreviewError(null);
+        const [previewRes, validationRes] = await Promise.all([
+          apiFetch('/agreements/templates/preview', { method: 'POST', body: { content: editContent, mode: previewMode } }),
+          apiFetch('/agreements/templates/validate', { method: 'POST', body: { content: editContent } }),
+        ]);
+        if (cancelled) return;
+        const preview = previewRes.data ?? previewRes;
+        const validation = validationRes.data ?? validationRes;
+        setPreviewState({
+          resolvedText: preview.resolvedText || '',
+          warnings: validation.warnings || [],
+          unresolved: validation.unresolved || [],
+          valid: validation.valid !== false,
+        });
+      } catch (err: any) {
+        if (cancelled) return;
+        if (err.message?.includes('Session expired')) return;
+        setPreviewError(err.message || 'Failed to render backend preview');
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [editContent, previewMode]);
 
   /* ─── Selected template data ─── */
 
@@ -818,16 +843,67 @@ export default function AccountabilityTemplatesPage() {
             onClick={e => e.stopPropagation()}
           >
             {/* Modal header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-slate-700">
-              <h2 className="text-sm font-bold text-[#012061] dark:text-slate-100">
-                {editName || 'Untitled'} — Preview
-              </h2>
-              <button
-                onClick={() => setShowPreview(false)}
-                className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
+            <div className="flex flex-col gap-3 px-5 py-3 border-b border-slate-200 dark:border-slate-700">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-sm font-bold text-[#012061] dark:text-slate-100">
+                    {editName || 'Untitled'} — Backend Preview
+                  </h2>
+                  <p className="mt-0.5 text-[11px] text-slate-400">
+                    Rendered by the same parser used for final agreement PDFs.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowPreview(false)}
+                  className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
+                  {(['single', 'multiple'] as PreviewMode[]).map(mode => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setPreviewMode(mode)}
+                      className={`rounded px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        previewMode === mode
+                          ? 'bg-[#012061] text-white shadow-sm'
+                          : 'text-slate-500 hover:bg-white hover:text-[#012061] dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {mode === 'single' ? 'Single asset' : 'Multiple assets'}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 text-[11px]">
+                  {previewLoading ? (
+                    <span className="inline-flex items-center gap-1.5 text-slate-400">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Rendering...
+                    </span>
+                  ) : previewState.valid ? (
+                    <span className="inline-flex items-center gap-1.5 text-emerald-600">
+                      <Check className="h-3.5 w-3.5" /> Template syntax OK
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-amber-600">
+                      <AlertTriangle className="h-3.5 w-3.5" /> Needs attention
+                    </span>
+                  )}
+                </div>
+              </div>
+              {(previewError || previewState.warnings.length > 0) && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  {previewError ? (
+                    <p>{previewError}</p>
+                  ) : (
+                    <ul className="list-disc space-y-1 pl-4">
+                      {previewState.warnings.map(warning => <li key={warning}>{warning}</li>)}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* A4-paper preview */}
@@ -868,9 +944,13 @@ export default function AccountabilityTemplatesPage() {
                 {/* Logo preview — redundant section removed, logo shown above */}
 
                 {/* Content with placeholders filled */}
-                {getPreviewContent() ? (
+                {previewLoading && !previewState.resolvedText ? (
+                  <div className="flex items-center gap-2 text-slate-400 italic text-[11px]">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Rendering backend preview...
+                  </div>
+                ) : previewState.resolvedText ? (
                   <pre className="whitespace-pre-wrap font-[inherit] text-[11px]">
-                    {getPreviewContent()}
+                    {previewState.resolvedText}
                   </pre>
                 ) : (
                   <p className="text-slate-400 italic text-[11px]">
