@@ -83,6 +83,12 @@ model Assignment {
   assignedAt    DateTime         @default(now())
   returnedAt    DateTime?
   condition     String?
+  conditionAtIssue String?       // Accountability condition snapshot when issued
+  conditionAtReturn String?      // Accountability condition captured during return inspection
+  returnRemarks String?          // Return inspection notes / acknowledgement remarks
+  returnedReceivedById String?   // User who received the returned asset
+  accountabilityStatus String    @default("PENDING_SIGNATURE") // PENDING_SIGNATURE, ACTIVE, RETURNED, CANCELLED, VOIDED
+  accountabilityClosedAt DateTime?
   notes         String?
   agreementText String?          // Resolved agreement content (separate from general notes)
   agreementId   String?          // FK to the template used for this issuance
@@ -98,6 +104,7 @@ model Assignment {
   personnel     Personnel?       @relation("PersonnelAssignments", fields: [personnelId], references: [id], onDelete: SetNull)
   agreement     AgreementTemplate? @relation("AssignmentAgreement", fields: [agreementId], references: [id], onDelete: SetNull)
 
+  @@index([accountabilityStatus])
   @@map("assignments")
 }
 

@@ -13,7 +13,8 @@ import BulkIssuanceWizard from '../components/issuances/BulkIssuanceWizard';
 /* ─── Types ─── */
 interface Issuance {
   id: string; assetId: string; personnelId: string | null; assignedTo: string | null; assignedAt: string; returnedAt: string | null;
-  condition: string | null; notes: string | null; agreementText: string | null; agreementId: string | null; bulkBatchId: string | null;
+  condition: string | null; conditionAtIssue?: string | null; conditionAtReturn?: string | null; returnRemarks?: string | null; accountabilityStatus?: string | null; accountabilityClosedAt?: string | null;
+  notes: string | null; agreementText: string | null; agreementId: string | null; bulkBatchId: string | null;
   recipientSignedAt: string | null; recipientSignatureName: string | null;
   agreementDocument: { id: string; documentNumber: string; status: string; signedPdfPath: string | null; signedUploadedAt: string | null; title: string; resolvedText: string | null; propertyOfficerName: string | null; authorizedRepName: string | null } | null;
   asset: { id: string; name: string; serialNumber: string | null; propertyNumber: string | null; status: string } | null;
@@ -702,6 +703,32 @@ export default function IssuancesPage() {
                       </td>
                       <td className="px-4 py-4 text-center align-top pt-5">
                         <div className="flex items-center justify-center gap-1.5">
+                          {!allReturned && (
+                            <PermissionGate permissions={['issuances:edit']}>
+                              <button
+                                onClick={async () => {
+                                  const activeItems = batchItems.filter((item: Issuance) => !item.returnedAt);
+                                  const label = activeItems.length === 1
+                                    ? activeItems[0].asset?.name || 'this asset'
+                                    : `${activeItems.length} active assets in this batch`;
+                                  if (!window.confirm(`Mark ${label} as returned?`)) return;
+                                  try {
+                                    await Promise.all(activeItems.map((item: Issuance) =>
+                                      apiFetch(`/issuances/${item.id}/return`, { method: 'POST', body: { condition: 'Good' } })
+                                    ));
+                                    showToast(activeItems.length === 1 ? 'Asset returned successfully' : `${activeItems.length} assets returned successfully`);
+                                    fetchIssuances();
+                                  } catch (e: any) {
+                                    showToast(e instanceof ApiError ? e.message : 'Return failed');
+                                  }
+                                }}
+                                className="p-2 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all group-hover:shadow-sm"
+                                title={batchItems.length === 1 ? 'Return Asset' : 'Return Active Assets'}
+                              >
+                                <RotateCcw className="w-4 h-4" />
+                              </button>
+                            </PermissionGate>
+                          )}
                           {!allReturned && !first.recipientSignedAt && (
                             <PermissionGate permissions={['issuances:edit']}>
                               <button

@@ -74,6 +74,7 @@ router.post('/:id/return', authenticate, hasPermission('issuances:edit'), valida
       getClientIp(req),
       getUA(req),
       req.body.viaQR || false,
+      req.body.remarks,
     );
     success(res, result);
   } catch (e: any) {

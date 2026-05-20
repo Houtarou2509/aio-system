@@ -855,11 +855,11 @@ Recipient digital sign-off is stored on assignments via `recipientSignedAt`, `re
 
 ## 13. Current Project Roadmap (Issuance System Overhaul)
 
-This section tracks the multi-phase upgrade of the asset issuance flow. (Last Updated: 2026-05-18)
+This section tracks the multi-phase upgrade of the asset issuance flow. (Last Updated: 2026-05-20)
 
 | Phase | Title | Status | Description |
 |-------|-------|--------|-------------|
 | **1** | **Foundation & Profiles** | ✅ Done | Added isReadyForIssuance flag to Personnel model, migration, backend readiness toggle endpoint, audit logging, and Profile UI readiness badges/toggle. |
-| **2** | **Unified Issuance Wizard** | ✅ Done | Consolidated Single vs Bulk issuance into the unified 1 -> N asset wizard. Added PENDING_ASSIGNMENT enum/migration plus lock/release endpoints and wizard-side locking cleanup. |
+| **2** | **Unified Issuance Wizard** | ✅ Done | Consolidated Single vs Bulk issuance into the unified 1 -> N asset wizard. Added PENDING_ASSIGNMENT enum/migration plus lock/release endpoints, wizard-side locking cleanup, batch-row return action, and verified accountability lifecycle states (`PENDING_SIGNATURE` -> `ACTIVE` -> `RETURNED`) with condition/return snapshots. Note: Phase 2 final verification passed on 2026-05-20 via Prisma validate, targeted issuance-accountability tests, and full app build. |
 | **3** | **Intelligent Template Engine** | ✅ Done | Added Visual Variable Picker with grouped insert-at-cursor variables, smart asset placeholders, and conditional blocks for 1-asset paragraph vs multi-asset table rendering. |
 | **4** | **Final Document & Sign-off** | ✅ Done | Enhanced PDF traceability with document metadata/sign-off status and added recipient typed digital sign-off fields, migration, endpoint, audit log, and issuance UI flow. |

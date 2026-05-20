@@ -11,6 +11,8 @@ export const createIssuanceSchema = z.object({
 
 export const returnIssuanceSchema = z.object({
   condition: z.string().min(1, 'Condition is required').max(100).optional(),
+  remarks: z.string().max(1000).optional().nullable(),
+  viaQR: z.boolean().optional(),
 });
 
 export const resolveTemplateSchema = z.object({

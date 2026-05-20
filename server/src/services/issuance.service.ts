@@ -5,6 +5,13 @@ import { classifySeverity, generateSummary } from '../utils/auditHelpers';
 import { parseTemplate } from '../utils/templateParser';
 import { FALLBACK_AGREEMENT_TEMPLATE, FALLBACK_AGREEMENT_TITLE, makeDocumentNumber } from './agreement.service';
 
+function resolveAssetStatusAfterReturn(returnCondition?: string): 'AVAILABLE' | 'MAINTENANCE' | 'LOST' {
+  const normalized = (returnCondition || '').trim().toLowerCase();
+  if (/\b(lost|missing|stolen|not returned)\b/.test(normalized)) return 'LOST';
+  if (/\b(damaged|defective|broken|cracked|poor|repair|unserviceable|not working)\b/.test(normalized)) return 'MAINTENANCE';
+  return 'AVAILABLE';
+}
+
 
 
 /* ─── Get active issuance for asset (QR return) ─── */
@@ -130,6 +137,8 @@ export async function createIssuance(params: {
         personnelId,
         assignedTo: personnel.fullName,
         condition: condition || 'Good',
+        conditionAtIssue: condition || 'Good',
+        accountabilityStatus: 'PENDING_SIGNATURE',
         notes: notes || null,
         agreementText: agreementText || null,
         agreementId: agreementId || null,
@@ -289,6 +298,8 @@ export async function bulkIssueAssets(
           personnelId,
           assignedTo: personnel.fullName,
           condition: condition || 'Good',
+          conditionAtIssue: condition || 'Good',
+          accountabilityStatus: 'PENDING_SIGNATURE',
           notes: notes || null,
           agreementText: agreementText || null,
           agreementId: agreementId || null,
@@ -380,6 +391,7 @@ export async function signIssuance(assignmentId: string, signerName: string, per
       recipientSignatureName: trimmedName,
       recipientSignatureMethod: 'typed',
       recipientSignatureIp: ipAddress || null,
+      accountabilityStatus: 'ACTIVE',
     },
   });
 
@@ -423,6 +435,7 @@ export async function returnIssuance(
   ipAddress?: string,
   userAgent?: string,
   viaQR: boolean = false,
+  returnRemarks?: string | null,
 ) {
   const assignment = await prisma.assignment.findUnique({
     where: { id: assignmentId },
@@ -431,12 +444,21 @@ export async function returnIssuance(
   if (!assignment) throw new Error('Issuance not found');
   if (assignment.returnedAt) throw new Error('Asset already returned');
 
+  const returnedAt = new Date();
+  const finalReturnCondition = returnCondition || assignment.condition || 'Good';
+  const assetStatusAfterReturn = resolveAssetStatusAfterReturn(finalReturnCondition);
+
   const result = await prisma.$transaction(async (tx) => {
     const a = await tx.assignment.update({
       where: { id: assignmentId },
       data: {
-        returnedAt: new Date(),
-        condition: returnCondition || assignment.condition || 'Good',
+        returnedAt,
+        condition: finalReturnCondition,
+        conditionAtReturn: finalReturnCondition,
+        returnRemarks: returnRemarks || null,
+        returnedReceivedById: performedById,
+        accountabilityStatus: 'RETURNED',
+        accountabilityClosedAt: returnedAt,
       },
       include: {
         asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
@@ -446,7 +468,7 @@ export async function returnIssuance(
       },
     });
 
-    await tx.asset.update({ where: { id: assignment.assetId }, data: { status: 'AVAILABLE' } });
+    await tx.asset.update({ where: { id: assignment.assetId }, data: { status: assetStatusAfterReturn } });
 
     return a;
   });
@@ -461,7 +483,7 @@ export async function returnIssuance(
       userAgent,
       field: 'returnedAt',
       oldValue: 'null',
-      newValue: new Date().toISOString(),
+      newValue: returnedAt.toISOString(),
       severity: classifySeverity('RETURN'),
       summary: generateSummary({
         action: 'RETURN',
@@ -485,7 +507,7 @@ export async function returnIssuance(
       userAgent,
       field: 'status',
       oldValue: 'ASSIGNED',
-      newValue: 'AVAILABLE',
+      newValue: assetStatusAfterReturn,
       severity: 'HIGH',
       summary: generateSummary({
         action: 'RETURN',
