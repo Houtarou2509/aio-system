@@ -47,7 +47,6 @@ function buildAssetTable(data: TemplateData): string {
   if (list.length === 0) return '(No assets)';
   const lines: string[] = [];
   lines.push('No.  Asset Name                 Serial Number          Property Number        Condition');
-  lines.push('───  ─────────────────────────  ─────────────────────  ─────────────────────  ─────────');
   list.forEach((a, idx) => {
     const no = String(idx + 1).padEnd(4).slice(0, 4);
     const name = a.name.padEnd(25).slice(0, 25);

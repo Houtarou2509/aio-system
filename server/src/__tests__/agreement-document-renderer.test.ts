@@ -1,0 +1,71 @@
+import { describe, expect, it } from 'vitest';
+import { buildAgreementDocumentView } from '../services/agreementDocumentRenderer.service';
+
+describe('agreement document structured renderer', () => {
+  it('separates body text, assets, recipient, and signatures from a legacy saved snapshot', () => {
+    const view = buildAgreementDocumentView({
+      title: 'LSAHP TITLE',
+      documentNumber: 'AGR-20260520-31LN79',
+      personnelName: 'Angelo DeLos Santos',
+      designation: 'Field Interviewer',
+      institution: 'DRDF Inc.',
+      project: 'LSAHP 2026',
+      condition: 'Good',
+      agreementText: [
+        'LSAHP LETTER BODY',
+        'May 20, 2026 Angelo DeLos Santos, Field Interviewer of DRDF Inc., (LSAHP 2026) PN-2023-001 No.  Asset Name                 Serial Number          Property Number        Condition',
+        '───  ─────────────────────────  ─────────────────────  ─────────────────────  ─────────',
+        '1    Canon imageRUNNER C3530   CAN-IR-C3530          PN-2023-001           Good',
+        '2    Lenovo ThinkCentre M90q   LEN-M90Q-001          PN-2025-004           Good',
+        'By signing below, the recipient acknowledges receipt.',
+        '________________________________________',
+        'Angelo DeLos Santos (Recipient)',
+      ].join('\n'),
+      assets: [
+        { name: 'Canon imageRUNNER C3530', serialNumber: 'CAN-IR-C3530', propertyNumber: 'PN-2023-001' },
+        { name: 'Lenovo ThinkCentre M90q', serialNumber: 'LEN-M90Q-001', propertyNumber: 'PN-2025-004' },
+      ],
+      propertyOfficerName: 'Property Officer A',
+      authorizedRepName: 'Authorized Rep B',
+    });
+
+    expect(view.title).toBe('LSAHP TITLE');
+    expect(view.documentNumber).toBe('AGR-20260520-31LN79');
+    expect(view.recipient).toEqual({
+      name: 'Angelo DeLos Santos',
+      designation: 'Field Interviewer',
+      institution: 'DRDF Inc.',
+      project: 'LSAHP 2026',
+    });
+    expect(view.assets).toEqual([
+      { no: 1, name: 'Canon imageRUNNER C3530', serialNumber: 'CAN-IR-C3530', propertyNumber: 'PN-2023-001', condition: 'Good' },
+      { no: 2, name: 'Lenovo ThinkCentre M90q', serialNumber: 'LEN-M90Q-001', propertyNumber: 'PN-2025-004', condition: 'Good' },
+    ]);
+    expect(view.bodyText).toContain('LSAHP LETTER BODY');
+    expect(view.bodyText).not.toContain('%%%');
+    expect(view.bodyText).not.toContain('───');
+    expect(view.bodyText).not.toContain('No.  Asset Name');
+    expect(view.bodyText).not.toContain('Canon imageRUNNER C3530   CAN-IR-C3530');
+    expect(view.bodyText).not.toContain('By signing below');
+    expect(view.signatures).toHaveLength(3);
+    expect(view.signatures[0]).toMatchObject({ role: 'Recipient', label: 'Angelo DeLos Santos' });
+    expect(view.signatures[1]).toMatchObject({ role: 'Property Officer', label: 'Property Officer A' });
+    expect(view.signatures[2]).toMatchObject({ role: 'Authorized Representative', label: 'Authorized Rep B' });
+  });
+
+  it('derives assets from single-asset fields when no assets array is supplied', () => {
+    const view = buildAgreementDocumentView({
+      personnelName: 'Juan Dela Cruz',
+      assetName: 'Dell Latitude 5540',
+      serialNumber: 'SN-001',
+      propertyNumber: 'PN-001',
+      condition: 'Excellent',
+      agreementText: 'Official accountability body text.',
+    });
+
+    expect(view.assets).toEqual([
+      { no: 1, name: 'Dell Latitude 5540', serialNumber: 'SN-001', propertyNumber: 'PN-001', condition: 'Excellent' },
+    ]);
+    expect(view.bodyText).toBe('Official accountability body text.');
+  });
+});

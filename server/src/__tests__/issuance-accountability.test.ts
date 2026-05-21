@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { prisma } from '../lib/prisma';
+import { sanitizeStoredAgreementTexts } from '../services/agreement.service';
 import { bulkIssueAssets, createIssuance, returnIssuance, signIssuance } from '../services/issuance.service';
 
 const runId = `phase1-${Date.now()}`;
@@ -83,6 +84,78 @@ describe('Phase 1 accountability lifecycle', () => {
 
     const updatedAsset = await prisma.asset.findUniqueOrThrow({ where: { id: asset.id } });
     expect(updatedAsset.status).toBe('ASSIGNED');
+  });
+
+  it('creates a non-empty clean agreement document snapshot even when the caller omits agreement text', async () => {
+    const personnel = await createReadyPersonnel();
+    const asset = await createAvailableAsset('Fallback Snapshot Laptop');
+
+    const assignment = await createIssuance(
+      {
+        assetId: asset.id,
+        personnelId: personnel.id,
+        condition: 'Good',
+      },
+      actorId,
+    );
+
+    const document = await prisma.agreementDocument.findUniqueOrThrow({
+      where: { id: assignment.agreementDocumentId! },
+    });
+
+    expect(document.resolvedText).toContain(personnel.fullName);
+    expect(document.resolvedText).toContain(asset.name);
+    expect(document.resolvedText).toContain(asset.propertyNumber!);
+    expect(document.resolvedText).not.toMatch(/%{3,}/);
+    expect(document.resolvedText).not.toMatch(/[─━═]{3,}/);
+    expect(assignment.agreementText).toBe(document.resolvedText);
+  });
+
+  it('dry-runs and cleans existing stored agreement text artifacts idempotently', async () => {
+    const personnel = await createReadyPersonnel();
+    const asset = await createAvailableAsset('Stored Artifact Laptop');
+    const assignment = await createIssuance(
+      {
+        assetId: asset.id,
+        personnelId: personnel.id,
+        condition: 'Good',
+      },
+      actorId,
+    );
+    const document = await prisma.agreementDocument.findUniqueOrThrow({
+      where: { id: assignment.agreementDocumentId! },
+    });
+    const dirtyText = [
+      'Clean opening paragraph.',
+      '%%% %%%%%%%%%%%%%%%%%%%%%%%%% %%%%%%%%%%%%%%%%%%%%% %%%%%%%%%%%%%%%%%%%%% %%%%%%%%%',
+      'Clean closing paragraph.',
+    ].join('\n');
+
+    await prisma.agreementDocument.update({ where: { id: document.id }, data: { resolvedText: dirtyText } });
+    await prisma.assignment.update({ where: { id: assignment.id }, data: { agreementText: dirtyText } });
+
+    const dryRun = await sanitizeStoredAgreementTexts({ dryRun: true, documentNumber: document.documentNumber });
+    expect(dryRun.dryRun).toBe(true);
+    expect(dryRun.documentsChanged).toBe(1);
+    expect(dryRun.assignmentsChanged).toBe(1);
+
+    const stillDirtyDocument = await prisma.agreementDocument.findUniqueOrThrow({ where: { id: document.id } });
+    expect(stillDirtyDocument.resolvedText).toMatch(/%{3,}/);
+
+    const cleaned = await sanitizeStoredAgreementTexts({ dryRun: false, documentNumber: document.documentNumber });
+    expect(cleaned.documentsChanged).toBe(1);
+    expect(cleaned.assignmentsChanged).toBe(1);
+
+    const cleanDocument = await prisma.agreementDocument.findUniqueOrThrow({ where: { id: document.id } });
+    const cleanAssignment = await prisma.assignment.findUniqueOrThrow({ where: { id: assignment.id } });
+    expect(cleanDocument.resolvedText).toContain('Clean opening paragraph.');
+    expect(cleanDocument.resolvedText).toContain('Clean closing paragraph.');
+    expect(cleanDocument.resolvedText).not.toMatch(/%{3,}/);
+    expect(cleanAssignment.agreementText).toBe(cleanDocument.resolvedText);
+
+    const secondRun = await sanitizeStoredAgreementTexts({ dryRun: false, documentNumber: document.documentNumber });
+    expect(secondRun.documentsChanged).toBe(0);
+    expect(secondRun.assignmentsChanged).toBe(0);
   });
 
   it('signing an accountability record activates every item in the batch', async () => {

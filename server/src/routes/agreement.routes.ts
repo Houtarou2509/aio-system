@@ -7,7 +7,7 @@ import { getPlaceholderReference } from '../utils/templateParser';
 import { authenticate, hasPermission } from '../middleware/auth';
 import { success, error } from '../utils/response';
 import { validate } from '../middleware/validate';
-import { createAgreementTemplateSchema, updateAgreementTemplateSchema, agreementPdfSchema, templatePreviewSchema, templateValidationSchema, backfillAgreementDocumentsSchema } from './agreement.schema';
+import { createAgreementTemplateSchema, updateAgreementTemplateSchema, agreementPdfSchema, templatePreviewSchema, templateValidationSchema, backfillAgreementDocumentsSchema, sanitizeAgreementDocumentsSchema } from './agreement.schema';
 
 const router = Router();
 
@@ -283,6 +283,24 @@ router.post(
       const result = await agreementService.backfillAgreementDocuments({
         performedById: (req as any).user.id,
         dryRun: Boolean(req.body.dryRun),
+      });
+      success(res, result);
+    } catch (e: any) {
+      error(res, e.message, 400);
+    }
+  },
+);
+
+router.post(
+  '/documents/sanitize-text',
+  authenticate,
+  hasPermission('issuances:edit'),
+  validate(sanitizeAgreementDocumentsSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const result = await agreementService.sanitizeStoredAgreementTexts({
+        dryRun: Boolean(req.body.dryRun),
+        documentNumber: req.body.documentNumber || null,
       });
       success(res, result);
     } catch (e: any) {

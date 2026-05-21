@@ -59,3 +59,8 @@ export const templateValidationSchema = z.object({
 export const backfillAgreementDocumentsSchema = z.object({
   dryRun: z.boolean().optional().default(false),
 });
+
+export const sanitizeAgreementDocumentsSchema = z.object({
+  dryRun: z.boolean().optional().default(true),
+  documentNumber: z.string().max(100).optional().nullable(),
+});

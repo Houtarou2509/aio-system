@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { prisma } from '../lib/prisma';
 import { parseTemplate } from '../utils/templateParser';
+import { buildAgreementDocumentView, type AgreementDocumentView } from './agreementDocumentRenderer.service';
 
 
 
@@ -246,7 +247,7 @@ export function previewTemplate(content: string, mode: 'single' | 'multiple' = '
       ]
     : [{ name: 'Dell Latitude 5540', serialNumber: 'SN-DL-2026-00123', propertyNumber: 'PN-2026-000456', condition: 'Good' }];
 
-  const resolvedText = parseTemplate(content, {
+  const resolvedText = sanitizeAgreementText(parseTemplate(content, {
     personnelName: 'Juan Dela Cruz',
     designation: 'Software Engineer',
     institution: 'DOST',
@@ -256,7 +257,7 @@ export function previewTemplate(content: string, mode: 'single' | 'multiple' = '
     propertyNumber: assets[0].propertyNumber,
     condition: 'Good',
     assets: mode === 'multiple' ? assets : undefined,
-  });
+  }));
   return { resolvedText, mode };
 }
 
@@ -495,6 +496,87 @@ export async function backfillAgreementDocuments(params: { performedById: string
   };
 }
 
+export async function sanitizeStoredAgreementTexts(params: { dryRun?: boolean; documentNumber?: string | null } = {}) {
+  const documentWhere = params.documentNumber
+    ? { documentNumber: params.documentNumber }
+    : {
+        OR: [
+          { resolvedText: { contains: '%' } },
+          { resolvedText: { contains: '─' } },
+          { resolvedText: { contains: '━' } },
+          { resolvedText: { contains: '═' } },
+        ],
+      };
+
+  const assignmentWhere = params.documentNumber
+    ? { agreementDocument: { is: { documentNumber: params.documentNumber } }, agreementText: { not: null } }
+    : {
+        agreementText: { not: null },
+        OR: [
+          { agreementText: { contains: '%' } },
+          { agreementText: { contains: '─' } },
+          { agreementText: { contains: '━' } },
+          { agreementText: { contains: '═' } },
+        ],
+      };
+
+  const [documents, assignments] = await Promise.all([
+    prisma.agreementDocument.findMany({
+      where: documentWhere,
+      select: { id: true, documentNumber: true, resolvedText: true },
+      orderBy: { issuedAt: 'desc' },
+    }),
+    prisma.assignment.findMany({
+      where: assignmentWhere,
+      select: { id: true, agreementText: true, agreementDocumentId: true, agreementDocument: { select: { documentNumber: true } } },
+      orderBy: { assignedAt: 'desc' },
+    }),
+  ]);
+
+  const documentChanges = documents
+    .map((document) => ({
+      id: document.id,
+      documentNumber: document.documentNumber,
+      before: document.resolvedText,
+      after: sanitizeAgreementText(document.resolvedText),
+    }))
+    .filter((change) => change.before !== change.after);
+
+  const assignmentChanges = assignments
+    .map((assignment) => ({
+      id: assignment.id,
+      agreementDocumentId: assignment.agreementDocumentId,
+      documentNumber: assignment.agreementDocument?.documentNumber || null,
+      before: assignment.agreementText || '',
+      after: sanitizeAgreementText(assignment.agreementText || ''),
+    }))
+    .filter((change) => change.before !== change.after);
+
+  if (!params.dryRun) {
+    await prisma.$transaction([
+      ...documentChanges.map((change) => prisma.agreementDocument.update({
+        where: { id: change.id },
+        data: { resolvedText: change.after },
+      })),
+      ...assignmentChanges.map((change) => prisma.assignment.update({
+        where: { id: change.id },
+        data: { agreementText: change.after || null },
+      })),
+    ]);
+  }
+
+  return {
+    dryRun: Boolean(params.dryRun),
+    documentNumber: params.documentNumber || null,
+    documentsScanned: documents.length,
+    assignmentsScanned: assignments.length,
+    documentsChanged: documentChanges.length,
+    assignmentsChanged: assignmentChanges.length,
+    documents: documentChanges.map(({ id, documentNumber }) => ({ id, documentNumber })),
+    assignments: assignmentChanges.map(({ id, agreementDocumentId, documentNumber }) => ({ id, agreementDocumentId, documentNumber })),
+  };
+}
+
 /* ═══════════════════════════════════════════════════════
    PDF GENERATION ENGINE
    ═══════════════════════════════════════════════════════ */
@@ -520,6 +602,7 @@ interface TextSegment {
   color: string;
   indent: number;
   align: 'left' | 'justify';
+  kind?: 'text' | 'divider' | 'assetHeader';
 }
 
 function parseBodySegments(filled: string): TextSegment[] {
@@ -533,29 +616,151 @@ function parseBodySegments(filled: string): TextSegment[] {
     if (/^_{5,}/.test(ln) || ln.startsWith('____')) break;
     if (ln.includes('By signing below')) break;
 
-    let fontSize = 9;
+    const percentCount = (ln.match(/%/g) || []).length;
+    if (percentCount >= 5 && /^[%\s\-–—_]+$/.test(ln)) {
+      segments.push({
+        text: '',
+        fontSize: 0,
+        bold: false,
+        color: '#000000',
+        indent: 0,
+        align: 'left',
+        kind: 'divider',
+      });
+      continue;
+    }
+
+    let fontSize = 8.2;
     let bold = false;
     let color = '#333333';
-    let indent = 40;
+    let indent = 38;
     let align: 'left' | 'justify' = 'left';
+    let kind: TextSegment['kind'] = 'text';
 
-    if (ln.startsWith('Terms and Conditions:')) {
-      fontSize = 10;
+    if (/^No\.\s+Asset Name\s+Serial Number\s+Property Number\s+Condition/i.test(ln)) {
+      fontSize = 7.6;
+      bold = true;
+      color = '#111111';
+      indent = 38;
+      kind = 'assetHeader';
+    } else if (ln.startsWith('Terms and Conditions:')) {
+      fontSize = 8.8;
       bold = true;
       color = '#012061';
     } else if (/^\d+\./.test(ln)) {
-      fontSize = 8.5;
+      fontSize = 7.65;
       color = '#444444';
-      indent = 50;
+      indent = 46;
       align = 'justify';
     } else if (ln.startsWith('Asset:') || ln.startsWith('Serial') || ln.startsWith('Property') || ln.startsWith('Condition')) {
-      indent = 54;
+      fontSize = 7.8;
+      indent = 50;
     }
 
-    segments.push({ text: raw, fontSize, bold, color, indent, align });
+    segments.push({ text: raw, fontSize, bold, color, indent, align, kind });
   }
 
   return segments;
+}
+
+function formatAssetTableForPdf(view: AgreementDocumentView): string {
+  if (!view.assets.length) return '';
+
+  const rows = view.assets.map((asset) => [
+    String(asset.no),
+    asset.name,
+    asset.serialNumber,
+    asset.propertyNumber,
+    asset.condition,
+  ].join('  '));
+
+  return [
+    'No. Asset Name Serial Number Property Number Condition',
+    ...rows,
+  ].join('\n');
+}
+
+function composePdfBodyText(view: AgreementDocumentView): string {
+  const assetTable = formatAssetTableForPdf(view);
+  if (!assetTable) return view.bodyText;
+
+  const lines = view.bodyText.split('\n');
+  const termsIndex = lines.findIndex((line) => line.trim().startsWith('Terms and Conditions:'));
+  if (termsIndex === -1) {
+    return sanitizeAgreementText([view.bodyText, assetTable].filter(Boolean).join('\n\n'));
+  }
+
+  return sanitizeAgreementText([
+    ...lines.slice(0, termsIndex),
+    '',
+    assetTable,
+    '',
+    ...lines.slice(termsIndex),
+  ].join('\n'));
+}
+
+const LEGACY_ASSET_HEADER_PATTERN = /\bNo\.\s+Asset Name\s+Serial Number\s+Property Number\s+Condition\b/i;
+
+function stripLegacyAssetTableLines(text: string): string {
+  const kept: string[] = [];
+  let skippingAssetTable = false;
+
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim();
+    const headerMatch = line.match(LEGACY_ASSET_HEADER_PATTERN);
+
+    if (headerMatch?.index !== undefined) {
+      const beforeHeader = line.slice(0, headerMatch.index).trim();
+      if (beforeHeader) kept.push(beforeHeader);
+      skippingAssetTable = true;
+      continue;
+    }
+
+    if (skippingAssetTable) {
+      if (!line) continue;
+      if (/^\d+\s+/.test(line) && /\s{2,}/.test(line)) continue;
+      skippingAssetTable = false;
+    }
+
+    kept.push(rawLine);
+  }
+
+  return kept.join('\n');
+}
+
+export function sanitizeAgreementText(text: string | null | undefined): string {
+  if (!text) return '';
+
+  const withoutDividers = text
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      const percentCount = (trimmed.match(/%/g) || []).length;
+
+      // Remove old PDF/table placeholder divider rows. These were layout
+      // artifacts, not agreement content, and must not appear in stored
+      // snapshots, previews, or PDFs. Also remove non-percent divider rows.
+      if (
+        (percentCount >= 5 && /^[%\s\-–—_]+$/.test(trimmed)) ||
+        /^[\s\-–—_─━═=]{5,}$/.test(trimmed)
+      ) {
+        return '';
+      }
+
+      // Remove inline/decorated percent divider runs embedded in older snapshots.
+      return line.replace(/[ \t]*%[%\s\-–—_]{4,}%[%\s\-–—_]*/g, ' ');
+    })
+    .join('\n');
+
+  return stripLegacyAssetTableLines(withoutDividers)
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function normalizePercentDividers(text: string): string {
+  return sanitizeAgreementText(text);
 }
 
 function loadLogoImage(logoPath: string | null | undefined): Buffer | null {
@@ -600,8 +805,8 @@ export async function generateAgreementPdf(p: {
 
   const titleText = p.title || tmpl?.title || FALLBACK_AGREEMENT_TITLE;
   const filled = agreementText && agreementText.trim().length > 0
-    ? agreementText
-    : parseTemplate(templateContent, {
+    ? sanitizeAgreementText(agreementText)
+    : sanitizeAgreementText(parseTemplate(templateContent, {
         personnelName,
         designation: designation || position || undefined,
         project: project || undefined,
@@ -616,24 +821,57 @@ export async function generateAgreementPdf(p: {
           propertyNumber: a.propertyNumber || undefined,
           condition: condition || undefined,
         })) || undefined,
-      });
+      }));
 
-  const cleanBody = stripSignatureSection(filled).replace(/\r\n?/g, '\n');
-  const segments = parseBodySegments(cleanBody);
+  const documentView = buildAgreementDocumentView({
+    title: titleText,
+    documentNumber,
+    personnelName,
+    designation,
+    position,
+    project,
+    institution,
+    assetName,
+    serialNumber,
+    propertyNumber,
+    condition,
+    agreementText: filled,
+    assets: assets?.map(a => ({
+      name: a.name,
+      serialNumber: a.serialNumber,
+      propertyNumber: a.propertyNumber,
+      condition,
+    })),
+    propertyOfficerName: propertyOfficerName || tmpl?.defaultPropertyOfficer,
+    authorizedRepName: authorizedRepName || tmpl?.defaultAuthorizedRep,
+    recipientSignedAt,
+    recipientSignatureName,
+  });
+
+  const cleanBody = composePdfBodyText(documentView)
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map(line => line.trim())
+    .join('\n');
+  const normalizedBody = normalizePercentDividers(cleanBody)
+    .replace(/\n{3,}/g, '\n\n');
+  const segments = parseBodySegments(normalizedBody);
   const logoData = loadLogoImage(tmpl?.headerLogo ?? null);
 
   const PW = 595.28;
   const PH = 841.89;
-  const M = 36;
-  const CW = PW - 72;
-  const LETTERHEAD_TOP = 72;
+  const M = 32;
+  const CW = PW - (M * 2);
+  const LETTERHEAD_TOP = 42;
   const HEADER_Y = LETTERHEAD_TOP;
-  const TITLE_Y = 105;
-  const LOGO_W = 95;
-  const BODY_START_Y = 180;
-  const FOOTER_Y = PH - 34;
-  const PAGE_BODY_MAX_Y = PH - 78;
-  const SIG_BLOCK_HEIGHT = 72;
+  const TITLE_Y = 82;
+  const LOGO_W = 78;
+  const BODY_START_Y = 124;
+  // Keep footer above PDFKit's bottom margin. If y is below the writable area,
+  // PDFKit silently creates trailing blank pages while adding footer text.
+  const FOOTER_Y = PH - 70;
+  const PAGE_BODY_MAX_Y = PH - 96;
+  const SIG_BLOCK_HEIGHT = 58;
 
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -666,20 +904,12 @@ export async function generateAgreementPdf(p: {
         titleWidth = doc.font('Helvetica-Bold').fontSize(titleFontSize).widthOfString(titleText);
       }
       textAbs(titleText, M, TITLE_Y, { width: CW, align: 'center', fontSize: titleFontSize, font: 'Helvetica-Bold', color: '#222222' });
-      doc.roundedRect(M, 134, CW, 24, 3).fillAndStroke('#f8fafc', '#dbe3ef');
-      doc.y = 0;
-      const issuedDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-      textAbs(`Issued: ${issuedDate}`, M + 8, 141, { width: 100, fontSize: 7.5, color: '#475569', font: 'Helvetica-Bold' });
-      textAbs(`Doc: ${documentNumber || '—'}`, M + 112, 141, { width: 92, fontSize: 7.5, color: '#475569' });
-      textAbs(`Recipient: ${personnelName || '—'}`, M + 208, 141, { width: 160, fontSize: 7.5, color: '#475569' });
-      textAbs(`Assets: ${assets?.length || 1}`, M + 374, 141, { width: 56, fontSize: 7.5, color: '#475569' });
-      textAbs(recipientSignedAt ? 'Digitally signed' : 'Pending sign-off', M + 430, 141, { width: 86, fontSize: 7.5, color: recipientSignedAt ? '#047857' : '#b45309', font: 'Helvetica-Bold' });
     }
 
     function addFooter(page: number, total: number) {
       doc.font('Helvetica').fontSize(7).fillColor('#94a3b8');
-      doc.text(`Page ${page} of ${total}`, M, FOOTER_Y, { width: CW, align: 'center', lineBreak: false });
-      if (documentNumber) doc.text(documentNumber, M, FOOTER_Y, { width: CW, align: 'right', lineBreak: false });
+      doc.text(`Page ${page} of ${total}`, M, FOOTER_Y, { width: CW, height: 8, align: 'center', lineBreak: false });
+      if (documentView.documentNumber) doc.text(documentView.documentNumber, M, FOOTER_Y, { width: CW, height: 8, align: 'right', lineBreak: false });
       doc.y = 0;
     }
 
@@ -693,24 +923,34 @@ export async function generateAgreementPdf(p: {
     let y = BODY_START_Y;
 
     for (const seg of segments) {
+      if (seg.kind === 'divider') continue;
+
       const width = PW - M - seg.indent;
       const font = seg.bold ? 'Helvetica-Bold' : 'Helvetica';
       const h = doc.font(font).fontSize(seg.fontSize).heightOfString(seg.text, { width, align: seg.align as any, lineBreak: true });
-      const lh = h + 3;
+      const lh = h + 1;
       if (y + lh > PAGE_BODY_MAX_Y) y = addContinuationPage();
       textAbs(seg.text, seg.indent, y, { width, fontSize: seg.fontSize, font, color: seg.color, align: seg.align, lineBreak: true });
       y += lh;
+
+      if (seg.kind === 'assetHeader') {
+        const lineY = y + 2;
+        const lineW = CW * 0.82;
+        doc.moveTo(seg.indent, lineY).lineTo(seg.indent + lineW, lineY).strokeColor('#000000').lineWidth(0.8).stroke();
+        doc.y = 0;
+        y += 7;
+      }
     }
 
     if (y + SIG_BLOCK_HEIGHT > PAGE_BODY_MAX_Y) y = addContinuationPage();
-    const sigLineY = Math.max(y + 24, PH - 118);
-    const sigLabelY = sigLineY + 16;
+    const sigLineY = Math.max(y + 14, PH - 96);
+    const sigLabelY = sigLineY + 14;
     const colW = (CW - 20) / 3;
-    const sigCols = [
-      { x: M, label: recipientSignatureName || personnelName || '_________________', subtitle: recipientSignedAt ? `Digitally signed ${new Date(recipientSignedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Recipient' },
-      { x: M + colW + 10, label: propertyOfficerName || tmpl?.defaultPropertyOfficer || '_________________', subtitle: 'Property Officer' },
-      { x: M + (colW + 10) * 2, label: authorizedRepName || tmpl?.defaultAuthorizedRep || '_________________', subtitle: 'Authorized Representative' },
-    ];
+    const sigCols = documentView.signatures.map((signature, index) => ({
+      x: M + (colW + 10) * index,
+      label: signature.label,
+      subtitle: signature.subtitle || signature.role,
+    }));
 
     for (const col of sigCols) {
       doc.moveTo(col.x, sigLineY).lineTo(col.x + colW, sigLineY).strokeColor('#bbbbbb').lineWidth(0.4).stroke();

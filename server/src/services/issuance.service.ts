@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma';
 import * as crypto from 'crypto';
 import { classifySeverity, generateSummary } from '../utils/auditHelpers';
 import { parseTemplate } from '../utils/templateParser';
-import { FALLBACK_AGREEMENT_TEMPLATE, FALLBACK_AGREEMENT_TITLE, makeDocumentNumber } from './agreement.service';
+import { FALLBACK_AGREEMENT_TEMPLATE, FALLBACK_AGREEMENT_TITLE, makeDocumentNumber, sanitizeAgreementText } from './agreement.service';
 
 function resolveAssetStatusAfterReturn(returnCondition?: string): 'AVAILABLE' | 'MAINTENANCE' | 'LOST' {
   const normalized = (returnCondition || '').trim().toLowerCase();
@@ -97,18 +97,29 @@ export async function createIssuance(params: {
   if (personnel.status !== 'active') throw new Error('Personnel is not active');
   if (!personnel.isReadyForIssuance) throw new Error('Personnel is not ready for issuance');
 
-  // Validate agreementId references an existing template (if provided)
+  // Validate agreementId references an existing template (if provided), then resolve
+  // clean agreement text for immutable snapshots. Single issuance must behave like
+  // bulk issuance: if the caller does not send agreementText, generate a fallback
+  // from the explicit default template or the code-owned DRDF fallback.
   let agreementTemplate: Awaited<ReturnType<typeof prisma.agreementTemplate.findUnique>> | null = null;
-  let agreementTemplateVersionId: string | null = null;
   if (agreementId) {
     agreementTemplate = await prisma.agreementTemplate.findUnique({ where: { id: agreementId } });
     if (!agreementTemplate) throw new Error('Agreement template not found');
-    const version = await prisma.agreementTemplateVersion.findUnique({
-      where: { templateId_versionNumber: { templateId: agreementTemplate.id, versionNumber: agreementTemplate.currentVersion } },
-      select: { id: true },
-    });
-    agreementTemplateVersionId = version?.id ?? null;
   }
+
+  const resolvedTemplate = (!agreementText?.trim() || agreementId)
+    ? await resolveTemplate({
+        templateId: agreementId,
+        personnelId,
+        assetIds: [assetId],
+        condition,
+      })
+    : null;
+  const cleanAgreementText = sanitizeAgreementText(agreementText?.trim() || resolvedTemplate?.resolvedText || '');
+  const documentTemplateId = resolvedTemplate?.templateId ?? agreementId ?? null;
+  const documentTemplateVersionId = resolvedTemplate?.templateVersionId ?? null;
+  const documentTemplateVersion = resolvedTemplate?.templateVersion ?? agreementTemplate?.currentVersion ?? null;
+  const documentTitle = resolvedTemplate?.templateTitle ?? agreementTemplate?.title ?? 'ISSUANCE & ACCOUNTABILITY AGREEMENT';
 
   // Create immutable agreement document + assignment, then update asset status in a transaction
   const assignment = await prisma.$transaction(async (tx) => {
@@ -117,11 +128,11 @@ export async function createIssuance(params: {
     const document = await tx.agreementDocument.create({
       data: {
         documentNumber: makeDocumentNumber(),
-        templateId: agreementId || null,
-        templateVersionId: agreementTemplateVersionId,
-        templateVersion: agreementTemplate?.currentVersion ?? null,
-        title: agreementTemplate?.title ?? 'ISSUANCE & ACCOUNTABILITY AGREEMENT',
-        resolvedText: agreementText || '',
+        templateId: documentTemplateId,
+        templateVersionId: documentTemplateVersionId,
+        templateVersion: documentTemplateVersion,
+        title: documentTitle,
+        resolvedText: cleanAgreementText,
         personnelId,
         personnelNameSnapshot: personnel.fullName,
         designationSnapshot,
@@ -140,7 +151,7 @@ export async function createIssuance(params: {
         conditionAtIssue: condition || 'Good',
         accountabilityStatus: 'PENDING_SIGNATURE',
         notes: notes || null,
-        agreementText: agreementText || null,
+        agreementText: cleanAgreementText || null,
         agreementId: agreementId || null,
         agreementDocumentId: document.id,
       },
@@ -254,7 +265,7 @@ export async function bulkIssueAssets(
     resolvedTemplate = { resolvedText: null, templateId: null };
   }
 
-  const agreementText = suppliedAgreementText?.trim() || resolvedTemplate.resolvedText;
+  const agreementText = sanitizeAgreementText(suppliedAgreementText?.trim() || resolvedTemplate.resolvedText);
   const agreementId = resolvedTemplate.templateId;
 
   // Validate agreementId references an existing template (if provided)
@@ -744,7 +755,7 @@ export async function resolveTemplate(params: {
     : null;
 
   // Use parseTemplate to resolve placeholders
-  const resolved = parseTemplate(templateContent, {
+  const resolved = sanitizeAgreementText(parseTemplate(templateContent, {
     personnelName: personnel.fullName,
     designation: resolvedDesignation,
     project: resolvedProject,
@@ -761,7 +772,7 @@ export async function resolveTemplate(params: {
         condition: condition || 'Good',
       })),
     } : {}),
-  });
+  }));
 
   return {
     resolvedText: resolved,
