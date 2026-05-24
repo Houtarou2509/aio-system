@@ -11,8 +11,16 @@ export const createIssuanceSchema = z.object({
 
 export const returnIssuanceSchema = z.object({
   condition: z.string().min(1, 'Condition is required').max(100).optional(),
+  returnCondition: z.string().max(100).optional().nullable(),
+  returnNote: z.string().max(1000).optional().nullable(),
   remarks: z.string().max(1000).optional().nullable(),
   viaQR: z.boolean().optional(),
+});
+
+export const bulkReturnSchema = z.object({
+  assignmentIds: z.array(z.string().uuid()).min(1).max(100),
+  returnCondition: z.string().max(100).optional().nullable(),
+  returnNote: z.string().max(1000).optional().nullable(),
 });
 
 export const resolveTemplateSchema = z.object({
@@ -45,4 +53,11 @@ export const assetLockSchema = z.object({
 
 export const signIssuanceSchema = z.object({
   signerName: z.string().min(2).max(120),
+});
+
+export const transferSchema = z.object({
+  toPersonnelId: z.string().uuid(),
+  condition: z.string().max(100).optional().nullable(),
+  transferNote: z.string().max(1000).optional().nullable(),
+  agreementTemplateId: z.string().uuid().optional().nullable(),
 });

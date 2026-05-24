@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, apiFetchBlob, ApiError, AUTH_EXPIRED_EVENT } from '../lib/api';
 import {
-  Users, PlusCircle, Search, Loader2, Eye, X, UserCircle, Briefcase, Building2, Calendar, Mail, Phone, Package, FileText, AlertTriangle, CheckCircle2, CheckCircle, Info, ChevronDown, Edit3, Trash2,
+  Users, PlusCircle, Search, Loader2, Eye, X, UserCircle, User, Camera, Briefcase, Building2, Calendar, Mail, Phone, Package, FileText, AlertTriangle, CheckCircle2, CheckCircle, Info, ChevronDown, ChevronRight, Edit3, Trash2, ClipboardCheck, FolderOpen,
 } from 'lucide-react';
 import BulkIssuanceWizard from '../components/issuances/BulkIssuanceWizard';
 import PDFPreviewModal from '../components/issuances/PDFPreviewModal';
 import { PermissionGate } from '../components/auth/PermissionGate';
+import { useAgreementPreview } from '../hooks/useAgreementPreview';
 
 /* ─── Types ─── */
 interface Personnel {
@@ -29,6 +30,7 @@ interface Personnel {
   institutionId: number | null;
   projectId: number | null;
   designationId: number | null;
+  photoUrl: string | null;
   institution?: { id: number; name: string } | null;
   projectLookup?: { id: number; name: string } | null;
   designationLookup?: { id: number; name: string } | null;
@@ -58,6 +60,71 @@ interface PersonnelDetail extends Personnel {
   assignments: AssignmentWithAsset[];
   historyLogs: ProfileHistoryEntry[];
   signedAgreementPath: string | null;
+}
+
+/* ─── Accountability types ─── */
+interface AccountabilityData {
+  personnel: {
+    id: string;
+    fullName: string;
+    designation: string | null;
+    project: string | null;
+    institution: string | null;
+    email: string | null;
+  };
+  summary: {
+    totalAssetsHeld: number;
+    totalAssetsReturned: number;
+    totalAgreements: number;
+    oldestActiveIssuanceDate: string | null;
+  };
+  activeAssignments: {
+    id: string;
+    assetId: string;
+    assetName: string | null;
+    serialNumber: string | null;
+    propertyNumber: string | null;
+    condition: string | null;
+    assignedAt: string;
+    agreementDocumentId: string | null;
+    documentNumber: string | null;
+  }[];
+  returnedAssignments: {
+    id: string;
+    assetId: string;
+    assetName: string | null;
+    serialNumber: string | null;
+    propertyNumber: string | null;
+    condition: string | null;
+    returnCondition: string | null;
+    returnNote: string | null;
+    assignedAt: string;
+    returnedAt: string;
+  }[];
+  agreementDocuments: {
+    id: string;
+    documentNumber: string;
+    status: string;
+    issuedAt: string;
+    assetCount: number;
+    recipientSignedAt: string | null;
+    signedPdfPath: string | null;
+  }[];
+}
+
+function DocStatusBadge({ status }: { status: string }) {
+  const config: Record<string, { label: string; classes: string }> = {
+    issued: { label: 'Active', classes: 'bg-[#012061]/10 text-[#012061] border-[#012061]/20' },
+    returned: { label: '✓ Returned', classes: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    pending_signature: { label: 'Pending Sign-off', classes: 'bg-[#f8931f]/10 text-[#f8931f] border-[#f8931f]/20' },
+    signed: { label: '✎ Signed', classes: 'bg-sky-50 text-sky-700 border-sky-200' },
+  };
+  const cfg = config[status] || { label: status, classes: 'bg-slate-100 text-slate-500 border-slate-200' };
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide ${cfg.classes}`}>
+      {cfg.label}
+    </span>
+  );
 }
 
 /* ─── Toast ─── */
@@ -150,8 +217,8 @@ function SearchableDropdown({ label, items, value, onChange, placeholder }: {
   const openMenu = () => {
     setIsOpen(true);
     setFilter('');
-    // Highlight currently selected item if any
-    const selIdx = selectedItem ? filtered.findIndex(i => String(i.id) === value) : -1;
+    // Compute highlighted index from the full unfiltered items list
+    const selIdx = selectedItem ? items.findIndex(i => String(i.id) === value) : -1;
     setHighlightIndex(selIdx >= 0 ? selIdx + 1 : 0); // +1 because "None" is index 0
   };
 
@@ -232,7 +299,6 @@ function SearchableDropdown({ label, items, value, onChange, placeholder }: {
             onChange={e => { setFilter(e.target.value); setHighlightIndex(0); }}
             placeholder={`Search ${label.toLowerCase()}...`}
             className="w-full border-0 px-3 py-2 text-sm outline-none rounded-t-lg"
-            onKeyDown={handleKeyDown}
           />
           <div className="max-h-36 overflow-y-auto border-t">
             {/* None option */}
@@ -280,6 +346,14 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
   const [institutions, setInstitutions] = useState<LookupItem[]>([]);
   const [projects, setProjects] = useState<LookupItem[]>([]);
   const [designations, setDesignations] = useState<LookupItem[]>([]);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoError, setPhotoError] = useState('');
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState('');
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const capturedCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Load lookups on modal open
   useEffect(() => {
@@ -318,21 +392,148 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
         hiredDate: editing.hiredDate ? editing.hiredDate.split('T')[0] : '',
         employmentHistory: editing.employmentHistory || '',
       });
+      setPhotoPreview(editing.photoUrl || null);
+      setPhotoFile(null);
     } else {
       setForm({
         fullName: '', designation: '', designationId: '', email: '', phone: '',
         institutionId: '', projectId: '', projectYear: '', hiredDate: '',
         employmentHistory: '',
       });
+      setPhotoPreview(null);
+      setPhotoFile(null);
     }
+    setPhotoError('');
   }, [editing, open]);
 
+  // ─── Camera ─── (hooks must be before early return)
+  const stopCamera = useCallback(() => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      setCameraStream(null);
+    }
+  }, [cameraStream]);
+
+  // Cleanup camera on unmount or modal close
+  useEffect(() => {
+    if (!open) {
+      stopCamera();
+      setShowCamera(false);
+      setCameraError('');
+    }
+  }, [open, stopCamera]);
+
+  useEffect(() => {
+    return () => { stopCamera(); };
+  }, [stopCamera]);
+
   if (!open) return null;
+
+  const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+  const MAX_SIZE = 2 * 1024 * 1024; // 2MB
+
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPhotoError('');
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      setPhotoError('Only JPG, PNG, and WebP images allowed');
+      return;
+    }
+    if (file.size > MAX_SIZE) {
+      setPhotoError('Image must be under 2MB');
+      return;
+    }
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setPhotoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handlePhotoRemove = () => {
+    setPhotoPreview(null);
+    setPhotoFile(null);
+    setPhotoError('');
+  };
+
+  const openCamera = async () => {
+    setCameraError('');
+    try {
+      // Prefer environment (rear) camera on mobile, fallback to any
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 640 } },
+        audio: false,
+      });
+      setCameraStream(stream);
+      setShowCamera(true);
+      // Attach stream to video element after render
+      setTimeout(() => {
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      }, 0);
+    } catch (err: any) {
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setCameraError('Camera permission denied. You can still upload a photo.');
+      } else if (err.name === 'NotFoundError') {
+        setCameraError('No camera found on this device. You can still upload a photo.');
+      } else {
+        setCameraError('Camera unavailable. You can still upload a photo.');
+      }
+    }
+  };
+
+  const capturePhoto = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = capturedCanvasRef.current;
+    if (!canvas) return;
+    // Draw current frame to canvas
+    const size = Math.min(video.videoWidth, video.videoHeight);
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    // Center-crop to square
+    const sx = (video.videoWidth - size) / 2;
+    const sy = (video.videoHeight - size) / 2;
+    ctx.drawImage(video, sx, sy, size, size, 0, 0, 256, 256);
+    // Convert to blob/file
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], `camera-capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      // Validate
+      if (file.size > MAX_SIZE) {
+        setCameraError('Captured image is too large. Try again or upload instead.');
+        return;
+      }
+      setPhotoFile(file);
+      setPhotoPreview(canvas.toDataURL('image/jpeg'));
+      setPhotoError('');
+      // Stop camera and close
+      stopCamera();
+      setShowCamera(false);
+      setCameraError('');
+    }, 'image/jpeg', 0.9);
+  };
+
+  const cancelCamera = () => {
+    stopCamera();
+    setShowCamera(false);
+    setCameraError('');
+  };
+
+  const getInitials = (name: string) => {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
+      // Upload photo first if selected (need personnel ID for new records)
+      let createdId: string | null = null;
+
       const body: Record<string, any> = {
         fullName: form.fullName,
         designation: form.designation || undefined,
@@ -351,9 +552,33 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
       }
       if (editing) {
         await apiFetch(`/personnel/${editing.id}`, { method: 'PATCH', body });
+        createdId = editing.id;
       } else {
-        await apiFetch('/personnel', { method: 'POST', body });
+        const result = await apiFetch('/personnel', { method: 'POST', body });
+        createdId = result.id || result.data?.id;
       }
+
+      // Upload photo if one was selected
+      if (photoFile && createdId) {
+        const formData = new FormData();
+        formData.append('photo', photoFile);
+        const token = localStorage.getItem('accessToken');
+        await fetch(`/api/personnel/${createdId}/photo`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+      }
+
+      // If editing and photo was removed, delete it
+      if (editing && editing.photoUrl && !photoPreview && !photoFile) {
+        const token = localStorage.getItem('accessToken');
+        await fetch(`/api/personnel/${editing.id}/photo`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+
       showToast('success', editing ? 'Profile updated successfully.' : 'Profile created successfully.');
       onSave();
       onClose();
@@ -378,75 +603,112 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
         </div>
         {/* Scrollable body */}
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
-          <div className="p-5 space-y-4 overflow-y-auto flex-1">
-          {/* Row 1: Full Name | Designation */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[10px] font-medium text-slate-500 mb-1">Full Name *</label>
-              <input required value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })}
-                placeholder="Full Name" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
-            </div>
-            <SearchableDropdown
-              label="Designation"
-              items={designations}
-              value={form.designationId}
-              onChange={id => setForm({ ...form, designationId: id })}
-              placeholder="Select designation..."
-            />
-          </div>
+          <div className="p-5 space-y-5 overflow-y-auto flex-1">
 
-          {/* Row 2: Email | Phone */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[10px] font-medium text-slate-500 mb-1">Email</label>
-              <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                placeholder="Email" type="email" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
-            </div>
-            <div>
-              <label className="block text-[10px] font-medium text-slate-500 mb-1">Phone</label>
-              <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
-                placeholder="Phone" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
-            </div>
-          </div>
-
-          {/* Row 3: Institution | Project */}
-          <div className="grid grid-cols-2 gap-4">
-            <SearchableDropdown
-              label="Institution"
-              items={institutions}
-              value={form.institutionId}
-              onChange={id => setForm({ ...form, institutionId: id })}
-              placeholder="Select institution..."
-            />
-            <SearchableDropdown
-              label="Project"
-              items={projects}
-              value={form.projectId}
-              onChange={id => setForm({ ...form, projectId: id })}
-              placeholder="Select project..."
-            />
-          </div>
-
-          {/* Row 4: Project Year | Date Hired */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[10px] font-medium text-slate-500 mb-1">Project Year</label>
-              <input value={form.projectYear} onChange={e => setForm({ ...form, projectYear: e.target.value })}
-                placeholder="e.g. 2024" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
-            </div>
-            <div>
-              <label className="block text-[10px] font-medium text-slate-500 mb-1">Date Hired</label>
-              <input value={form.hiredDate} onChange={e => setForm({ ...form, hiredDate: e.target.value })}
-                type="date" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
-            </div>
-          </div>
-
-          {/* Employment History */}
+          {/* ─── Basic Info ─── */}
           <div>
-            <label className="block text-[10px] font-medium text-slate-500 mb-1">Employment History / Previous Projects</label>
-            <textarea value={form.employmentHistory} onChange={e => setForm({ ...form, employmentHistory: e.target.value })}
-              placeholder="Employment History / Previous Projects..." rows={3}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Basic Info</p>
+            {/* Photo + fullName + designation row */}
+            <div className="flex gap-4 items-start">
+              {/* Profile photo */}
+              <div className="flex flex-col items-center gap-1.5 shrink-0">
+                <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-slate-200 flex items-center justify-center bg-slate-100 shrink-0">
+                  {photoPreview ? (
+                    <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
+                  ) : form.fullName ? (
+                    <span className="text-xl font-bold text-[#012061]">{getInitials(form.fullName)}</span>
+                  ) : (
+                    <User className="w-8 h-8 text-slate-300" />
+                  )}
+                </div>
+                <div className="flex flex-col items-center gap-0.5">
+                  <label className="text-[10px] font-medium text-[#f8931f] cursor-pointer hover:underline">
+                    {photoPreview ? 'Replace' : 'Upload photo'}
+                    <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoSelect} className="hidden" />
+                  </label>
+                  {!photoPreview && (
+                    <button type="button" onClick={openCamera} className="text-[10px] font-medium text-[#f8931f] hover:underline">Take photo</button>
+                  )}
+                  {photoPreview && (
+                    <button type="button" onClick={handlePhotoRemove} className="text-[10px] font-medium text-red-400 hover:text-red-600">Remove</button>
+                  )}
+                </div>
+              </div>
+              {/* fullName + designation */}
+              <div className="flex-1 grid grid-cols-1 gap-3">
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-500 mb-1">Full Name *</label>
+                  <input required value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })}
+                    placeholder="Full Name" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                </div>
+                <SearchableDropdown
+                  label="Designation"
+                  items={designations}
+                  value={form.designationId}
+                  onChange={id => setForm({ ...form, designationId: id })}
+                  placeholder="Select designation..."
+                />
+              </div>
+            </div>
+            {photoError && <p className="text-[10px] text-red-500 mt-1">{photoError}</p>}
+            {cameraError && <p className="text-[10px] text-amber-600 mt-1">{cameraError}</p>}
+            {/* Email + Phone */}
+            <div className="grid grid-cols-2 gap-4 mt-3">
+              <div>
+                <label className="block text-[10px] font-medium text-slate-500 mb-1">Email</label>
+                <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                  placeholder="Email" type="email" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-medium text-slate-500 mb-1">Phone</label>
+                <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+                  placeholder="Phone" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+              </div>
+            </div>
+          </div>
+
+          {/* ─── Assignment Info ─── */}
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Assignment Info</p>
+            <div className="grid grid-cols-2 gap-4">
+              <SearchableDropdown
+                label="Institution"
+                items={institutions}
+                value={form.institutionId}
+                onChange={id => setForm({ ...form, institutionId: id })}
+                placeholder="Select institution..."
+              />
+              <SearchableDropdown
+                label="Project"
+                items={projects}
+                value={form.projectId}
+                onChange={id => setForm({ ...form, projectId: id })}
+                placeholder="Select project..."
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4 mt-3">
+              <div>
+                <label className="block text-[10px] font-medium text-slate-500 mb-1">Project Year</label>
+                <input value={form.projectYear} onChange={e => setForm({ ...form, projectYear: e.target.value })}
+                  placeholder="e.g. 2024" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-medium text-slate-500 mb-1">Date Hired</label>
+                <input value={form.hiredDate} onChange={e => setForm({ ...form, hiredDate: e.target.value })}
+                  type="date" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+              </div>
+            </div>
+          </div>
+
+          {/* ─── History ─── */}
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">History</p>
+            <div>
+              <label className="block text-[10px] font-medium text-slate-500 mb-1">Employment History / Previous Projects{!editing && ' (create-only)'}</label>
+              <textarea value={form.employmentHistory} onChange={e => setForm({ ...form, employmentHistory: e.target.value })}
+                placeholder="Employment History / Previous Projects..." rows={3}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+            </div>
           </div>
 
           </div>
@@ -459,6 +721,30 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
           </div>
         </form>
       </div>
+      {/* Hidden canvas for camera capture */}
+      <canvas ref={capturedCanvasRef} className="hidden" />
+      {/* Camera capture overlay */}
+      {showCamera && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ background: '#012061' }}>
+              <h3 className="text-sm font-bold text-white">Take Photo</h3>
+              <button type="button" onClick={cancelCamera} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4">
+              <div className="relative rounded-lg overflow-hidden bg-black aspect-square">
+                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              </div>
+              <div className="flex items-center justify-center gap-3 mt-4">
+                <button type="button" onClick={cancelCamera} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+                <button type="button" onClick={capturePhoto} className="px-4 py-2 text-sm font-semibold text-white bg-[#f8931f] rounded-lg hover:bg-[#e07e0a] flex items-center gap-1.5">
+                  <Camera className="w-3.5 h-3.5" /> Capture
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -524,7 +810,11 @@ function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail
         <div className="px-6 py-4 border-b rounded-t-xl" style={{ background: '#012061' }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <UserCircle className="w-8 h-8 text-[#f8931f]" />
+              {personnel.photoUrl ? (
+                <img src={personnel.photoUrl} alt={personnel.fullName} className="w-8 h-8 rounded-full object-cover border-2 border-[#f8931f]" />
+              ) : (
+                <UserCircle className="w-8 h-8 text-[#f8931f]" />
+              )}
               <div>
                 <h2 className="text-base font-bold text-white">{personnel.fullName}</h2>
             <div className="flex items-center gap-2">
@@ -725,6 +1015,268 @@ function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail
   );
 }
 
+/* ─── Accountability Drawer ─── */
+function AccountabilityDrawer({
+  personnelId,
+  personnelName,
+  onClose,
+  onPreviewAgreement,
+}: {
+  personnelId: string;
+  personnelName: string;
+  onClose: () => void;
+  onPreviewAgreement: (params: Record<string, any>) => void;
+}) {
+  const [data, setData] = useState<AccountabilityData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showReturned, setShowReturned] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    apiFetch(`/personnel/${personnelId}/accountability`)
+      .then(res => { if (!cancelled) setData(res.data); })
+      .catch(err => { if (!cancelled) setError(err instanceof ApiError ? err.message : 'Failed to load accountability data'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [personnelId]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      {/* Overlay */}
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+
+      {/* Drawer panel */}
+      <div className="relative z-10 w-full max-w-3xl h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+        {/* Header */}
+        <div className="px-5 py-4 border-b shrink-0" style={{ background: '#012061' }}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <ClipboardCheck className="w-5 h-5 text-[#f8931f]" />
+              <div>
+                <h2 className="text-sm font-bold text-white">Accountability Summary</h2>
+                <p className="text-[10px] text-white/60">{personnelName}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="text-white/70 hover:text-white transition-colors"><X className="w-4 h-4" /></button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 text-[#f8931f] animate-spin" /></div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center px-6">
+              <AlertTriangle className="w-8 h-8 text-red-400 mb-3" />
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          ) : data ? (
+            <div className="p-5 space-y-5">
+              {/* ─── Info Row ─── */}
+              <div className="flex flex-wrap gap-3">
+                {data.personnel.designation && (
+                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-3 py-1.5">
+                    <Briefcase className="w-3 h-3 text-slate-400" />
+                    <span className="text-xs text-slate-700">{data.personnel.designation}</span>
+                  </div>
+                )}
+                {data.personnel.project && (
+                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-3 py-1.5">
+                    <Package className="w-3 h-3 text-slate-400" />
+                    <span className="text-xs text-slate-700">{data.personnel.project}</span>
+                  </div>
+                )}
+                {data.personnel.institution && (
+                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-3 py-1.5">
+                    <Building2 className="w-3 h-3 text-slate-400" />
+                    <span className="text-xs text-slate-700">{data.personnel.institution}</span>
+                  </div>
+                )}
+                {data.personnel.email && (
+                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-3 py-1.5">
+                    <Mail className="w-3 h-3 text-slate-400" />
+                    <span className="text-xs text-slate-700">{data.personnel.email}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* ─── Summary Bar ─── */}
+              <div className="grid grid-cols-4 gap-2 rounded-lg overflow-hidden">
+                <div className="bg-[#012061] px-3 py-3 text-center">
+                  <p className="text-2xl font-bold text-[#f8931f]">{data.summary.totalAssetsHeld}</p>
+                  <p className="text-[10px] text-white/70 uppercase tracking-widest font-semibold mt-0.5">Held</p>
+                </div>
+                <div className="bg-[#012061] px-3 py-3 text-center">
+                  <p className="text-2xl font-bold text-emerald-400">{data.summary.totalAssetsReturned}</p>
+                  <p className="text-[10px] text-white/70 uppercase tracking-widest font-semibold mt-0.5">Returned</p>
+                </div>
+                <div className="bg-[#012061] px-3 py-3 text-center">
+                  <p className="text-2xl font-bold text-white">{data.summary.totalAgreements}</p>
+                  <p className="text-[10px] text-white/70 uppercase tracking-widest font-semibold mt-0.5">Agreements</p>
+                </div>
+                <div className="bg-[#012061] px-3 py-3 text-center">
+                  <p className="text-sm font-bold text-white">
+                    {data.summary.oldestActiveIssuanceDate
+                      ? new Date(data.summary.oldestActiveIssuanceDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                      : '—'}
+                  </p>
+                  <p className="text-[10px] text-white/70 uppercase tracking-widest font-semibold mt-0.5">Oldest Active</p>
+                </div>
+              </div>
+
+              {/* ─── Active Assets ─── */}
+              <div>
+                <h3 className="text-xs font-semibold text-[#012061] flex items-center gap-1.5 mb-2">
+                  <Package className="w-3.5 h-3.5 text-[#f8931f]" />
+                  Active Assets ({data.activeAssignments.length})
+                </h3>
+                {data.activeAssignments.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic py-2">No active assets held.</p>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border border-slate-200">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-[#012061] text-left">
+                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Asset</th>
+                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Serial #</th>
+                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Property No.</th>
+                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Condition</th>
+                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Issued</th>
+                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Agreement</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.activeAssignments.map(a => (
+                          <tr key={a.id} className="border-b border-slate-100 bg-white">
+                            <td className="px-3 py-2 font-semibold text-[#012061]">{a.assetName || '—'}</td>
+                            <td className="px-3 py-2 text-xs text-slate-600 font-mono">{a.serialNumber || '—'}</td>
+                            <td className="px-3 py-2 text-xs text-slate-600 font-mono">{a.propertyNumber || '—'}</td>
+                            <td className="px-3 py-2">
+                              <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-emerald-50 text-emerald-700">{a.condition || 'Good'}</span>
+                            </td>
+                            <td className="px-3 py-2 text-xs text-slate-600">{new Date(a.assignedAt).toLocaleDateString()}</td>
+                            <td className="px-3 py-2">
+                              {a.agreementDocumentId ? (
+                                <button
+                                  onClick={() => onPreviewAgreement({ agreementDocumentId: a.agreementDocumentId, personnelId: data.personnel.id, personnelName: data.personnel.fullName })}
+                                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#f8931f] hover:underline"
+                                >
+                                  <FileText className="w-3 h-3" />
+                                  {a.documentNumber || 'View'}
+                                </button>
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* ─── Returned Assets (collapsed by default) ─── */}
+              <div>
+                <button
+                  onClick={() => setShowReturned(!showReturned)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-[#012061] hover:text-[#f8931f] transition-colors mb-2"
+                >
+                  {showReturned ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                  <FileText className="w-3.5 h-3.5 text-slate-400" />
+                  Returned Assets ({data.returnedAssignments.length})
+                </button>
+                {showReturned && (
+                  data.returnedAssignments.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic pl-5">No returned assets yet.</p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 ml-5">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-[#012061] text-left">
+                            <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Asset</th>
+                            <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Serial #</th>
+                            <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Issued Cond.</th>
+                            <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Return Cond.</th>
+                            <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Note</th>
+                            <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Returned</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {data.returnedAssignments.map(a => (
+                            <tr key={a.id} className="border-b border-slate-100 bg-white">
+                              <td className="px-3 py-2 font-semibold text-[#012061]">{a.assetName || '—'}</td>
+                              <td className="px-3 py-2 text-xs text-slate-600 font-mono">{a.serialNumber || '—'}</td>
+                              <td className="px-3 py-2"><span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-emerald-50 text-emerald-700">{a.condition || 'Good'}</span></td>
+                              <td className="px-3 py-2"><span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-slate-100 text-slate-600">{a.returnCondition || a.condition || '—'}</span></td>
+                              <td className="px-3 py-2 text-xs text-slate-500 max-w-[120px] truncate">{a.returnNote || '—'}</td>
+                              <td className="px-3 py-2 text-xs text-slate-600">{new Date(a.returnedAt).toLocaleDateString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* ─── Agreement Documents ─── */}
+              <div>
+                <h3 className="text-xs font-semibold text-[#012061] flex items-center gap-1.5 mb-2">
+                  <FolderOpen className="w-3.5 h-3.5 text-[#f8931f]" />
+                  Agreement Documents ({data.agreementDocuments.length})
+                </h3>
+                {data.agreementDocuments.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">No agreement documents.</p>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border border-slate-200">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-[#012061] text-left">
+                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Doc #</th>
+                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Status</th>
+                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Issued</th>
+                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Assets</th>
+                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Signed At</th>
+                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.agreementDocuments.map(doc => (
+                          <tr key={doc.id} className="border-b border-slate-100 bg-white">
+                            <td className="px-3 py-2 font-semibold text-[#012061] text-xs">{doc.documentNumber}</td>
+                            <td className="px-3 py-2"><DocStatusBadge status={doc.status} /></td>
+                            <td className="px-3 py-2 text-xs text-slate-600">{new Date(doc.issuedAt).toLocaleDateString()}</td>
+                            <td className="px-3 py-2 text-xs text-slate-600">{doc.assetCount}</td>
+                            <td className="px-3 py-2 text-xs text-slate-600">
+                              {doc.recipientSignedAt ? new Date(doc.recipientSignedAt).toLocaleDateString() : '—'}
+                            </td>
+                            <td className="px-3 py-2">
+                              <button
+                                onClick={() => onPreviewAgreement({ agreementDocumentId: doc.id, personnelId: data.personnel.id, personnelName: data.personnel.fullName })}
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#f8931f] hover:underline"
+                              >
+                                <FileText className="w-3 h-3" /> View
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function InfoCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="flex items-start gap-2 bg-slate-50 rounded-lg px-3 py-2">
@@ -755,6 +1307,11 @@ export default function ProfilesPage() {
     personnelId?: string;
     personnelName?: string;
   }>({ blobUrl: null, loading: false, filename: 'agreement.pdf' });
+  const [accountabilityId, setAccountabilityId] = useState<string | null>(null);
+  const [accountabilityName, setAccountabilityName] = useState<string>('');
+
+  // Shared agreement preview hook for the accountability drawer
+  const { preview: agreementPreview, openPreview: openAgreementPreview, closePreview: closeAgreementPreview } = useAgreementPreview();
 
   const showToast = useCallback((type: ToastType, message: string) => {
     const id = ++toastId;
@@ -975,7 +1532,16 @@ export default function ProfilesPage() {
                 {personnel.map(p => (
                   <tr key={p.id} className="bg-white dark:bg-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all group">
                     <td className="px-4 py-3">
-                      <button onClick={() => openDetail(p)} className="text-sm font-semibold hover:underline" style={{ color: '#012061' }}>{p.fullName}</button>
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-200 flex items-center justify-center shrink-0 bg-slate-100">
+                          {p.photoUrl ? (
+                            <img src={p.photoUrl} alt={p.fullName} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-[10px] font-bold text-[#012061]">{p.fullName.trim().split(/\s+/).length === 1 ? p.fullName.slice(0, 2).toUpperCase() : (p.fullName.trim().split(/\s+/)[0][0] + p.fullName.trim().split(/\s+/).slice(-1)[0][0]).toUpperCase()}</span>
+                          )}
+                        </div>
+                        <button onClick={() => openDetail(p)} className="text-sm font-semibold hover:underline" style={{ color: '#012061' }}>{p.fullName}</button>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {p.personnelType === 'contractor' ? (
@@ -1050,6 +1616,10 @@ export default function ProfilesPage() {
                             <Package className="w-3.5 h-3.5" />
                           </button>
                         </PermissionGate>
+                        <button onClick={() => { setAccountabilityId(p.id); setAccountabilityName(p.fullName); }}
+                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-[#012061] dark:hover:text-slate-100 transition-colors" title="Accountability">
+                          <ClipboardCheck className="w-3.5 h-3.5" />
+                        </button>
                         <button onClick={() => openDetail(p)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-[#012061] dark:hover:text-slate-100 transition-colors" title="View">
                           <Eye className="w-3.5 h-3.5" />
                         </button>
@@ -1106,6 +1676,32 @@ export default function ProfilesPage() {
         />
       )}
       <SessionExpiredModal open={sessionExpired} onClose={() => setSessionExpired(false)} />
+
+      {/* Accountability Drawer */}
+      {accountabilityId && (
+        <AccountabilityDrawer
+          personnelId={accountabilityId}
+          personnelName={accountabilityName}
+          onClose={() => { setAccountabilityId(null); setAccountabilityName(''); }}
+          onPreviewAgreement={openAgreementPreview}
+        />
+      )}
+
+      {/* Agreement PDF Preview (from accountability drawer) */}
+      {agreementPreview.blobUrl && (
+        <PDFPreviewModal
+          open={!!agreementPreview.blobUrl}
+          blobUrl={agreementPreview.blobUrl}
+          loading={agreementPreview.loading}
+          downloadFilename={agreementPreview.filename}
+          personnelId={agreementPreview.personnelId}
+          personnelName={agreementPreview.personnelName}
+          agreementDocumentId={agreementPreview.agreementDocumentId}
+          signedPdfPath={agreementPreview.signedPdfPath}
+          signedUploadedAt={agreementPreview.signedUploadedAt}
+          onClose={closeAgreementPreview}
+        />
+      )}
 
       {/* Toast Container */}
       <ToastContainer toasts={toasts} dismiss={dismissToast} />

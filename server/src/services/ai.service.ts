@@ -5,7 +5,45 @@ const AI_MODEL = process.env.AI_MODEL || 'gpt-4o-mini';
 interface Suggestion {
   type: string;
   manufacturer: string;
-  confidence: number;
+  usefulLifeYears: number;
+  warrantyYears: number;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+// Lookup tables for asset metadata based on keyword match
+const USEFUL_LIFE_MAP: Record<string, number> = {
+  laptop: 5,
+  tablet: 5,
+  desktop: 7,
+  server: 7,
+  printer: 10,
+  monitor: 7,
+};
+
+const WARRANTY_YEARS_MAP: Record<string, number> = {
+  laptop: 3,
+  tablet: 3,
+  desktop: 3,
+  server: 3,
+  printer: 2,
+  monitor: 3,
+};
+
+const DEFAULT_USEFUL_LIFE = 5;
+const DEFAULT_WARRANTY_YEARS = 1;
+
+function getAssetMetadata(assetName: string): { usefulLifeYears: number; warrantyYears: number; confidence: 'high' | 'low' } {
+  const lower = assetName.toLowerCase();
+  for (const keyword of Object.keys(USEFUL_LIFE_MAP)) {
+    if (lower.includes(keyword)) {
+      return {
+        usefulLifeYears: USEFUL_LIFE_MAP[keyword],
+        warrantyYears: WARRANTY_YEARS_MAP[keyword] ?? DEFAULT_WARRANTY_YEARS,
+        confidence: 'high',
+      };
+    }
+  }
+  return { usefulLifeYears: DEFAULT_USEFUL_LIFE, warrantyYears: DEFAULT_WARRANTY_YEARS, confidence: 'low' };
 }
 
 const TYPE_SUGGESTIONS: Record<string, { type: string; manufacturer: string }[]> = {
@@ -86,7 +124,13 @@ function localSuggest(assetName: string): Suggestion[] {
   const lower = assetName.toLowerCase();
   for (const [keyword, suggestions] of Object.entries(TYPE_SUGGESTIONS)) {
     if (lower.includes(keyword)) {
-      return suggestions.map((s, i) => ({ ...s, confidence: 0.9 - i * 0.15 }));
+      const meta = getAssetMetadata(assetName);
+      return suggestions.map((s) => ({
+        ...s,
+        usefulLifeYears: meta.usefulLifeYears,
+        warrantyYears: meta.warrantyYears,
+        confidence: meta.confidence,
+      }));
     }
   }
   return [];
@@ -107,7 +151,7 @@ export async function suggestAsset(assetName: string): Promise<{ suggestions: Su
           messages: [
             {
               role: 'system',
-              content: 'You are an asset classification assistant. Given an asset name, suggest the most likely type and manufacturer. Respond ONLY with a JSON array of objects with fields: type (one of: DESKTOP, LAPTOP, FURNITURE, EQUIPMENT, PERIPHERAL, OTHER), manufacturer (string), confidence (0-1). Max 3 suggestions.',
+              content: 'You are an asset classification assistant. Given an asset name, suggest the most likely type and manufacturer. Respond ONLY with a JSON array of objects with fields: type (one of: DESKTOP, LAPTOP, FURNITURE, EQUIPMENT, PERIPHERAL, OTHER), manufacturer (string). Max 3 suggestions.',
             },
             { role: 'user', content: `Asset name: "${assetName}"` },
           ],
@@ -123,7 +167,18 @@ export async function suggestAsset(assetName: string): Promise<{ suggestions: Su
         if (content) {
           const parsed = JSON.parse(content);
           if (Array.isArray(parsed)) {
-            return { suggestions: parsed.slice(0, 3), source: 'ai' };
+            // Enrich AI suggestions with metadata based on asset name
+            const meta = getAssetMetadata(assetName);
+            return {
+              suggestions: parsed.slice(0, 3).map((s: any) => ({
+                type: s.type || 'OTHER',
+                manufacturer: s.manufacturer || '',
+                usefulLifeYears: meta.usefulLifeYears,
+                warrantyYears: meta.warrantyYears,
+                confidence: meta.confidence,
+              })),
+              source: 'ai',
+            };
           }
         }
       }

@@ -3,15 +3,16 @@ import { prisma } from '../lib/prisma';
 import { z } from 'zod';
 import { authenticate, authorize } from '../middleware/auth';
 import { success, error } from '../utils/response';
+import { logAudit } from '../services/auditLog.service';
 
 const router = Router();
 
 
 // ── Validation schemas ──
 const nameSchema = z.object({ name: z.string().min(1, 'Name is required').max(100) });
-const designationPatchSchema = z.object({ name: z.string().min(1).max(100).optional(), status: z.enum(['active', 'inactive']).optional() });
-const institutionPatchSchema = z.object({ name: z.string().min(1).max(100).optional(), status: z.enum(['active', 'inactive']).optional() });
-const projectPatchSchema = z.object({ name: z.string().min(1).max(100).optional(), status: z.enum(['active', 'inactive', 'completed', 'archived']).optional() });
+const designationPatchSchema = z.object({ name: z.string().min(1).max(100).optional(), status: z.enum(['active', 'inactive']).optional(), forceDeactivate: z.boolean().optional() });
+const institutionPatchSchema = z.object({ name: z.string().min(1).max(100).optional(), status: z.enum(['active', 'inactive']).optional(), forceDeactivate: z.boolean().optional() });
+const projectPatchSchema = z.object({ name: z.string().min(1).max(100).optional(), status: z.enum(['active', 'inactive', 'completed', 'archived']).optional(), forceDeactivate: z.boolean().optional() });
 
 // ═══════════════════════════════════════════════════════════
 // DESIGNATIONS
@@ -70,19 +71,29 @@ designationsRouter.patch('/:id', authenticate, authorize(['ADMIN', 'STAFF_ADMIN'
     if (parsed.data.name) data.name = parsed.data.name;
     if (parsed.data.status) data.status = parsed.data.status;
 
-    // Cascade warning: check personnel references when deactivating
-    let referencedBy = 0;
-    let warning: string | null = null;
+    // Reference check when deactivating
     if (parsed.data.status === 'inactive') {
-      referencedBy = await prisma.personnel.count({ where: { designationId: id } });
-      if (referencedBy > 0) {
-        warning = `${referencedBy} personnel record(s) reference this designation. They will keep the current name but lose the active link.`;
+      const affectedCount = await prisma.personnel.count({
+        where: { designationId: id, status: 'active' },
+      });
+      if (affectedCount > 0 && !parsed.data.forceDeactivate) {
+        return error(res, `${affectedCount} active profile(s) use this value. Reassign or deactivate those profiles before deactivating this lookup.`, 409, { code: 'LOOKUP_IN_USE', affectedCount });
+      }
+      if (affectedCount > 0 && parsed.data.forceDeactivate) {
+        await logAudit({
+          userId: (req as any).user?.id ?? null,
+          action: 'lookup.force_deactivated',
+          entityType: 'DesignationLookup',
+          entityId: String(id),
+          metadata: { affectedPersonnelCount: affectedCount, lookupName: item.name },
+          ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
+        });
       }
     }
 
     const updated = await prisma.designationLookup.update({ where: { id }, data });
     console.log(`[LOOKUP-PATCH] Designation ${id} ("${item.name}") → ${JSON.stringify(data)}`);
-    return success(res, { ...updated, ...(warning ? { _warning: warning } : {}) });
+    return success(res, updated);
   } catch (e: any) {
     console.error(`[LOOKUP-PATCH] FK Error on Designation ${id}:`, e.message);
     if (e.code === 'P2003') {
@@ -149,19 +160,29 @@ institutionsRouter.patch('/:id', authenticate, authorize(['ADMIN', 'STAFF_ADMIN'
     if (parsed.data.name) data.name = parsed.data.name;
     if (parsed.data.status) data.status = parsed.data.status;
 
-    // Cascade warning: check personnel references when deactivating
-    let referencedBy = 0;
-    let warning: string | null = null;
+    // Reference check when deactivating
     if (parsed.data.status === 'inactive') {
-      referencedBy = await prisma.personnel.count({ where: { institutionId: id } });
-      if (referencedBy > 0) {
-        warning = `${referencedBy} personnel record(s) reference this institution. They will keep the current name but lose the active link.`;
+      const affectedCount = await prisma.personnel.count({
+        where: { institutionId: id, status: 'active' },
+      });
+      if (affectedCount > 0 && !parsed.data.forceDeactivate) {
+        return error(res, `${affectedCount} active profile(s) use this value. Reassign or deactivate those profiles before deactivating this lookup.`, 409, { code: 'LOOKUP_IN_USE', affectedCount });
+      }
+      if (affectedCount > 0 && parsed.data.forceDeactivate) {
+        await logAudit({
+          userId: (req as any).user?.id ?? null,
+          action: 'lookup.force_deactivated',
+          entityType: 'InstitutionLookup',
+          entityId: String(id),
+          metadata: { affectedPersonnelCount: affectedCount, lookupName: item.name },
+          ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
+        });
       }
     }
 
     const updated = await prisma.institutionLookup.update({ where: { id }, data });
     console.log(`[LOOKUP-PATCH] Institution ${id} ("${item.name}") → ${JSON.stringify(data)}`);
-    return success(res, { ...updated, ...(warning ? { _warning: warning } : {}) });
+    return success(res, updated);
   } catch (e: any) {
     console.error(`[LOOKUP-PATCH] FK Error on Institution ${id}:`, e.message);
     if (e.code === 'P2003') {
@@ -223,24 +244,36 @@ projectsRouter.patch('/:id', authenticate, authorize(['ADMIN', 'STAFF_ADMIN']), 
     if (dup) return error(res, `"${parsed.data.name}" already exists`, 409);
   }
 
+  const deactivationStatuses = ['inactive', 'completed', 'archived'];
+
   try {
     const data: any = {};
     if (parsed.data.name) data.name = parsed.data.name;
     if (parsed.data.status) data.status = parsed.data.status;
 
-    // Cascade warning: check personnel references when deactivating
-    let referencedBy = 0;
-    let warning: string | null = null;
-    if (parsed.data.status === 'inactive' || parsed.data.status === 'completed' || parsed.data.status === 'archived') {
-      referencedBy = await prisma.personnel.count({ where: { projectId: id } });
-      if (referencedBy > 0) {
-        warning = `${referencedBy} personnel record(s) reference this project. They will keep the current name but lose the active link.`;
+    // Reference check when deactivating
+    if (parsed.data.status && deactivationStatuses.includes(parsed.data.status)) {
+      const affectedCount = await prisma.personnel.count({
+        where: { projectId: id, status: 'active' },
+      });
+      if (affectedCount > 0 && !parsed.data.forceDeactivate) {
+        return error(res, `${affectedCount} active profile(s) use this value. Reassign or deactivate those profiles before deactivating this lookup.`, 409, { code: 'LOOKUP_IN_USE', affectedCount });
+      }
+      if (affectedCount > 0 && parsed.data.forceDeactivate) {
+        await logAudit({
+          userId: (req as any).user?.id ?? null,
+          action: 'lookup.force_deactivated',
+          entityType: 'ProjectLookup',
+          entityId: String(id),
+          metadata: { affectedPersonnelCount: affectedCount, lookupName: item.name, newStatus: parsed.data.status },
+          ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
+        });
       }
     }
 
     const updated = await prisma.projectLookup.update({ where: { id }, data });
     console.log(`[LOOKUP-PATCH] Project ${id} ("${item.name}") → ${JSON.stringify(data)}`);
-    return success(res, { ...updated, ...(warning ? { _warning: warning } : {}) });
+    return success(res, updated);
   } catch (e: any) {
     console.error(`[LOOKUP-PATCH] FK Error on Project ${id}:`, e.message);
     if (e.code === 'P2003' || (e.meta?.field_name && typeof e.meta?.field_name === 'string' && e.meta.field_name.includes('Foreign'))) {

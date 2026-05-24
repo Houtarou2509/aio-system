@@ -50,6 +50,7 @@ export function authorize(roles: RoleCheck[]) {
 export function hasPermission(permission: PermissionKey) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) return error(res, 'Authentication required', 401);
+    if (req.user.role === 'ADMIN') return next();
     if (!req.user.permissions?.includes(permission)) {
       return error(res, 'Insufficient permissions', 403);
     }

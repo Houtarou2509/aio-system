@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
-  Briefcase, Building2, FolderKanban, Search, Plus, Pencil, PowerOff, Power, Eye, EyeOff,
+  Briefcase, Building2, FolderKanban, Search, Plus, Pencil, PowerOff, Power, Eye, EyeOff, AlertTriangle,
 } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 /* ─── Types ─── */
 interface LookupItem {
@@ -139,6 +143,10 @@ function LookupTable({
   const [showAdd, setShowAdd] = useState(false);
   const [editTarget, setEditTarget] = useState<LookupItem | null>(null);
 
+  // Force-deactivate warning dialog
+  const [forceDialog, setForceDialog] = useState<{ id: number; currentStatus: string; newStatus: string; affectedCount: number } | null>(null);
+  const [forceLoading, setForceLoading] = useState(false);
+
   const token = localStorage.getItem('accessToken');
   const authHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
@@ -184,16 +192,24 @@ function LookupTable({
         body: JSON.stringify({ status: newStatus }),
       });
       const json = await res.json();
+
+      // Handle LOOKUP_IN_USE (409) — referenced by active personnel
+      if (res.status === 409 && json.error?.details?.code === 'LOOKUP_IN_USE') {
+        // Revert optimistic update and show warning dialog instead
+        setItems(prev =>
+          prev.map(item => (item.id === id ? { ...item, status: currentStatus } : item))
+        );
+        const affectedCount = json.error.details.affectedCount || '?';
+        setForceDialog({ id, currentStatus, newStatus, affectedCount });
+        return;
+      }
+
       if (!json.success) {
         // Revert on failure
         setItems(prev =>
           prev.map(item => (item.id === id ? { ...item, status: currentStatus } : item))
         );
         throw new Error(json.error?.message || 'Failed to update status');
-      }
-      // Show cascade warning if present
-      if (json.data?._warning) {
-        alert('⚠️ ' + json.data._warning);
       }
     } catch (e: any) {
       // Already reverted above for API errors; re-throw for other failures
@@ -203,6 +219,38 @@ function LookupTable({
         );
       }
       throw e;
+    }
+  };
+
+  const handleForceDeactivate = async () => {
+    if (!forceDialog) return;
+    setForceLoading(true);
+    const { id, currentStatus, newStatus } = forceDialog;
+    // Optimistic update
+    setItems(prev =>
+      prev.map(item => (item.id === id ? { ...item, status: newStatus } : item))
+    );
+    try {
+      const res = await fetch(`${endpoint}/${id}`, {
+        method: 'PATCH',
+        headers: authHeaders,
+        body: JSON.stringify({ status: newStatus, forceDeactivate: true }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        // Revert
+        setItems(prev =>
+          prev.map(item => (item.id === id ? { ...item, status: currentStatus } : item))
+        );
+        throw new Error(json.error?.message || 'Failed to force-deactivate');
+      }
+    } catch (e: any) {
+      setItems(prev =>
+        prev.map(item => (item.id === id ? { ...item, status: currentStatus } : item))
+      );
+    } finally {
+      setForceLoading(false);
+      setForceDialog(null);
     }
   };
 
@@ -333,6 +381,49 @@ function LookupTable({
           setEditTarget(null);
         }}
       />
+
+      {/* Force Deactivate Warning Dialog */}
+      <Dialog open={forceDialog !== null} onOpenChange={(open) => { if (!open) setForceDialog(null); }}>
+        <DialogContent showCloseButton={false} className="max-w-md overflow-hidden rounded-xl border-0 bg-white p-0 shadow-2xl dark:bg-slate-900">
+          <div className="flex items-center justify-between px-5 py-4" style={{ background: '#7B1113' }}>
+            <DialogHeader className="gap-0">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-white" />
+                <DialogTitle className="text-sm font-bold text-white">
+                  This value is in use
+                </DialogTitle>
+              </div>
+            </DialogHeader>
+          </div>
+          <DialogDescription className="sr-only">
+            Confirm force deactivation of a lookup value that is used by active personnel profiles.
+          </DialogDescription>
+          <div className="px-5 py-4">
+            <p className="text-sm text-slate-700 dark:text-slate-300">
+              <span className="font-bold text-[#7B1113]">{forceDialog?.affectedCount ?? '?'}</span> active profile(s) currently use this lookup value.
+              Deactivating it will not remove them from existing profiles, but the value will no longer appear in dropdowns for new or edited profiles.
+            </p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
+              Do you want to force deactivation anyway?
+            </p>
+          </div>
+          <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-2 bg-slate-50 dark:bg-slate-900/50">
+            <DialogClose
+              render={<Button variant="outline" size="sm" />}
+              onClick={() => setForceDialog(null)}
+            >
+              Cancel
+            </DialogClose>
+            <button
+              onClick={handleForceDeactivate}
+              disabled={forceLoading}
+              className="rounded-lg bg-[#7B1113] px-4 py-2 text-xs font-semibold text-white hover:bg-[#5e0e10] shadow-sm transition-colors disabled:opacity-50"
+            >
+              {forceLoading ? 'Deactivating…' : 'Force Deactivate'}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

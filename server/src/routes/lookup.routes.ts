@@ -4,9 +4,20 @@ import { prisma } from '../lib/prisma';
 import { z } from 'zod';
 import { authenticate, authorize } from '../middleware/auth';
 import { success, error } from '../utils/response';
+import { logAudit } from '../services/auditLog.service';
 
 const router = Router();
 
+// ────────────────────────────────────────────────────────────
+// DEPRECATED: ASSIGNED_TO is sunset — replaced by Personnel
+// profiles and Issuances. All read/write endpoints return 410.
+// ────────────────────────────────────────────────────────────
+const DEPRECATED_CATEGORY = LookupCategory.ASSIGNED_TO;
+const DEPRECATION_MESSAGE = 'This lookup category is deprecated. Use Personnel profiles and Issuances for assignment tracking.';
+
+function isDeprecated(category: LookupCategory): boolean {
+  return category === DEPRECATED_CATEGORY;
+}
 
 // Map URL param to LookupCategory enum
 const categoryMap: Record<string, LookupCategory> = {
@@ -30,7 +41,11 @@ router.get(
   async (req: Request, res: Response) => {
     const category = resolveCategory(String(req.params.category));
     if (!category) {
-      return error(res, 'Invalid category. Use: asset-types, manufacturers, locations, assigned-to', 400);
+      return error(res, 'Invalid category. Use: asset-types, manufacturers, locations', 400);
+    }
+
+    if (isDeprecated(category)) {
+      return error(res, DEPRECATION_MESSAGE, 410);
     }
 
     const values = await prisma.lookupValue.findMany({
@@ -51,9 +66,19 @@ router.get(
   authenticate,
   authorize(['ADMIN', 'STAFF_ADMIN']),
   async (req: Request, res: Response) => {
-    const category = resolveCategory(String(req.params.category));
+    const categoryMapLocal: Record<string, LookupCategory> = {
+      'asset-types': LookupCategory.ASSET_TYPE,
+      'manufacturers': LookupCategory.MANUFACTURER,
+      'locations': LookupCategory.LOCATION,
+      'assigned-to': LookupCategory.ASSIGNED_TO,
+    };
+    const category = categoryMapLocal[String(req.params.category)] ?? null;
     if (!category) {
       return error(res, 'Invalid category', 400);
+    }
+
+    if (isDeprecated(category)) {
+      return error(res, DEPRECATION_MESSAGE, 410);
     }
 
     const values = await prisma.lookupValue.findMany({
@@ -81,6 +106,10 @@ router.post(
     const category = resolveCategory(String(req.params.category));
     if (!category) {
       return error(res, 'Invalid category', 400);
+    }
+
+    if (isDeprecated(category)) {
+      return error(res, DEPRECATION_MESSAGE, 410);
     }
 
     const parsed = createSchema.safeParse(req.body);
@@ -142,6 +171,11 @@ router.patch(
       return error(res, 'Lookup value not found', 404);
     }
 
+    // Block edits to deprecated ASSIGNED_TO values
+    if (isDeprecated(existing.category)) {
+      return error(res, DEPRECATION_MESSAGE, 410);
+    }
+
     // If renaming, check for duplicate
     if (parsed.data.value) {
       const duplicate = await prisma.lookupValue.findFirst({
@@ -187,13 +221,12 @@ router.post(
       const typeSet = new Set<string>();
       const mfrSet = new Set<string>();
       const locSet = new Set<string>();
-      const assSet = new Set<string>();
+      // ASSIGNED_TO is deprecated — no longer migrated into lookup values
 
       for (const a of assets) {
         if (a.type) typeSet.add(a.type.charAt(0).toUpperCase() + a.type.slice(1).toLowerCase());
         if (a.manufacturer) mfrSet.add(a.manufacturer);
         if (a.location) locSet.add(a.location);
-        if (a.assignedTo) assSet.add(a.assignedTo);
       }
 
       const upsert = async (category: LookupCategory, value: string) => {
@@ -208,14 +241,14 @@ router.post(
       for (const v of typeSet) { await upsert(LookupCategory.ASSET_TYPE, v); count++; }
       for (const v of mfrSet) { await upsert(LookupCategory.MANUFACTURER, v); count++; }
       for (const v of locSet) { await upsert(LookupCategory.LOCATION, v); count++; }
-      for (const v of assSet) { await upsert(LookupCategory.ASSIGNED_TO, v); count++; }
+      // ASSIGNED_TO removed from migration — deprecated
 
-      await prisma.auditLog.create({
-        data: {
-          entityType: 'System',
-          entityId: 'lookup-migration',
-          action: 'MIGRATE_LOOKUPS',
-          performedById: req.user!.id,
+      await logAudit({
+        userId: req.user!.id,
+        entityType: 'System',
+        entityId: 'lookup-migration',
+        action: 'MIGRATE_LOOKUPS',
+        metadata: {
           field: '*',
           newValue: `Migrated ${count} lookup values from ${assets.length} assets`,
         },

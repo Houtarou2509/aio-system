@@ -5,8 +5,13 @@ export const createAssetSchema = z.object({
   type: z.string().min(1, 'Type is required'),
   manufacturer: z.string().optional(),
   serialNumber: z.string().optional(),
-  purchasePrice: z.coerce.number().nonnegative().optional(),
-  purchaseDate: z.string().optional().transform(v => v ? new Date(v).toISOString() : undefined),
+  purchasePrice: z.coerce.number({
+    required_error: 'Purchase price is required.',
+    invalid_type_error: 'Purchase price must be a number.',
+  }).nonnegative('Purchase price cannot be negative.'),
+  purchaseDate: z.string({
+    required_error: 'Purchase date is required.',
+  }).min(1, 'Purchase date is required.').transform(v => new Date(v).toISOString()),
   status: z.enum(['AVAILABLE', 'PENDING_ASSIGNMENT', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST']).default('AVAILABLE'),
   location: z.string().optional(),
   assignedTo: z.string().optional(),
@@ -14,6 +19,10 @@ export const createAssetSchema = z.object({
   remarks: z.string().optional(),
   warrantyExpiry: z.string().optional().nullable(),
   warrantyNotes: z.string().max(500).optional().nullable(),
+  depreciationMethod: z.string().optional().default('straight_line'),
+  usefulLifeYears: z.coerce.number().int().min(1).max(50).optional().default(5),
+  salvageValue: z.coerce.number().nonnegative().optional().default(0),
+  supplierId: z.string().uuid().optional().nullable(),
 });
 
 export const updateAssetSchema = createAssetSchema.partial();

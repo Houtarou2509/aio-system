@@ -14,6 +14,9 @@ import {
   ChevronDown,
   ChevronRight,
   Loader2,
+  DollarSign,
+  BarChart3,
+  TrendingUp,
 } from 'lucide-react';
 
 interface Props {
@@ -29,6 +32,22 @@ interface Schedule {
   status: string;
   completedAt?: string;
   frequency?: string;
+}
+
+interface MaintenanceCostSummary {
+  assetId: string;
+  totalCost: number;
+  logCount: number;
+  avgCostPerLog: number;
+  maxCost: number;
+  minCost: number;
+  lastMaintenanceDate: string | null;
+  firstMaintenanceDate: string | null;
+  costByYear: { year: number; total: number; count: number }[];
+}
+
+function formatPeso(value: number): string {
+  return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 const FREQ_LABELS: Record<string, string> = {
@@ -116,7 +135,6 @@ function ScheduleTile({
 export function MaintenanceTab({ assetId, frequentRepair }: Props) {
   const { user } = useAuth();
 
-
   const [logs, setLogs] = useState<MaintenanceLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -129,6 +147,9 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
   const [schedulesLoading, setSchedulesLoading] = useState(true);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isCompletedExpanded, setIsCompletedExpanded] = useState(false);
+
+  const [costSummary, setCostSummary] = useState<MaintenanceCostSummary | null>(null);
+  const [costSummaryLoading, setCostSummaryLoading] = useState(false);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -151,6 +172,22 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
   };
 
   useEffect(() => { fetchLogs(); fetchSchedules(); }, [assetId]);
+
+  useEffect(() => {
+    const fetchCostSummary = async () => {
+      setCostSummaryLoading(true);
+      try {
+        const token = localStorage.getItem('accessToken');
+        const res = await fetch(`/api/assets/${assetId}/maintenance/summary`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const result = await res.json();
+        if (result.success) setCostSummary(result.data);
+      } catch { /* ignore */ }
+      finally { setCostSummaryLoading(false); }
+    };
+    fetchCostSummary();
+  }, [assetId]);
 
   const handleMarkDone = async (schedule: Schedule) => {
     try {
@@ -231,6 +268,47 @@ export function MaintenanceTab({ assetId, frequentRepair }: Props) {
           Frequent repair flag: more than 3 maintenance events in the past 12 months
         </div>
       )}
+
+      {/* ─── Cost Summary Bar ─── */}
+      {costSummaryLoading ? (
+        <div className="flex items-center justify-center py-4 text-sm text-slate-400">
+          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+          Loading cost summary…
+        </div>
+      ) : costSummary && costSummary.logCount > 0 ? (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-xl bg-[#012061] px-4 py-3 text-white shadow-sm">
+            <div className="flex items-center gap-1.5 mb-1">
+              <DollarSign className="w-3 h-3 text-white/60" />
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-white/60">Total Spend</span>
+            </div>
+            <p className="text-lg font-bold">{formatPeso(costSummary.totalCost)}</p>
+          </div>
+          <div className="rounded-xl bg-[#012061] px-4 py-3 text-white shadow-sm">
+            <div className="flex items-center gap-1.5 mb-1">
+              <BarChart3 className="w-3 h-3 text-white/60" />
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-white/60">Avg per Log</span>
+            </div>
+            <p className="text-lg font-bold">{formatPeso(costSummary.avgCostPerLog)}</p>
+          </div>
+          <div className="rounded-xl bg-[#012061] px-4 py-3 text-white shadow-sm">
+            <div className="flex items-center gap-1.5 mb-1">
+              <TrendingUp className="w-3 h-3 text-white/60" />
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-white/60">Last Service</span>
+            </div>
+            <p className="text-lg font-bold">
+              {costSummary.lastMaintenanceDate
+                ? new Date(costSummary.lastMaintenanceDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                : '—'}
+            </p>
+          </div>
+        </div>
+      ) : costSummary && costSummary.logCount === 0 ? (
+        <div className="flex items-center justify-center py-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-xs text-slate-400">
+          <DollarSign className="w-3.5 h-3.5 mr-1.5" />
+          No maintenance costs recorded.
+        </div>
+      ) : null}
 
       {/* ─── Upcoming Maintenance (Connectivity Matrix style) ─── */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xs overflow-hidden">

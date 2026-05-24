@@ -2,12 +2,15 @@ import { Router, Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
+import crypto from 'crypto';
 import * as agreementService from '../services/agreement.service';
 import { getPlaceholderReference } from '../utils/templateParser';
 import { authenticate, hasPermission } from '../middleware/auth';
 import { success, error } from '../utils/response';
 import { validate } from '../middleware/validate';
 import { createAgreementTemplateSchema, updateAgreementTemplateSchema, agreementPdfSchema, templatePreviewSchema, templateValidationSchema, backfillAgreementDocumentsSchema, sanitizeAgreementDocumentsSchema } from './agreement.schema';
+import { AUDIT_ACTIONS, logAudit } from '../services/auditLog.service';
+import { prisma } from '../lib/prisma';
 
 const router = Router();
 
@@ -319,6 +322,13 @@ router.post(
       if (!req.file) return error(res, 'No PDF file provided, or file is not a valid PDF', 400);
       const filePath = `/uploads/signed-agreements/${req.file.filename}`;
       const document = await agreementService.attachSignedAgreementDocument(String(req.params.id), filePath, (req as any).user.id);
+      logAudit({
+        userId: (req as any).user?.id ?? null,
+        action: AUDIT_ACTIONS.AGREEMENT_SIGNED_COPY_UPLOADED,
+        entityType: 'AgreementDocument',
+        entityId: String(req.params.id),
+        ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
+      }).catch(() => {});
       success(res, document, 201);
     } catch (e: any) {
       error(res, e.message, e.message === 'Agreement document not found' ? 404 : 400);
@@ -339,12 +349,72 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const pdfBuffer = await agreementService.generateAgreementPdf(req.body);
+      logAudit({
+        userId: (req as any).user?.id ?? null,
+        action: AUDIT_ACTIONS.AGREEMENT_PDF_VIEWED,
+        entityType: 'AgreementDocument',
+        entityId: req.body.agreementDocumentId,
+        ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
+      }).catch(() => {});
       const filename = `agreement-${(req.body.personnelName || 'unknown').replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.pdf`;
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
       res.send(pdfBuffer);
     } catch (e: any) {
       error(res, e.message, 400);
+    }
+  },
+);
+
+/* ═══════════════════════════════════════════════════════
+   PUBLIC SIGNATURE VERIFICATION
+   ═══════════════════════════════════════════════════════ */
+
+// GET /api/agreements/verify/:documentNumber  (PUBLIC — no auth required)
+router.get(
+  '/verify/:documentNumber',
+  async (req: Request, res: Response) => {
+    try {
+      const documentNumber = req.params.documentNumber as string;
+
+      const doc = await prisma.agreementDocument.findUnique({
+        where: { documentNumber },
+        select: {
+          id: true,
+          documentNumber: true,
+          recipientSignedAt: true,
+          recipientSignatureName: true,
+          signatureHash: true,
+        },
+      });
+
+      if (!doc) {
+        return error(res, 'Document not found', 404);
+      }
+
+      if (!doc.signatureHash) {
+        return success(res, { verified: false, reason: 'not_signed' });
+      }
+
+      // Recompute hash from stored fields
+      const expectedHash = crypto
+        .createHash('sha256')
+        .update([doc.documentNumber, doc.recipientSignatureName || '', doc.recipientSignedAt!.toISOString()].join('|'))
+        .digest('hex');
+
+      if (expectedHash !== doc.signatureHash) {
+        return success(res, { verified: false, reason: 'hash_mismatch' });
+      }
+
+      return success(res, {
+        verified: true,
+        documentNumber: doc.documentNumber,
+        signedAt: doc.recipientSignedAt,
+        signatoryName: doc.recipientSignatureName,
+      });
+    } catch (err: any) {
+      console.error('[Agreement Verify Error]', err);
+      return error(res, err.message || 'Verification failed', 500);
     }
   },
 );

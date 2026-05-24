@@ -1,4 +1,4 @@
-import { AuditSeverity } from '@prisma/client';
+export type AuditSeverity = 'LOW' | 'MEDIUM' | 'HIGH';
 
 /* ─── Field display names ──────────────────────────────── */
 

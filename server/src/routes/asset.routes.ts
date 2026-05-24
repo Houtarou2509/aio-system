@@ -3,10 +3,12 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs/promises';
 import sharp from 'sharp';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { parse as parseCsv } from 'csv-parse/sync';
 import * as assetService from '../services/asset.service';
 import { calculateDepreciation } from '../services/depreciation.service';
 import { prisma } from '../lib/prisma';
+import { logAudit } from '../services/auditLog.service';
 
 import { authenticate, authorize, hasPermission } from '../middleware/auth';
 import { success, error } from '../utils/response';
@@ -105,11 +107,15 @@ router.post('/', hasPermission('assets:create'), upload.single('image'), async (
     
     return success(res, asset, 201);
   } catch (err: any) {
+    if (err instanceof PrismaClientKnownRequestError && err.code === 'P2002') {
+      const field = (err.meta?.target as string[])?.includes('serialNumber') ? 'serialNumber' : 'unknown';
+      return error(res, 'A unique field value already exists.', 409, { message: 'A unique field value already exists.', field, code: 'DUPLICATE_FIELD' });
+    }
     return error(res, err.message, 400);
   }
 });
 
-// POST /api/assets/import — CSV bulk import
+// POST /api/assets/import — CSV bulk import with structured validation report
 const VALID_STATUSES = ['AVAILABLE', 'PENDING_ASSIGNMENT', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
 
 router.post('/import', hasPermission('assets:create'), importUpload.single('file'), async (req: Request, res: Response) => {
@@ -127,99 +133,210 @@ router.post('/import', hasPermission('assets:create'), importUpload.single('file
       return error(res, 'No data rows found in file', 400);
     }
 
-    const validRows: any[] = [];
-    const errorRows: { row: number; reason: string }[] = [];
+    // Pre-fetch lookup values for validation
+    const [assetTypes, manufacturers] = await Promise.all([
+      prisma.lookupValue.findMany({ where: { category: 'ASSET_TYPE', isActive: true }, select: { value: true } }),
+      prisma.lookupValue.findMany({ where: { category: 'MANUFACTURER', isActive: true }, select: { value: true } }),
+    ]);
+    const assetTypeSet = new Set(assetTypes.map(v => v.value.toLowerCase()));
+    const manufacturerSet = new Set(manufacturers.map(v => v.value.toLowerCase()));
+    // Case-map for suggestions
+    const assetTypeMap = new Map(assetTypes.map(v => [v.value.toLowerCase(), v.value]));
+    const manufacturerMap = new Map(manufacturers.map(v => [v.value.toLowerCase(), v.value]));
+
+    // Pre-fetch existing serial numbers and property numbers for batch duplicate checks
+    const existingSerials = new Set(
+      (await prisma.asset.findMany({ where: { serialNumber: { not: null }, deletedAt: null }, select: { serialNumber: true } }))
+        .map(a => a.serialNumber!.toLowerCase())
+    );
+    const existingPropertyNums = new Set(
+      (await prisma.asset.findMany({ where: { propertyNumber: { not: null }, deletedAt: null }, select: { propertyNumber: true } }))
+        .map(a => a.propertyNumber!.toLowerCase())
+    );
+
+    const results: Array<{ row: number; status: 'imported' | 'skipped' | 'warning'; assetId?: string; reason?: string; field?: string }> = [];
+    let imported = 0;
+    let skipped = 0;
+    let warnings = 0;
 
     for (let i = 0; i < records.length; i++) {
       const row = records[i];
       const rowNumber = i + 2; // row 1 is headers
-      const rowErrors: string[] = [];
+      const rowErrors: Array<{ field: string; reason: string }> = [];
 
-      // name: required
-      if (!row.name || !row.name.trim()) {
-        rowErrors.push('Name is required');
+      // ── a. Required field checks ──
+      if (!row.name?.trim()) {
+        rowErrors.push({ field: 'name', reason: 'Name is required' });
+      }
+      if (!row.serialNumber?.trim()) {
+        rowErrors.push({ field: 'serialNumber', reason: 'Serial number is required' });
+      }
+      if (!row.propertyNumber?.trim()) {
+        rowErrors.push({ field: 'propertyNumber', reason: 'Property number is required' });
       }
 
-      // type: required, non-empty string
-      if (!row.type || row.type.trim() === '') {
-        rowErrors.push('Type is required');
+      // If required fields missing, skip entirely — no further validation needed
+      if (rowErrors.length > 0) {
+        results.push({ row: rowNumber, status: 'skipped', reason: rowErrors.map(e => `${e.field}: ${e.reason}`).join('; ') });
+        skipped++;
+        continue;
       }
 
-      // status: optional, default AVAILABLE if empty
+      // ── b. Duplicate serialNumber check ──
+      const snLower = row.serialNumber.trim().toLowerCase();
+      if (existingSerials.has(snLower)) {
+        rowErrors.push({ field: 'serialNumber', reason: `Duplicate serial number: "${row.serialNumber.trim()}" already exists` });
+      } else {
+        // Add to set so later rows in the same CSV can't reuse it
+        existingSerials.add(snLower);
+      }
+
+      // ── c. Duplicate propertyNumber check ──
+      const pnLower = row.propertyNumber.trim().toLowerCase();
+      if (existingPropertyNums.has(pnLower)) {
+        rowErrors.push({ field: 'propertyNumber', reason: `Duplicate property number: "${row.propertyNumber.trim()}" already exists` });
+      } else {
+        existingPropertyNums.add(pnLower);
+      }
+
+      // ── d. Type validation against ASSET_TYPE lookup ──
+      let typeValue = row.type?.trim() || 'Other';
+      if (typeValue && typeValue !== 'Other') {
+        if (!assetTypeSet.has(typeValue.toLowerCase())) {
+          const suggestion = assetTypeMap.get(typeValue.toLowerCase()) || [...assetTypeMap.values()].slice(0, 5).join(', ');
+          rowErrors.push({ field: 'type', reason: `Invalid type "${typeValue}". Did you mean: ${suggestion}?` });
+        } else {
+          typeValue = assetTypeMap.get(typeValue.toLowerCase())!;
+        }
+      }
+
+      // ── e. Manufacturer validation (warning only — import with raw string) ──
+      let manufacturerWarning: string | undefined;
+      const manufacturerValue = row.manufacturer?.trim() || null;
+      if (manufacturerValue && !manufacturerSet.has(manufacturerValue.toLowerCase())) {
+        const suggestion = manufacturerMap.get(manufacturerValue.toLowerCase()) || [...manufacturerMap.values()].slice(0, 5).join(', ');
+        manufacturerWarning = `Manufacturer "${manufacturerValue}" not in lookup. Imported as-is. Suggestions: ${suggestion}`;
+      } else if (manufacturerValue) {
+        // Normalize to the casing in the lookup
+        const normalized = manufacturerMap.get(manufacturerValue.toLowerCase());
+        if (normalized) row.manufacturer = normalized;
+      }
+
+      // ── f. Status validation ──
       let status = 'AVAILABLE';
-      if (row.status) {
+      if (row.status?.trim()) {
         const upper = row.status.trim().toUpperCase();
         if (!VALID_STATUSES.includes(upper)) {
-          rowErrors.push(`Invalid status: ${row.status}`);
+          rowErrors.push({ field: 'status', reason: `Invalid status: ${row.status}` });
         } else {
           status = upper;
         }
       }
 
-      // price: optional, must be valid number
+      // ── g. Price validation ──
+      let purchasePrice: number | null = null;
       if (row.price !== undefined && row.price !== '') {
         const num = Number(row.price);
         if (!Number.isFinite(num)) {
-          rowErrors.push('Price must be a number');
+          rowErrors.push({ field: 'price', reason: 'Price must be a number' });
+        } else {
+          purchasePrice = num;
         }
       }
 
-      // purchaseDate: optional, must be valid date
+      // ── h. Date validations ──
+      let purchaseDate: Date | null = null;
       if (row.purchaseDate !== undefined && row.purchaseDate !== '') {
         if (isNaN(Date.parse(row.purchaseDate))) {
-          rowErrors.push('Invalid date format for Purchase Date');
+          rowErrors.push({ field: 'purchaseDate', reason: 'Invalid date format for Purchase Date' });
+        } else {
+          purchaseDate = new Date(row.purchaseDate);
         }
       }
 
-      // warrantyExpiry: optional, must be valid date
+      let warrantyExpiry: Date | null = null;
       if (row.warrantyExpiry !== undefined && row.warrantyExpiry !== '') {
         if (isNaN(Date.parse(row.warrantyExpiry))) {
-          rowErrors.push('Invalid date format for Warranty Expiry');
+          rowErrors.push({ field: 'warrantyExpiry', reason: 'Invalid date format for Warranty Expiry' });
+        } else {
+          warrantyExpiry = new Date(row.warrantyExpiry);
         }
       }
 
-      if (rowErrors.length > 0) {
-        errorRows.push({ row: rowNumber, reason: rowErrors.join('; ') });
-      } else {
-        validRows.push({
-          name: row.name.trim(),
-          type: row.type.trim(),
-          status,
-          manufacturer: row.manufacturer?.trim() || null,
-          serialNumber: row.serialNumber?.trim() || null,
-          purchasePrice: row.price ? parseFloat(row.price) : null,
-          purchaseDate: row.purchaseDate ? new Date(row.purchaseDate) : null,
-          assignedTo: row.assignedTo?.trim() || null,
-          propertyNumber: row.propertyNumber?.trim() || null,
-          location: row.location?.trim() || null,
-          remarks: row.remarks?.trim() || null,
-          warrantyExpiry: row.warrantyExpiry ? new Date(row.warrantyExpiry) : null,
-          warrantyNotes: row.warrantyNotes?.trim() || null,
-        });
+      // ── Determine row outcome ──
+      const hardErrors = rowErrors.filter(e => e.field !== 'manufacturer');
+      if (hardErrors.length > 0) {
+        results.push({ row: rowNumber, status: 'skipped', reason: hardErrors.map(e => `${e.field}: ${e.reason}`).join('; '), field: hardErrors.map(e => e.field).join(',') });
+        skipped++;
+        continue;
       }
-    }
 
-    if (validRows.length > 0) {
-      await prisma.asset.createMany({ data: validRows });
+      // Row is importable — create the asset
+      try {
+        const asset = await prisma.asset.create({
+          data: {
+            name: row.name.trim(),
+            type: typeValue,
+            status: status as any,
+            manufacturer: row.manufacturer?.trim() || null,
+            serialNumber: row.serialNumber.trim(),
+            purchasePrice: purchasePrice ?? null,
+            purchaseDate,
+            assignedTo: row.assignedTo?.trim() || null,
+            propertyNumber: row.propertyNumber.trim(),
+            location: row.location?.trim() || null,
+            remarks: row.remarks?.trim() || null,
+            warrantyExpiry,
+            warrantyNotes: row.warrantyNotes?.trim() || null,
+          },
+        });
 
-      await prisma.auditLog.create({
-        data: {
+        results.push({
+          row: rowNumber,
+          status: manufacturerWarning ? 'warning' : 'imported',
+          assetId: asset.id,
+          ...(manufacturerWarning ? { reason: manufacturerWarning, field: 'manufacturer' } : {}),
+        });
+
+        if (manufacturerWarning) {
+          warnings++;
+        } else {
+          imported++;
+        }
+
+        // Audit log per imported asset
+        await logAudit({
+          userId: req.user!.id,
           action: 'BULK_IMPORT',
           entityType: 'Asset',
-          entityId: 'bulk',
-          field: '*',
-          oldValue: null,
-          newValue: `${req.user!.username} imported ${validRows.length} assets via CSV`,
-          performedById: req.user!.id,
+          entityId: asset.id,
           ipAddress: getClientIp(req),
-        },
-      });
+          metadata: {
+            field: '*',
+            oldValue: null,
+            newValue: `Imported "${asset.name}" (S/N: ${asset.serialNumber})`,
+          },
+        });
+      } catch (dbErr: any) {
+        // Handle unique constraint violations that slipped past pre-check
+        if (dbErr.code === 'P2002') {
+          const target = dbErr.meta?.target as string[] | undefined;
+          const field = target?.[0] || 'unknown';
+          results.push({ row: rowNumber, status: 'skipped', reason: `Database unique constraint violation on field: ${field}`, field });
+          skipped++;
+        } else {
+          results.push({ row: rowNumber, status: 'skipped', reason: `Database error: ${dbErr.message}` });
+          skipped++;
+        }
+      }
     }
 
     return success(res, {
-      imported: validRows.length,
-      skipped: errorRows.length,
-      errors: errorRows,
+      imported,
+      skipped,
+      warnings,
+      total: records.length,
+      results,
     }, 200);
   } catch (err: any) {
     console.error('Import error:', err);
@@ -240,15 +357,15 @@ router.patch('/bulk-status', hasPermission('assets:edit'), async (req: Request, 
     });
 
     // Audit log
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'Asset',
-        entityId: 'bulk',
-        action: 'BULK_STATUS_CHANGE',
+    await logAudit({
+      userId: req.user!.id,
+      entityType: 'Asset',
+      entityId: 'bulk',
+      action: 'BULK_STATUS_CHANGE',
+      ipAddress: getClientIp(req),
+      metadata: {
         field: 'status',
         newValue: `${status} (${result.count} assets)`,
-        performedById: req.user!.id,
-        ipAddress: getClientIp(req),
       },
     });
 
@@ -272,15 +389,15 @@ router.delete('/bulk-delete', hasPermission('assets:delete'), async (req: Reques
     });
 
     // Audit log
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'Asset',
-        entityId: 'bulk',
-        action: 'SOFT_DELETE',
+    await logAudit({
+      userId: req.user!.id,
+      entityType: 'Asset',
+      entityId: 'bulk',
+      action: 'SOFT_DELETE',
+      ipAddress: getClientIp(req),
+      metadata: {
         field: 'deletedAt',
         newValue: `Bulk soft-delete (${result.count} assets) at ${now.toISOString()}`,
-        performedById: req.user!.id,
-        ipAddress: getClientIp(req),
       },
     });
 
@@ -329,15 +446,15 @@ router.post('/bulk-assign', hasPermission('assets:edit'), async (req: Request, r
       }
     }
 
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'Asset',
-        entityId: 'bulk',
-        action: 'BULK_ASSIGN',
+    await logAudit({
+      userId: req.user!.id,
+      entityType: 'Asset',
+      entityId: 'bulk',
+      action: 'BULK_ASSIGN',
+      ipAddress: getClientIp(req),
+      metadata: {
         field: '*',
         newValue: `Bulk assigned ${results.length} assets to ${personnel.fullName}`,
-        performedById: req.user!.id,
-        ipAddress: getClientIp(req),
       },
     });
 
@@ -376,15 +493,15 @@ router.post('/bulk-return', hasPermission('assets:edit'), async (req: Request, r
       }
     }
 
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'Asset',
-        entityId: 'bulk',
-        action: 'BULK_RETURN',
+    await logAudit({
+      userId: req.user!.id,
+      entityType: 'Asset',
+      entityId: 'bulk',
+      action: 'BULK_RETURN',
+      ipAddress: getClientIp(req),
+      metadata: {
         field: '*',
         newValue: `Bulk returned ${results.length} assets`,
-        performedById: req.user!.id,
-        ipAddress: getClientIp(req),
       },
     });
 
@@ -414,15 +531,15 @@ router.post('/bulk-update', hasPermission('assets:edit'), async (req: Request, r
     if (location) changed.push(`location → ${location}`);
     if (status) changed.push(`status → ${status}`);
 
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'Asset',
-        entityId: 'bulk',
-        action: 'BULK_UPDATE',
+    await logAudit({
+      userId: req.user!.id,
+      entityType: 'Asset',
+      entityId: 'bulk',
+      action: 'BULK_UPDATE',
+      ipAddress: getClientIp(req),
+      metadata: {
         field: '*',
         newValue: `Bulk updated ${result.count} assets: ${changed.join(', ')}`,
-        performedById: req.user!.id,
-        ipAddress: getClientIp(req),
       },
     });
 
@@ -457,6 +574,13 @@ router.put('/:id', hasPermission('assets:edit'), upload.single('image'), async (
     
     // If image was uploaded, replace it
     if (req.file) {
+      // Clean up old image file if it exists
+      const oldImageUrl = asset.imageUrl;
+      if (oldImageUrl) {
+        const oldFileName = path.basename(oldImageUrl);
+        const oldFilePath = path.resolve(__dirname, '../../uploads', oldFileName);
+        await fs.unlink(oldFilePath).catch(() => {});
+      }
       const ext = path.extname(req.file.originalname) || '.jpg';
       const filename = `${asset.id}${ext}`;
       const dest = path.resolve(__dirname, '../../uploads', filename);
@@ -466,6 +590,10 @@ router.put('/:id', hasPermission('assets:edit'), upload.single('image'), async (
     
     return success(res, asset, 200);
   } catch (err: any) {
+    if (err instanceof PrismaClientKnownRequestError && err.code === 'P2002') {
+      const field = (err.meta?.target as string[])?.includes('serialNumber') ? 'serialNumber' : 'unknown';
+      return error(res, 'A unique field value already exists.', 409, { message: 'A unique field value already exists.', field, code: 'DUPLICATE_FIELD' });
+    }
     return error(res, err.message, err.message === 'Asset not found' ? 404 : 400);
   }
 });
@@ -521,10 +649,17 @@ router.post('/:id/dispose', hasPermission('assets:delete'), async (req: Request,
 
     return success(res, asset, 200);
   } catch (err: any) {
-    const status = err.message === 'Asset not found' ? 404
+    const statusCode = err.statusCode
+      || (err.message === 'Asset not found' ? 404
       : err.message === 'Asset is already retired' ? 409
-      : 400;
-    return error(res, err.message, status);
+      : 400);
+    const details: any = {};
+    if (err.code) details.code = err.code;
+    if (err.assignedTo) details.assignedTo = err.assignedTo;
+    if (err.documentNumber) details.documentNumber = err.documentNumber;
+    if (err.scheduleCount) details.scheduleCount = err.scheduleCount;
+    if (err.canForce) details.canForce = err.canForce;
+    return error(res, err.message, statusCode, Object.keys(details).length > 0 ? details : undefined);
   }
 });
 
@@ -536,6 +671,37 @@ router.get('/:id/history', async (req: Request, res: Response) => {
     return success(res, result.items, 200, { page: query.page, limit: query.limit, total: result.total, totalPages: result.totalPages });
   } catch (err: any) {
     return error(res, err.message, 400);
+  }
+});
+
+// GET /api/assets/:id/condition-history
+router.get('/:id/condition-history', hasPermission('assets:view'), async (req: Request, res: Response) => {
+  try {
+    const assetId = String(req.params.id);
+    const asset = await prisma.asset.findUnique({ where: { id: assetId }, select: { id: true } });
+    if (!asset) return error(res, 'Asset not found', 404);
+
+    const logs = await prisma.assetConditionLog.findMany({
+      where: { assetId },
+      orderBy: { recordedAt: 'desc' },
+      include: { recordedBy: { select: { id: true, fullName: true } } },
+    });
+
+    const data = logs.map(log => ({
+      id: log.id,
+      assetId: log.assetId,
+      assignmentId: log.assignmentId,
+      event: log.event,
+      condition: log.condition,
+      note: log.note,
+      recordedById: log.recordedById,
+      recordedByName: log.recordedBy?.fullName ?? null,
+      recordedAt: log.recordedAt.toISOString(),
+    }));
+
+    return success(res, data, 200);
+  } catch (err: any) {
+    return error(res, err.message, 500);
   }
 });
 

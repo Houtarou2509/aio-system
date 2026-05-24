@@ -2,12 +2,14 @@ import { useState, useRef, FormEvent, useEffect } from 'react';
 import { X, UserCog, Eye, EyeOff } from 'lucide-react';
 import { PermissionChecklist, getDefaultPermissions } from './PermissionChecklist';
 
-const ROLES = [
+// GUEST role hidden until guest link flow is implemented
+const ALL_ROLES = [
   { value: 'ADMIN', label: 'Admin' },
   { value: 'STAFF_ADMIN', label: 'Staff-Admin' },
   { value: 'STAFF', label: 'Staff' },
   { value: 'GUEST', label: 'Guest' },
 ];
+const NON_GUEST_ROLES = ALL_ROLES.filter(r => r.value !== 'GUEST');
 
 interface User {
   id: string;
@@ -37,6 +39,7 @@ interface Props {
 }
 
 export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }: Props) {
+  const availableRoles = user.role === 'GUEST' ? ALL_ROLES : NON_GUEST_ROLES;
   const [form, setForm] = useState({
     fullName: user.fullName || '',
     username: user.username,
@@ -81,7 +84,7 @@ export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }:
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email format';
     if (showPwSection) {
       if (!newPassword) e.newPassword = 'New password is required';
-      else if (newPassword.length < 8) e.newPassword = 'Minimum 8 characters';
+      else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/.test(newPassword)) e.newPassword = 'Password must be 8+ chars with uppercase, number, and special character';
       if (newPassword !== confirmPassword) e.confirmPassword = 'Passwords do not match';
     }
     setErrors(e);
@@ -173,7 +176,7 @@ export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }:
                   disabled={isSelf}
                   className={`${inputClass} ${isSelf ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  {availableRoles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
                 {isSelf && <p className="text-[10px] text-amber-600 mt-1">You cannot change your own role.</p>}
                 {fieldError('role') && <p className="text-xs text-red-500 mt-1">{fieldError('role')}</p>}

@@ -1,3 +1,4 @@
+import { logAudit } from './auditLog.service';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
@@ -307,19 +308,20 @@ export async function attachSignedAgreementDocument(documentId: string, signedPd
       },
     });
 
-    await tx.auditLog.create({
-      data: {
-        entityType: 'AgreementDocument',
-        entityId: document.id,
-        action: existing.signedPdfPath ? 'REPLACE_SIGNED_COPY' : 'UPLOAD_SIGNED_COPY',
-        performedById: uploadedById,
-        field: 'signedPdfPath',
-        oldValue: existing.signedPdfPath || null,
-        newValue: signedPdfPath,
-        severity: 'MEDIUM',
-        summary: `${existing.signedPdfPath ? 'Replaced' : 'Uploaded'} signed PDF copy for ${document.documentNumber}`,
-      },
-    });
+    await logAudit({
+  userId: uploadedById ?? null,
+  action: existing.signedPdfPath ? 'REPLACE_SIGNED_COPY' : 'UPLOAD_SIGNED_COPY',
+  entityType: 'AgreementDocument',
+  entityId: document.id ?? null,
+  ipAddress: null,
+  metadata: {
+    "field": 'signedPdfPath',
+    "oldValue": existing.signedPdfPath || null,
+    "newValue": signedPdfPath,
+    "severity": 'MEDIUM',
+    "summary": `${existing.signedPdfPath ? 'Replaced' : 'Uploaded'} signed PDF copy for ${document.documentNumber}`,
+  },
+});
 
     return document;
   });
@@ -465,18 +467,19 @@ export async function backfillAgreementDocuments(params: { performedById: string
         data: { agreementDocumentId: created.id },
       });
 
-      await tx.auditLog.create({
-        data: {
-          entityType: 'AgreementDocument',
-          entityId: created.id,
-          action: 'BACKFILL',
-          performedById: params.performedById,
-          field: 'agreementDocumentId',
-          newValue: `${linked.count} historical assignment(s) linked`,
-          severity: 'MEDIUM',
-          summary: `Backfilled agreement document ${created.documentNumber} for ${linked.count} historical assignment(s)`,
-        },
-      });
+      await logAudit({
+  userId: params.performedById ?? null,
+  action: 'BACKFILL',
+  entityType: 'AgreementDocument',
+  entityId: created.id ?? null,
+  ipAddress: null,
+  metadata: {
+    "field": 'agreementDocumentId',
+    "newValue": `${linked.count} historical assignment(s) linked`,
+    "severity": 'MEDIUM',
+    "summary": `Backfilled agreement document ${created.documentNumber} for ${linked.count} historical assignment(s)`,
+  },
+});
 
       return { created, linkedCount: linked.count };
     });
@@ -663,40 +666,120 @@ function parseBodySegments(filled: string): TextSegment[] {
   return segments;
 }
 
-function formatAssetTableForPdf(view: AgreementDocumentView): string {
-  if (!view.assets.length) return '';
+type PdfAsset = AgreementDocumentView['assets'][number];
 
-  const rows = view.assets.map((asset) => [
-    String(asset.no),
-    asset.name,
-    asset.serialNumber,
-    asset.propertyNumber,
-    asset.condition,
-  ].join('  '));
-
-  return [
-    'No. Asset Name Serial Number Property Number Condition',
-    ...rows,
-  ].join('\n');
-}
-
-function composePdfBodyText(view: AgreementDocumentView): string {
-  const assetTable = formatAssetTableForPdf(view);
-  if (!assetTable) return view.bodyText;
-
-  const lines = view.bodyText.split('\n');
+function splitBodyAndTerms(text: string): { bodyText: string; termsText: string } {
+  const lines = text.split('\n');
   const termsIndex = lines.findIndex((line) => line.trim().startsWith('Terms and Conditions:'));
+
   if (termsIndex === -1) {
-    return sanitizeAgreementText([view.bodyText, assetTable].filter(Boolean).join('\n\n'));
+    return { bodyText: text, termsText: '' };
   }
 
-  return sanitizeAgreementText([
-    ...lines.slice(0, termsIndex),
-    '',
-    assetTable,
-    '',
-    ...lines.slice(termsIndex),
-  ].join('\n'));
+  return {
+    bodyText: lines.slice(0, termsIndex).join('\n').trim(),
+    termsText: lines.slice(termsIndex).join('\n').trim(),
+  };
+}
+
+// Asset table is rendered directly via PDFKit. Do NOT pipe assets through sanitizeAgreementText().
+function renderAssetTableToPdf(
+  doc: PDFKit.PDFDocument,
+  assets: PdfAsset[],
+  x: number,
+  startY: number,
+  contentWidth: number,
+): number {
+  if (!assets.length) return startY;
+
+  const pageBottomY = doc.page.height - 96;
+  const newPageStartY = 124;
+  const paddingX = 3;
+  const paddingY = 4;
+  const headerHeight = 18;
+  const fontSize = 6.8;
+  const headerFontSize = 6.5;
+  const minRowHeight = 20;
+  const columns = [
+    { key: 'no', label: 'No.', width: 24, align: 'center' as const },
+    { key: 'name', label: 'Asset Name', width: Math.floor(contentWidth * 0.34), align: 'left' as const },
+    { key: 'serialNumber', label: 'Serial Number', width: Math.floor(contentWidth * 0.20), align: 'left' as const },
+    { key: 'propertyNumber', label: 'Property Number', width: Math.floor(contentWidth * 0.21), align: 'left' as const },
+    { key: 'condition', label: 'Condition', width: 0, align: 'left' as const },
+  ];
+  const usedWidth = columns.slice(0, -1).reduce((sum, col) => sum + col.width, 0);
+  columns[columns.length - 1].width = Math.max(52, contentWidth - usedWidth);
+
+  const ensureSpace = (y: number, height: number) => {
+    if (y + height <= pageBottomY) return y;
+    doc.addPage();
+    doc.y = 0;
+    return newPageStartY;
+  };
+
+  const drawHeader = (y: number) => {
+    let currentX = x;
+    doc.font('Helvetica-Bold').fontSize(headerFontSize).fillColor('#111827');
+    for (const column of columns) {
+      doc
+        .rect(currentX, y, column.width, headerHeight)
+        .fillAndStroke('#e5e7eb', '#94a3b8');
+      doc.fillColor('#111827').text(column.label, currentX + paddingX, y + 5, {
+        width: column.width - paddingX * 2,
+        align: column.align,
+        lineBreak: false,
+      });
+      currentX += column.width;
+    }
+    doc.y = 0;
+    return y + headerHeight;
+  };
+
+  let y = ensureSpace(startY, headerHeight + minRowHeight);
+  y = drawHeader(y);
+
+  for (const asset of assets) {
+    const values: Record<string, string> = {
+      no: String(asset.no),
+      name: asset.name,
+      serialNumber: asset.serialNumber,
+      propertyNumber: asset.propertyNumber,
+      condition: asset.condition,
+    };
+
+    doc.font('Helvetica').fontSize(fontSize);
+    const rowTextHeight = columns.reduce((max, column) => {
+      const text = values[column.key] || '—';
+      const height = doc.heightOfString(text, {
+        width: column.width - paddingX * 2,
+        align: column.align,
+        lineBreak: true,
+      });
+      return Math.max(max, height);
+    }, 0);
+    const rowHeight = Math.max(minRowHeight, rowTextHeight + paddingY * 2);
+
+    y = ensureSpace(y, rowHeight);
+    if (y === newPageStartY) y = drawHeader(y);
+
+    let currentX = x;
+    for (const column of columns) {
+      const text = values[column.key] || '—';
+      doc
+        .rect(currentX, y, column.width, rowHeight)
+        .fillAndStroke('#ffffff', '#cbd5e1');
+      doc.font('Helvetica').fontSize(fontSize).fillColor('#1f2937').text(text, currentX + paddingX, y + paddingY, {
+        width: column.width - paddingX * 2,
+        align: column.align,
+        lineBreak: true,
+      });
+      currentX += column.width;
+    }
+    doc.y = 0;
+    y += rowHeight;
+  }
+
+  return y + 8;
 }
 
 const LEGACY_ASSET_HEADER_PATTERN = /\bNo\.\s+Asset Name\s+Serial Number\s+Property Number\s+Condition\b/i;
@@ -759,10 +842,6 @@ export function sanitizeAgreementText(text: string | null | undefined): string {
     .trim();
 }
 
-function normalizePercentDividers(text: string): string {
-  return sanitizeAgreementText(text);
-}
-
 function loadLogoImage(logoPath: string | null | undefined): Buffer | null {
   if (!logoPath) return null;
   const fullPath = path.resolve(__dirname, '../..', logoPath.replace(/^\/+/, ''));
@@ -772,7 +851,7 @@ function loadLogoImage(logoPath: string | null | undefined): Buffer | null {
   return null;
 }
 
-export async function generateAgreementPdf(p: {
+export interface AgreementPdfParams {
   personnelName: string;
   designation?: string | null;
   position?: string | null;
@@ -787,11 +866,122 @@ export async function generateAgreementPdf(p: {
   title?: string | null;
   propertyOfficerName?: string | null;
   authorizedRepName?: string | null;
-  assets?: Array<{ name: string; serialNumber?: string | null; propertyNumber?: string | null }>;
+  assets?: Array<{ name: string; serialNumber?: string | null; propertyNumber?: string | null; condition?: string | null }>;
   recipientSignedAt?: string | Date | null;
   recipientSignatureName?: string | null;
   documentNumber?: string | null;
-}): Promise<Buffer> {
+  agreementDocumentId?: string | null;
+}
+
+function assetSnapshotArray(snapshot: unknown): Array<{ name: string; serialNumber?: string | null; propertyNumber?: string | null; condition?: string | null }> {
+  if (!Array.isArray(snapshot)) return [];
+  return snapshot
+    .map((item: any) => ({
+      name: String(item?.name || '').trim(),
+      serialNumber: item?.serialNumber ?? null,
+      propertyNumber: item?.propertyNumber ?? null,
+      condition: item?.condition ?? null,
+    }))
+    .filter((item) => item.name);
+}
+
+function pdfAssetArray(assets: AgreementPdfParams['assets']): Array<{ name: string; serialNumber?: string | null; propertyNumber?: string | null; condition?: string | null }> {
+  if (!Array.isArray(assets)) return [];
+  return assets
+    .map((item: any) => ({
+      name: String(item?.name || '').trim(),
+      serialNumber: item?.serialNumber ?? null,
+      propertyNumber: item?.propertyNumber ?? null,
+      condition: item?.condition ?? null,
+    }))
+    .filter((item) => item.name);
+}
+
+export async function resolveAgreementPdfParams(p: AgreementPdfParams): Promise<AgreementPdfParams> {
+  if (!p.agreementDocumentId) return p;
+
+  const document = await prisma.agreementDocument.findUnique({
+    where: { id: p.agreementDocumentId },
+    include: {
+      assignments: {
+        orderBy: { assignedAt: 'asc' },
+        include: {
+          asset: { select: { name: true, serialNumber: true, propertyNumber: true } },
+        },
+      },
+      personnel: {
+        select: {
+          fullName: true,
+          designation: true,
+          project: true,
+          designationLookup: { select: { name: true } },
+          projectLookup: { select: { name: true } },
+          institution: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  if (!document) throw new Error('Agreement document not found');
+
+  const assignmentAssets = document.assignments
+    .map((assignment) => ({
+      name: String(assignment.asset?.name || '').trim(),
+      serialNumber: assignment.asset?.serialNumber || null,
+      propertyNumber: assignment.asset?.propertyNumber || null,
+      condition: assignment.conditionAtIssue || assignment.condition || p.condition || 'Good',
+    }))
+    .filter((asset) => asset.name);
+  const snapshotAssets = assetSnapshotArray(document.assetSnapshot);
+  const frontendAssets = pdfAssetArray(p.assets);
+  const legacySingleAsset = p.assetName?.trim()
+    ? [{
+        name: p.assetName.trim(),
+        serialNumber: p.serialNumber || null,
+        propertyNumber: p.propertyNumber || null,
+        condition: p.condition || 'Good',
+      }]
+    : [];
+
+  // Asset source priority for document-level PDF rendering:
+  // 1. Linked AgreementDocument assignments with live Asset records.
+  // 2. AgreementDocument.assetSnapshot captured at issuance time.
+  // 3. Frontend payload assets, used only as a final fallback.
+  // 4. Legacy single asset fields, used only as the last-resort compatibility path.
+  const resolvedAssets = assignmentAssets.length
+    ? assignmentAssets
+    : snapshotAssets.length
+      ? snapshotAssets
+      : frontendAssets.length
+        ? frontendAssets
+        : legacySingleAsset;
+  const primaryAsset = resolvedAssets[0];
+
+  return {
+    ...p,
+    personnelName: document.personnelNameSnapshot || document.personnel?.fullName || p.personnelName,
+    designation: document.designationSnapshot || document.personnel?.designationLookup?.name || document.personnel?.designation || p.designation || p.position || null,
+    position: document.designationSnapshot || document.personnel?.designationLookup?.name || document.personnel?.designation || p.position || null,
+    project: document.projectSnapshot || document.personnel?.projectLookup?.name || document.personnel?.project || p.project || null,
+    institution: document.institutionSnapshot || document.personnel?.institution?.name || p.institution || null,
+    assetName: primaryAsset?.name || p.assetName,
+    serialNumber: primaryAsset?.serialNumber || p.serialNumber || null,
+    propertyNumber: primaryAsset?.propertyNumber || p.propertyNumber || null,
+    condition: primaryAsset?.condition || p.condition || 'Good',
+    templateId: document.templateId || p.templateId || null,
+    agreementText: document.resolvedText || p.agreementText || null,
+    title: document.title || p.title || null,
+    propertyOfficerName: document.propertyOfficerName || p.propertyOfficerName || null,
+    authorizedRepName: document.authorizedRepName || p.authorizedRepName || null,
+    assets: resolvedAssets.length ? resolvedAssets : p.assets,
+    recipientSignedAt: document.recipientSignedAt || p.recipientSignedAt || null,
+    recipientSignatureName: document.recipientSignatureName || p.recipientSignatureName || null,
+    documentNumber: document.documentNumber || p.documentNumber || null,
+  };
+}
+
+export async function generateAgreementPdf(input: AgreementPdfParams): Promise<Buffer> {
+  const p = await resolveAgreementPdfParams(input);
   const {
     personnelName, designation, position, project, institution, assetName, serialNumber,
     propertyNumber, condition, templateId, agreementText,
@@ -819,7 +1009,7 @@ export async function generateAgreementPdf(p: {
           name: a.name,
           serialNumber: a.serialNumber || undefined,
           propertyNumber: a.propertyNumber || undefined,
-          condition: condition || undefined,
+          condition: a.condition || condition || undefined,
         })) || undefined,
       }));
 
@@ -840,7 +1030,7 @@ export async function generateAgreementPdf(p: {
       name: a.name,
       serialNumber: a.serialNumber,
       propertyNumber: a.propertyNumber,
-      condition,
+      condition: a.condition || condition,
     })),
     propertyOfficerName: propertyOfficerName || tmpl?.defaultPropertyOfficer,
     authorizedRepName: authorizedRepName || tmpl?.defaultAuthorizedRep,
@@ -848,14 +1038,15 @@ export async function generateAgreementPdf(p: {
     recipientSignatureName,
   });
 
-  const cleanBody = composePdfBodyText(documentView)
+  const cleanBodyText = stripLegacyAssetTableLines(sanitizeAgreementText(documentView.bodyText))
     .replace(/\r\n?/g, '\n')
     .split('\n')
     .map(line => line.trim())
-    .join('\n');
-  const normalizedBody = normalizePercentDividers(cleanBody)
+    .join('\n')
     .replace(/\n{3,}/g, '\n\n');
-  const segments = parseBodySegments(normalizedBody);
+  const { bodyText, termsText } = splitBodyAndTerms(cleanBodyText);
+  const bodySegments = parseBodySegments(bodyText);
+  const termsSegments = parseBodySegments(termsText);
   const logoData = loadLogoImage(tmpl?.headerLogo ?? null);
 
   const PW = 595.28;
@@ -922,25 +1113,33 @@ export async function generateAgreementPdf(p: {
     renderHeader();
     let y = BODY_START_Y;
 
-    for (const seg of segments) {
-      if (seg.kind === 'divider') continue;
+    function renderSegments(segmentsToRender: TextSegment[]) {
+      for (const seg of segmentsToRender) {
+        if (seg.kind === 'divider') continue;
 
-      const width = PW - M - seg.indent;
-      const font = seg.bold ? 'Helvetica-Bold' : 'Helvetica';
-      const h = doc.font(font).fontSize(seg.fontSize).heightOfString(seg.text, { width, align: seg.align as any, lineBreak: true });
-      const lh = h + 1;
-      if (y + lh > PAGE_BODY_MAX_Y) y = addContinuationPage();
-      textAbs(seg.text, seg.indent, y, { width, fontSize: seg.fontSize, font, color: seg.color, align: seg.align, lineBreak: true });
-      y += lh;
+        const width = PW - M - seg.indent;
+        const font = seg.bold ? 'Helvetica-Bold' : 'Helvetica';
+        const h = doc.font(font).fontSize(seg.fontSize).heightOfString(seg.text, { width, align: seg.align as any, lineBreak: true });
+        const lh = h + 1;
+        if (y + lh > PAGE_BODY_MAX_Y) y = addContinuationPage();
+        textAbs(seg.text, seg.indent, y, { width, fontSize: seg.fontSize, font, color: seg.color, align: seg.align, lineBreak: true });
+        y += lh;
 
-      if (seg.kind === 'assetHeader') {
-        const lineY = y + 2;
-        const lineW = CW * 0.82;
-        doc.moveTo(seg.indent, lineY).lineTo(seg.indent + lineW, lineY).strokeColor('#000000').lineWidth(0.8).stroke();
-        doc.y = 0;
-        y += 7;
+        if (seg.kind === 'assetHeader') {
+          const lineY = y + 2;
+          const lineW = CW * 0.82;
+          doc.moveTo(seg.indent, lineY).lineTo(seg.indent + lineW, lineY).strokeColor('#000000').lineWidth(0.8).stroke();
+          doc.y = 0;
+          y += 7;
+        }
       }
     }
+
+    renderSegments(bodySegments);
+    if (documentView.assets.length) {
+      y = renderAssetTableToPdf(doc, documentView.assets, M + 6, y + 8, CW - 12);
+    }
+    renderSegments(termsSegments);
 
     if (y + SIG_BLOCK_HEIGHT > PAGE_BODY_MAX_Y) y = addContinuationPage();
     const sigLineY = Math.max(y + 14, PH - 96);
@@ -957,6 +1156,16 @@ export async function generateAgreementPdf(p: {
       doc.y = 0;
       textAbs(col.label, col.x, sigLineY + 4, { width: colW, align: 'center', fontSize: 8, color: '#333333' });
       textAbs(col.subtitle, col.x, sigLabelY, { width: colW, align: 'center', fontSize: 7, color: '#888888', font: 'Helvetica-Bold' });
+    }
+
+    // Verification URL footnote for signed documents
+    if (recipientSignedAt && documentNumber) {
+      const baseUrl = process.env.APP_BASE_URL || 'http://localhost:3000';
+      const verifyUrl = `${baseUrl}/api/agreements/verify/${documentNumber}`;
+      const verifyY = sigLabelY + 14;
+      doc.font('Helvetica').fontSize(7).fillColor('#94a3b8');
+      doc.text(`Document authenticity can be verified at: ${verifyUrl}`, M, verifyY, { width: CW, align: 'center', lineBreak: false });
+      doc.y = 0;
     }
 
     const range = doc.bufferedPageRange();

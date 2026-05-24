@@ -70,6 +70,20 @@ router.delete('/:assetId/maintenance/:logId', authorize(['ADMIN']), async (req: 
   }
 });
 
+// GET /api/assets/:id/maintenance/summary
+router.get('/:id/maintenance/summary', async (req: Request, res: Response) => {
+  try {
+    const assetId = req.params.id as string;
+    const asset = await prisma.asset.findUnique({ where: { id: assetId, deletedAt: null } });
+    if (!asset) return error(res, 'Asset not found', 404);
+
+    const summary = await maintenanceService.getAssetMaintenanceSummary(assetId);
+    return success(res, summary, 200);
+  } catch (err: any) {
+    return error(res, err.message, 500);
+  }
+});
+
 /* ═══════════════════════════════════════════════════════
    Maintenance Schedules — /api/assets/:id/schedules
    ═══════════════════════════════════════════════════════ */
@@ -201,6 +215,22 @@ router.delete('/:id/schedules/:scheduleId', authorize(['ADMIN', 'STAFF_ADMIN']),
 /* ═══════════════════════════════════════════════════════
    Upcoming Maintenance — /api/maintenance/upcoming
    ═══════════════════════════════════════════════════════ */
+
+// GET /api/maintenance/cost-summary
+router.get('/cost-summary', async (req: Request, res: Response) => {
+  try {
+    const { from, to, assetType, location } = req.query as Record<string, string | undefined>;
+    const summary = await maintenanceService.getMaintenanceCostSummary({
+      from: from || undefined,
+      to: to || undefined,
+      assetType: assetType || undefined,
+      location: location || undefined,
+    });
+    return success(res, summary, 200);
+  } catch (err: any) {
+    return error(res, err.message, 500);
+  }
+});
 
 // GET /api/maintenance/upcoming
 router.get('/upcoming', async (_req: Request, res: Response) => {

@@ -1,14 +1,21 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ShieldAlert } from 'lucide-react';
 
 export function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string | string[] }) {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, user, mustChangePassword } = useAuth();
+  const location = useLocation();
 
   // Wait for auth to be restored from localStorage before redirecting
   if (isLoading) return null;
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+
+  // If user must change password, redirect to change-password page
+  if (mustChangePassword && location.pathname !== '/change-password') {
+    return <Navigate to="/change-password" replace />;
+  }
+
   if (requiredRole) {
     const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
     if (!roles.includes(user?.role || '')) {

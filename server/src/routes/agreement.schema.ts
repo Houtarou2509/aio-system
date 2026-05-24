@@ -24,6 +24,7 @@ const pdfAssetSchema = z.object({
   name: z.string().min(1).max(500),
   serialNumber: z.string().max(200).optional().nullable(),
   propertyNumber: z.string().max(200).optional().nullable(),
+  condition: z.string().max(100).optional().nullable(),
 });
 
 export const agreementPdfSchema = z.object({
@@ -45,6 +46,7 @@ export const agreementPdfSchema = z.object({
   recipientSignedAt: z.union([z.string(), z.date()]).optional().nullable(),
   recipientSignatureName: z.string().max(200).optional().nullable(),
   documentNumber: z.string().max(100).optional().nullable(),
+  agreementDocumentId: z.string().uuid().optional().nullable(),
 });
 
 export const templatePreviewSchema = z.object({

@@ -1,3 +1,4 @@
+import { logAudit } from './auditLog.service';
 import { prisma } from '../lib/prisma';
 import { classifySeverity, generateSummary } from '../utils/auditHelpers';
 
@@ -40,21 +41,21 @@ export async function createSupplier(
 ) {
   const supplier = await prisma.supplier.create({ data });
 
-  await prisma.auditLog.create({
-    data: {
-      entityType: 'Supplier',
-      entityId: supplier.id,
-      action: 'CREATE',
-      performedById,
-      ipAddress,
-      userAgent,
-      field: '*',
-      oldValue: null,
-      newValue: JSON.stringify(data),
-      severity: 'LOW',
-      summary: generateSummary({ action: 'CREATE', entityType: 'Supplier', assetName: supplier.name }),
-    },
-  });
+  await logAudit({
+  userId: performedById ?? null,
+  action: 'CREATE',
+  entityType: 'Supplier',
+  entityId: supplier.id ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": '*',
+    "oldValue": null,
+    "newValue": JSON.stringify(data),
+    "severity": 'LOW',
+    "summary": generateSummary({ action: 'CREATE', entityType: 'Supplier', assetName: supplier.name }),
+  },
+});
 
   return supplier;
 }
@@ -86,19 +87,19 @@ export async function updateSupplier(
     const oldStr = oldVal == null ? '' : String(oldVal);
     const newStr = newVal == null ? '' : String(newVal);
     if (oldStr === newStr) continue;
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'Supplier',
-        entityId: id,
-        action: 'UPDATE',
-        performedById,
-        ipAddress,
-        userAgent,
-        field: key,
-        oldValue: oldVal == null ? null : String(oldVal),
-        newValue: newVal == null ? null : String(newVal),
-        severity: classifySeverity('UPDATE', key),
-        summary: generateSummary({
+    await logAudit({
+  userId: performedById ?? null,
+  action: 'UPDATE',
+  entityType: 'Supplier',
+  entityId: id ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": key,
+    "oldValue": oldVal == null ? null : String(oldVal),
+    "newValue": newVal == null ? null : String(newVal),
+    "severity": classifySeverity('UPDATE', key),
+    "summary": generateSummary({
           action: 'UPDATE',
           entityType: 'Supplier',
           field: key,
@@ -106,8 +107,8 @@ export async function updateSupplier(
           newValue: newVal == null ? null : String(newVal),
           assetName: existing.name,
         }),
-      },
-    });
+  },
+});
   }
 
   return supplier;
@@ -131,21 +132,21 @@ export async function deleteSupplier(
 
   const supplier = await prisma.supplier.delete({ where: { id } });
 
-  await prisma.auditLog.create({
-    data: {
-      entityType: 'Supplier',
-      entityId: id,
-      action: 'DELETE',
-      performedById,
-      ipAddress,
-      userAgent,
-      field: '*',
-      oldValue: existing.name,
-      newValue: null,
-      severity: 'HIGH',
-      summary: generateSummary({ action: 'DELETE', entityType: 'Supplier', assetName: existing.name }),
-    },
-  });
+  await logAudit({
+  userId: performedById ?? null,
+  action: 'DELETE',
+  entityType: 'Supplier',
+  entityId: id ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": '*',
+    "oldValue": existing.name,
+    "newValue": null,
+    "severity": 'HIGH',
+    "summary": generateSummary({ action: 'DELETE', entityType: 'Supplier', assetName: existing.name }),
+  },
+});
 
   return supplier;
 }

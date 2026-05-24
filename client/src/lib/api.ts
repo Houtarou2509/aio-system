@@ -62,10 +62,12 @@ function emitSessionExpired() {
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  errorData: any;
+  constructor(message: string, status: number, errorData?: any) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.errorData = errorData;
   }
 }
 
@@ -115,7 +117,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
   const data = await res.json();
   if (!data.success) {
-    throw new ApiError(data.error?.message || 'Request failed', res.status);
+    throw new ApiError(data.error?.message || 'Request failed', res.status, data.error);
   }
   return data;
 }
@@ -198,6 +200,12 @@ export interface Asset {
   propertyNumber?: string;
   remarks?: string;
   imageUrl?: string;
+  warrantyExpiry?: string;
+  warrantyNotes?: string;
+  depreciationMethod?: string;
+  usefulLifeYears?: number;
+  salvageValue?: number;
+  supplierId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

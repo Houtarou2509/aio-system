@@ -4,6 +4,7 @@ import { authenticate, authorize } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { success, error } from '../utils/response';
 import { auditQuerySchema, auditCleanupSchema, auditExportQuerySchema } from './audit.schema';
+import { logAudit } from '../services/auditLog.service';
 
 const router = Router();
 
@@ -26,14 +27,12 @@ router.get('/export', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Request, 
     const query = auditExportQuerySchema.parse(req.query);
     const { csv, recordCount } = await auditService.exportAuditLogsCsv(query);
 
-    // Log the export action (lazy-import prisma to avoid circular deps)
-    const { prisma } = await import('../lib/prisma');
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'AuditLog',
-        entityId: req.user!.id,
-        action: 'EXPORT_DATA',
-        performedById: req.user!.id,
+    await logAudit({
+      userId: req.user!.id,
+      entityType: 'AuditLog',
+      entityId: req.user!.id,
+      action: 'EXPORT_DATA',
+      metadata: {
         severity: 'MEDIUM',
         summary: `Exported ${recordCount} audit log(s) to CSV`,
       },

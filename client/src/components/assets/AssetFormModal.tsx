@@ -5,7 +5,7 @@ import {
   SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { useLookupOptions } from '@/hooks/useLookupOptions';
-import { Sparkles, X, Upload, Pencil, Plus } from 'lucide-react';
+import { Sparkles, X, Upload, Pencil, Plus, ChevronDown, ChevronUp } from 'lucide-react';
 
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
 
@@ -21,6 +21,11 @@ function getImageUrl(url: string | null | undefined): string {
     return `${base}${url}`;
   }
   return url;
+}
+
+interface Supplier {
+  id: string;
+  name: string;
 }
 
 interface Props {
@@ -39,26 +44,46 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     serialNumber: asset?.serialNumber || '',
     purchasePrice: asset?.purchasePrice != null ? String(asset.purchasePrice) : '',
     purchaseDate: asset?.purchaseDate ? new Date(asset.purchaseDate).toISOString().split('T')[0] : '',
-    assignedTo: asset?.assignedTo ?? '',
+    supplierId: (asset as any)?.supplierId ?? null as string | null,
     propertyNumber: (asset as any)?.propertyNumber || '',
     status: asset?.status || 'AVAILABLE',
     location: asset?.location ?? '',
     remarks: (asset as any)?.remarks || '',
     warrantyExpiry: (asset as any)?.warrantyExpiry ? new Date((asset as any).warrantyExpiry).toISOString().split('T')[0] : '',
     warrantyNotes: (asset as any)?.warrantyNotes || '',
+    depreciationMethod: (asset as any)?.depreciationMethod ?? 'straight_line',
+    usefulLifeYears: (asset as any)?.usefulLifeYears ?? 5,
+    salvageValue: (asset as any)?.salvageValue != null ? String((asset as any).salvageValue) : '0',
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(getImageUrl(asset?.imageUrl) || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [serialNumberError, setSerialNumberError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
+  const [depreciationOpen, setDepreciationOpen] = useState(false);
+  const [aiSuggestedFields, setAiSuggestedFields] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Supplier list
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [suppliersLoading, setSuppliersLoading] = useState(false);
 
   // Dynamic lookup lists via hook
   const { options: typeOptions, isLoading: typeLoading } = useLookupOptions('asset-types');
   const { options: manufacturerOptions, isLoading: manufacturerLoading } = useLookupOptions('manufacturers');
   const { options: locationOptions, isLoading: locationLoading } = useLookupOptions('locations');
-  const { options: assignedToOptions, isLoading: assignedToLoading } = useLookupOptions('assigned-to');
+
+  // Fetch suppliers on mount
+  useEffect(() => {
+    setSuppliersLoading(true);
+    const token = localStorage.getItem('accessToken');
+    fetch('/api/suppliers', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => { if (d.success) setSuppliers(d.data); })
+      .catch(() => {})
+      .finally(() => setSuppliersLoading(false));
+  }, []);
 
   // Generate preview when image selected
   useEffect(() => {
@@ -85,8 +110,21 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       const d = await res.json();
       if (d.success && d.data.suggestions?.length > 0) {
         const best = d.data.suggestions[0];
-        if (best.type) setForm(f => ({ ...f, type: best.type }));
-        if (best.manufacturer) setForm(f => ({ ...f, manufacturer: best.manufacturer }));
+        const suggested = new Set<string>();
+        if (best.type) { setForm(f => ({ ...f, type: best.type })); suggested.add('type'); }
+        if (best.manufacturer) { setForm(f => ({ ...f, manufacturer: best.manufacturer })); suggested.add('manufacturer'); }
+        if (best.usefulLifeYears != null) {
+          setForm(f => ({ ...f, usefulLifeYears: best.usefulLifeYears }));
+          suggested.add('usefulLifeYears');
+          setDepreciationOpen(true);
+        }
+        if (best.warrantyYears != null && !form.warrantyExpiry && form.purchaseDate) {
+          const purchaseDate = new Date(form.purchaseDate);
+          purchaseDate.setFullYear(purchaseDate.getFullYear() + best.warrantyYears);
+          setForm(f => ({ ...f, warrantyExpiry: purchaseDate.toISOString().split('T')[0] }));
+          suggested.add('warrantyExpiry');
+        }
+        setAiSuggestedFields(suggested);
       }
     } catch {} finally { setSuggesting(false); }
   };
@@ -95,6 +133,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setSerialNumberError(null);
 
     try {
       // Build the data object
@@ -105,7 +144,6 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       data.serialNumber = form.serialNumber || undefined;
       data.status = form.status;
       data.location = form.location || undefined;
-      data.assignedTo = form.assignedTo || undefined;
       data.propertyNumber = form.propertyNumber || undefined;
       data.remarks = form.remarks || undefined;
       if (form.purchasePrice !== '') {
@@ -117,10 +155,15 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       data.warrantyExpiry = form.warrantyExpiry ? new Date(form.warrantyExpiry).toISOString() : null;
       data.warrantyNotes = form.warrantyNotes || null;
       if (data.warrantyNotes === '') data.warrantyNotes = null;
+      // Depreciation fields
+      data.depreciationMethod = form.depreciationMethod;
+      data.usefulLifeYears = Number(form.usefulLifeYears);
+      data.salvageValue = form.salvageValue !== '' ? Number(form.salvageValue) : 0;
+      // Supplier
+      data.supplierId = form.supplierId || null;
 
       if (imageFile) {
         // Send as multipart/form-data with 'image' file + 'data' JSON string
-        // This matches the backend: multer single('image') + JSON.parse(req.body.data)
         if (import.meta.env.DEV) console.log('[AssetFormModal] Submitting data:', data);
         const fd = new FormData();
         fd.append('image', imageFile);
@@ -133,7 +176,12 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       }
     } catch (err: any) {
       console.error('[AssetFormModal] Submit failed:', err);
-      setError(err?.message || 'Failed to save asset. Please try again.');
+      // Check for duplicate serial number error
+      if (err?.errorData?.code === 'DUPLICATE_FIELD' && err?.errorData?.field === 'serialNumber') {
+        setSerialNumberError('This serial number already exists in the system.');
+      } else {
+        setError(err?.message || 'Failed to save asset. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -276,7 +324,8 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               {/* 5. Serial Number */}
               <div>
                 <label className={labelClass}>Serial Number</label>
-                <input value={form.serialNumber} onChange={e => set('serialNumber', e.target.value)} className={inputClass} placeholder="e.g. SN-12345" />
+                <input value={form.serialNumber} onChange={e => { set('serialNumber', e.target.value); if (serialNumberError) setSerialNumberError(null); }} className={`${inputClass}${serialNumberError ? ' !border-[#7B1113] !ring-[#7B1113]' : ''}`} placeholder="e.g. SN-12345" />
+                {serialNumberError && <p className="mt-1 text-xs text-[#7B1113]">{serialNumberError}</p>}
               </div>
 
               {/* 6. Price */}
@@ -294,31 +343,33 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                 <input type="date" value={form.purchaseDate} onChange={e => set('purchaseDate', e.target.value)} {...(isEdit ? {} : { required: true })} className={inputClass} />
               </div>
 
-              {/* 8. Assigned To */}
+              {/* 7a. Supplier */}
               <div>
-                <label className={labelClass}>Assigned To</label>
-                <Select value={form.assignedTo || 'none'} onValueChange={(val) => val != null && set('assignedTo', val === 'none' ? '' : val)} disabled={assignedToLoading}>
+                <label className={labelClass}>Supplier</label>
+                <Select
+                  value={form.supplierId || 'none'}
+                  onValueChange={(val) => setForm(prev => ({ ...prev, supplierId: val === 'none' ? null : val }))}
+                  disabled={suppliersLoading}
+                >
                   <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
-                    <SelectValue placeholder={assignedToLoading ? 'Loading...' : 'Select assignee'} />
+                    <SelectValue placeholder={suppliersLoading ? 'Loading...' : 'Select supplier'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {mergeWithFallback(assignedToOptions, form.assignedTo).map((opt) => (
-                      <SelectItem key={opt.id} value={opt.value}>
-                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
-                      </SelectItem>
+                    <SelectItem value="none">— None —</SelectItem>
+                    {suppliers.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* 9. Property # */}
+              {/* 8. Property # */}
               <div>
                 <label className={labelClass}>Property #</label>
                 <input value={form.propertyNumber} onChange={e => set('propertyNumber', e.target.value)} placeholder="e.g. PROP-00123" className={inputClass} />
               </div>
 
-              {/* 10. Location */}
+              {/* 9. Location */}
               <div>
                 <label className={labelClass}>Location</label>
                 <Select value={form.location || 'none'} onValueChange={(val) => val != null && set('location', val === 'none' ? '' : val)} disabled={locationLoading}>
@@ -336,7 +387,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                 </Select>
               </div>
 
-              {/* 11. Status */}
+              {/* 10. Status */}
               <div>
                 <label className={labelClass}>Status *</label>
                 <select value={form.status} onChange={e => set('status', e.target.value)} required className={inputClass}>
@@ -344,19 +395,22 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                 </select>
               </div>
 
-              {/* 12. Remarks */}
+              {/* 11. Remarks */}
               <div className="col-span-2">
                 <label className={labelClass}>Remarks</label>
                 <textarea rows={3} value={form.remarks} onChange={e => set('remarks', e.target.value)} placeholder="Any additional notes..." className={`${inputClass} resize-none`} />
               </div>
 
-              {/* 13. Warranty Section */}
+              {/* 12. Warranty Section */}
               <div className="col-span-2">
                 <div className="border-t border-slate-100 dark:border-slate-700 my-2" />
                 <label className={labelClass}>Warranty (Optional)</label>
                 <div className="grid grid-cols-2 gap-3 mt-1">
                   <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">Expiry date</label>
+                    <label className="text-[10px] text-slate-400 block mb-1">
+                      Expiry date
+                      {aiSuggestedFields.has('warrantyExpiry') && <span className="ml-1 text-[#f8931f]">AI suggested</span>}
+                    </label>
                     <input type="date" value={form.warrantyExpiry} onChange={e => set('warrantyExpiry', e.target.value)} className={inputClass} />
                   </div>
                   <div>
@@ -364,6 +418,45 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                     <input type="text" value={form.warrantyNotes} onChange={e => set('warrantyNotes', e.target.value)} placeholder="e.g. 3-year on-site" className={inputClass} />
                   </div>
                 </div>
+              </div>
+
+              {/* 13. Depreciation Settings (Collapsible) */}
+              <div className="col-span-2">
+                <button
+                  type="button"
+                  onClick={() => setDepreciationOpen(!depreciationOpen)}
+                  className="flex items-center gap-2 w-full text-left border-l-4 border-[#012061] pl-3 py-1 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
+                >
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wider">Depreciation Settings</span>
+                  {depreciationOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                </button>
+                <p className="text-[10px] text-slate-400 mt-0.5 pl-3 border-l-4 border-transparent">These values are used to calculate the asset's book value over time.</p>
+                {depreciationOpen && (
+                  <div className="grid grid-cols-3 gap-3 mt-3">
+                    <div>
+                      <label className={labelClass}>Depreciation Method</label>
+                      <select value={form.depreciationMethod} onChange={e => set('depreciationMethod', e.target.value)} className={inputClass}>
+                        <option value="straight_line">Straight Line</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>
+                        Useful Life (Years)
+                        {aiSuggestedFields.has('usefulLifeYears') && <span className="ml-1 text-[#f8931f]">AI suggested</span>}
+                      </label>
+                      <input type="number" min={1} max={50} value={form.usefulLifeYears} onChange={e => setForm(prev => ({ ...prev, usefulLifeYears: Number(e.target.value) || 5 }))} className={inputClass} />
+                      <p className="text-[10px] text-slate-400 mt-0.5">How many years is this asset expected to last?</p>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Salvage Value (₱)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">₱</span>
+                        <input type="number" step="0.01" min={0} value={form.salvageValue} onChange={e => set('salvageValue', e.target.value)} className={`${inputClass} pl-8`} />
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Estimated resale/scrap value at end of useful life.</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

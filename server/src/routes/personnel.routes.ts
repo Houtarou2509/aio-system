@@ -7,7 +7,9 @@ import { createPersonnelSchema, updatePersonnelSchema, updatePersonnelReadinessS
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import sharp from 'sharp';
 import { prisma } from '../lib/prisma';
+import { logAudit } from '../services/auditLog.service';
 
 // Signed agreement upload storage — outside server/public so Vite doesn't wipe
 const signedAgreementDir = path.resolve(__dirname, '../../uploads/signed-agreements');
@@ -44,10 +46,10 @@ function getUA(req: Request): string {
 const router = Router();
 
 function getClientIp(req: Request): string {
-  const ip = req.headers['x-forwarded-for'];
+  const ip = req.headers['x-forwarded-for'] as string | string[] | undefined;
   if (Array.isArray(ip)) return ip[0];
   if (typeof ip === 'string') return ip.split(',')[0].trim();
-  return req.socket.remoteAddress || 'unknown';
+  return req.socket?.remoteAddress || 'unknown';
 }
 
 /* ─── List ─── */
@@ -80,6 +82,17 @@ router.patch('/:id/readiness', authenticate, hasPermission('issuances:edit'), va
   } catch (e: any) {
     if (e.message === 'Personnel not found') error(res, e.message, 404);
     else error(res, e.message, 400);
+  }
+});
+
+/* ─── Accountability summary ─── */
+router.get('/:id/accountability', authenticate, hasPermission('issuances:view'), async (req: Request, res: Response) => {
+  try {
+    const result = await personnelService.getPersonnelAccountability(String(req.params.id));
+    success(res, result);
+  } catch (e: any) {
+    if (e.message === 'Personnel not found') error(res, e.message, 404);
+    else error(res, e.message, 500);
   }
 });
 
@@ -228,6 +241,118 @@ router.get('/:id/signed-agreement', authenticate, async (req: Request, res: Resp
     res.sendFile(absolutePath);
   } catch (e: any) {
     error(res, e.message, 500);
+  }
+});
+
+/* ─── Profile photo upload storage ─── */
+const profilePhotoDir = path.resolve(__dirname, '../../uploads/profiles');
+if (!fs.existsSync(profilePhotoDir)) {
+  fs.mkdirSync(profilePhotoDir, { recursive: true });
+}
+
+const ALLOWED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_PHOTO_SIZE = 2 * 1024 * 1024; // 2MB
+
+const profilePhotoUpload = multer({
+  dest: profilePhotoDir,
+  limits: { fileSize: MAX_PHOTO_SIZE },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_PHOTO_TYPES.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Only JPG, PNG, and WebP images are allowed'));
+  },
+});
+
+/* ─── POST /api/personnel/:id/photo — upload/replace profile photo ─── */
+router.post('/:id/photo', authenticate, requireRole(['ADMIN']), profilePhotoUpload.single('photo'), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) return error(res, 'No photo uploaded or file type not allowed (JPG, PNG, WebP only, max 2MB)', 400);
+
+    const personnel = await prisma.personnel.findUnique({ where: { id: String(req.params.id) } });
+    if (!personnel) return error(res, 'Personnel not found', 404);
+
+    // Resize to 256x256 square crop for avatar
+    const ext = path.extname(req.file.originalname) || '.jpg';
+    const filename = `${req.params.id}-${Date.now()}${ext}`;
+    const outputPath = path.resolve(profilePhotoDir, filename);
+
+    await sharp(req.file.path)
+      .resize(256, 256, { fit: 'cover', position: 'center' })
+      .toFile(outputPath);
+
+    // Remove multer temp file
+    const { unlink } = await import('fs/promises');
+    await unlink(req.file.path).catch(() => {});
+
+    // Remove old photo file if exists
+    if (personnel.photoUrl) {
+      const oldPath = path.resolve(__dirname, '../..', personnel.photoUrl.replace(/^\//, ''));
+      await unlink(oldPath).catch(() => {});
+    }
+
+    const photoUrl = `/uploads/profiles/${filename}`;
+    await prisma.personnel.update({
+      where: { id: String(req.params.id) },
+      data: { photoUrl },
+    });
+
+    // Audit log
+    await logAudit({
+      userId: req.user!.id,
+      action: personnel.photoUrl ? 'UPDATE' : 'CREATE',
+      entityType: 'Personnel',
+      entityId: String(req.params.id),
+      ipAddress: getClientIp(req),
+      metadata: {
+        userAgent: getUA(req),
+        field: 'photoUrl',
+        oldValue: personnel.photoUrl || null,
+        newValue: photoUrl,
+      },
+    });
+
+    return success(res, { photoUrl }, 200);
+  } catch (err: any) {
+    if (err.message?.includes('Only JPG')) return error(res, err.message, 400);
+    return error(res, err.message || 'Upload failed', 400);
+  }
+});
+
+/* ─── DELETE /api/personnel/:id/photo — remove profile photo ─── */
+router.delete('/:id/photo', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response) => {
+  try {
+    const personnel = await prisma.personnel.findUnique({ where: { id: String(req.params.id) } });
+    if (!personnel) return error(res, 'Personnel not found', 404);
+    if (!personnel.photoUrl) return error(res, 'No photo to remove', 404);
+
+    // Remove file from disk
+    const filePath = path.resolve(__dirname, '../..', personnel.photoUrl.replace(/^\//, ''));
+    const { unlink } = await import('fs/promises');
+    await unlink(filePath).catch(() => {});
+
+    // Clear photoUrl in DB
+    await prisma.personnel.update({
+      where: { id: String(req.params.id) },
+      data: { photoUrl: null },
+    });
+
+    // Audit log
+    await logAudit({
+      userId: req.user!.id,
+      action: 'DELETE',
+      entityType: 'Personnel',
+      entityId: String(req.params.id),
+      ipAddress: getClientIp(req),
+      metadata: {
+        userAgent: getUA(req),
+        field: 'photoUrl',
+        oldValue: personnel.photoUrl,
+        newValue: null,
+      },
+    });
+
+    return success(res, { photoUrl: null }, 200);
+  } catch (err: any) {
+    return error(res, err.message || 'Delete failed', 400);
   }
 });
 

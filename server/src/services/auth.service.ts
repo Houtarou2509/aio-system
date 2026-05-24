@@ -91,6 +91,7 @@ export async function login(email: string, password: string, twoFactorToken?: st
     requiresTwoFactor: false,
     accessToken,
     refreshToken,
+    mustChangePassword: user.mustChangePassword,
     user: {
       id: user.id,
       username: user.username,
@@ -98,6 +99,7 @@ export async function login(email: string, password: string, twoFactorToken?: st
       email: user.email,
       role: user.role,
       twoFactorEnabled: user.twoFactorEnabled,
+      mustChangePassword: user.mustChangePassword,
       permissions,
     },
   };
@@ -212,6 +214,7 @@ export async function getMe(userId: string) {
       email: true,
       role: true,
       twoFactorEnabled: true,
+      mustChangePassword: true,
       permissions: true,
       createdAt: true,
       updatedAt: true,
@@ -220,6 +223,7 @@ export async function getMe(userId: string) {
   if (!user) throw new Error('User not found');
   return {
     ...user,
+    mustChangePassword: user.mustChangePassword,
     permissions: parsePermissions(user.permissions),
   };
 }
@@ -288,7 +292,7 @@ export async function resetPassword(rawToken: string, newPassword: string): Prom
   const passwordHash = await bcrypt.hash(newPassword, 10);
   await prisma.user.update({
     where: { id: stored.userId },
-    data: { passwordHash },
+    data: { passwordHash, mustChangePassword: false },
   });
 
   resetTokens.delete(tokenHash);

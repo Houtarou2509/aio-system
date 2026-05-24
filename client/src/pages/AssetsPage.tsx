@@ -136,6 +136,23 @@ export default function AssetsPage() {
     }
   }, [searchParams, setSearchParams]);
 
+  // Handle warranty quick-filter URL params: ?warrantyExpiring=1 or ?warrantyExpired=1
+  useEffect(() => {
+    if (searchParams.get('warrantyExpiring') === '1') {
+      const now = new Date();
+      const from = now.toISOString().split('T')[0];
+      const to = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      setFilters({ ...filters, warrantyExpiryFrom: from, warrantyExpiryTo: to, page: 1 });
+      setSearchParams({}, { replace: true });
+    } else if (searchParams.get('warrantyExpired') === '1') {
+      const past = new Date(2020, 0, 1).toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      setFilters({ ...filters, warrantyExpiryFrom: past, warrantyExpiryTo: yesterday, page: 1 });
+      setSearchParams({}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   // Close status dropdown on outside click
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -450,6 +467,24 @@ export default function AssetsPage() {
               className="w-[105px] rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2 py-1.5 text-[10px] text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
             />
           </div>
+
+          {/* Warranty Expiring quick filter */}
+          <button
+            onClick={() => {
+              const now = new Date();
+              const from = now.toISOString().split('T')[0];
+              const to = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+              setFilters({ ...filters, warrantyExpiryFrom: from, warrantyExpiryTo: to, page: 1 });
+            }}
+            className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[10px] font-semibold tracking-wide uppercase transition-colors shrink-0 h-8 ${
+              filters.warrantyExpiryFrom && filters.warrantyExpiryTo
+                ? 'border-[#f8931f] bg-[#f8931f]/10 text-[#f8931f] dark:text-[#f8931f]'
+                : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:border-[#f8931f] hover:text-[#f8931f]'
+            }`}
+          >
+            <Calendar className="h-3 w-3" />
+            Warranty Expiring
+          </button>
 
           {/* Clear All */}
           {hasActiveFilters && (

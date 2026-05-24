@@ -18,15 +18,18 @@ model User {
   twoFactorEnabled Boolean  @default(false)
   backupCodes     String   @default("[]")
   fullName        String?
-  status          String    @default("active")
-  lastLogin       DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  status              String    @default("active")
+  mustChangePassword  Boolean   @default(false)
+  lastLogin           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   assignments        Assignment[]
+  returnedAssignments Assignment[]  @relation("AssignmentReturnedBy")
   issuedAgreementDocuments AgreementDocument[] @relation("AgreementDocumentIssuedBy")
   uploadedAgreementDocuments AgreementDocument[] @relation("AgreementDocumentSignedUploadedBy")
-  auditLogs          AuditLog[]         @relation("PerformedBy")
+  auditLogs          AuditLog[]         @relation("AuditLogUser")
+  conditionLogsRecorded AssetConditionLog[] @relation("ConditionLogRecordedBy")
   labelTemplates     LabelTemplate[]
   purchaseRequests   PurchaseRequest[]  @relation("PurchaseRequests")
   approvedRequests   PurchaseRequest[]  @relation("ApprovedRequests")
@@ -68,8 +71,10 @@ model Asset {
   assignments     Assignment[]
   maintenanceLogs MaintenanceLog[]
   maintenanceSchedules MaintenanceSchedule[]
+  conditionLogs   AssetConditionLog[]
   guestTokens     GuestToken[]
   notifications   Notification[]
+  purchaseRequest PurchaseRequest?  @relation("PurchaseReqAsset")
 
   @@map("assets")
 }
@@ -85,6 +90,9 @@ model Assignment {
   condition     String?
   conditionAtIssue String?       // Accountability condition snapshot when issued
   conditionAtReturn String?      // Accountability condition captured during return inspection
+  returnCondition   String?
+  returnNote        String?
+  returnedById      String?
   returnRemarks String?          // Return inspection notes / acknowledgement remarks
   returnedReceivedById String?   // User who received the returned asset
   accountabilityStatus String    @default("PENDING_SIGNATURE") // PENDING_SIGNATURE, ACTIVE, RETURNED, CANCELLED, VOIDED
@@ -101,10 +109,10 @@ model Assignment {
   agreementDocument   AgreementDocument? @relation(fields: [agreementDocumentId], references: [id], onDelete: SetNull)
   asset         Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
   user          User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  returnedBy    User?            @relation("AssignmentReturnedBy", fields: [returnedById], references: [id], onDelete: SetNull)
   personnel     Personnel?       @relation("PersonnelAssignments", fields: [personnelId], references: [id], onDelete: SetNull)
   agreement     AgreementTemplate? @relation("AssignmentAgreement", fields: [agreementId], references: [id], onDelete: SetNull)
 
-  @@index([accountabilityStatus])
   @@map("assignments")
 }
 
@@ -122,30 +130,20 @@ model MaintenanceLog {
   @@map("maintenance_logs")
 }
 
-enum AuditSeverity {
-  LOW
-  MEDIUM
-  HIGH
-}
-
 model AuditLog {
-  id           String        @id @default(uuid())
-  entityType   String
-  entityId     String
-  action       String
-  field        String?
-  oldValue     String?
-  newValue     String?
-  summary      String?
-  severity     AuditSeverity  @default(LOW)
-  userAgent    String?
-  oldImageUrl  String?
-  performedById String
-  performedAt  DateTime      @default(now())
-  ipAddress    String?
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation("AuditLogUser", fields: [userId], references: [id], onDelete: SetNull)
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
 
-  performedBy  User          @relation("PerformedBy", fields: [performedById], references: [id])
-
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
   @@map("audit_logs")
 }
 
@@ -227,7 +225,7 @@ enum LookupCategory {
   ASSET_TYPE
   MANUFACTURER
   LOCATION
-  ASSIGNED_TO
+  ASSIGNED_TO  // ASSIGNED_TO is deprecated — use Personnel + Issuances instead. Do not remove from enum (breaks existing DB rows).
 }
 
 enum BackupStatus {
@@ -270,6 +268,7 @@ model Personnel {
   contractStartDate      DateTime?
   contractEndDate        DateTime?
   signedAgreementPath    String?
+  photoUrl              String?   // profile photo path (e.g. /uploads/profiles/xxx.jpg)
   status            String   @default("active")  // active, inactive, resigned
   isReadyForIssuance Boolean @default(false)
   createdAt         DateTime @default(now())
@@ -396,6 +395,7 @@ model AgreementDocument {
   recipientSignatureName     String?
   recipientSignatureMethod   String?
   recipientSignatureIp       String?
+  signatureHash              String?   // SHA-256 tamper-evidence hash of signing fields
   signedPdfPath              String?
   signedUploadedAt           DateTime?
   signedUploadedById         String?
@@ -414,6 +414,23 @@ model AgreementDocument {
   @@index([templateVersionId])
   @@index([issuedAt])
   @@map("agreement_documents")
+}
+
+model AssetConditionLog {
+  id           String   @id @default(uuid())
+  assetId      String
+  asset        Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assignmentId String?
+  event        String   // 'issued' | 'returned' | 'transferred' | 'manual'
+  condition    String
+  note         String?
+  recordedById String?
+  recordedBy   User?    @relation("ConditionLogRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  recordedAt   DateTime @default(now())
+
+  @@index([assetId])
+  @@index([recordedAt])
+  @@map("asset_condition_logs")
 }
 
 model MaintenanceSchedule {
@@ -450,19 +467,22 @@ model Supplier {
 }
 
 model PurchaseRequest {
-  id            String    @id @default(uuid())
-  assetName     String
-  type          String
-  reason        String
-  status        String    @default("PENDING")
-  notes         String?
-  requestedById String
-  approvedById  String?
-  approvedAt    DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  requestedBy   User      @relation("PurchaseRequests", fields: [requestedById], references: [id])
-  approvedBy    User?     @relation("ApprovedRequests", fields: [approvedById], references: [id])
+  id                  String    @id @default(uuid())
+  assetName           String
+  type                String
+  reason              String
+  status              String    @default("PENDING")
+  notes               String?
+  requestedById       String
+  approvedById        String?
+  approvedAt          DateTime?
+  convertedToAssetId  String?   @unique
+  convertedAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  requestedBy         User      @relation("PurchaseRequests", fields: [requestedById], references: [id])
+  approvedBy          User?     @relation("ApprovedRequests", fields: [approvedById], references: [id])
+  convertedToAsset    Asset?    @relation("PurchaseReqAsset", fields: [convertedToAssetId], references: [id])
 
   @@map("purchase_requests")
 }

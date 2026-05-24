@@ -1,3 +1,4 @@
+import { logAudit } from './auditLog.service';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import path from 'path';
@@ -123,9 +124,21 @@ export async function createAsset(data: Prisma.AssetCreateInput, performedById: 
   const cleaned = cleanWarrantyFields(data);
   const asset = await prisma.asset.create({ data: cleaned });
 
-  await prisma.auditLog.create({
-    data: { entityType: 'Asset', entityId: asset.id, action: 'CREATE', performedById, ipAddress, userAgent, field: '*', oldValue: null, newValue: JSON.stringify(data), severity: 'LOW', summary: generateSummary({ action: 'CREATE', entityType: 'Asset', assetName: (data as any).name }) },
-  });
+  await logAudit({
+  userId: performedById ?? null,
+  action: 'CREATE',
+  entityType: 'Asset',
+  entityId: asset.id ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": '*',
+    "oldValue": null,
+    "newValue": JSON.stringify(data),
+    "severity": 'LOW',
+    "summary": generateSummary({ action: 'CREATE', entityType: 'Asset', assetName: (data as any).name }),
+  },
+});
 
   return asset;
 }
@@ -158,14 +171,21 @@ export async function updateAsset(id: string, data: Prisma.AssetUpdateInput, per
     const oldStr = oldVal == null ? '' : String(oldVal);
     const newStr = newVal == null ? '' : String(newVal);
     if (oldStr === newStr) continue;
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'Asset', entityId: id, action: 'UPDATE', performedById, ipAddress, userAgent,
-        field: key, oldValue: oldVal == null ? null : formatAuditValue(oldVal), newValue: newVal == null ? null : formatAuditValue(newVal),
-        severity: classifySeverity('UPDATE', key),
-        summary: generateSummary({ action: 'UPDATE', entityType: 'Asset', field: key, oldValue: oldVal == null ? null : formatAuditValue(oldVal), newValue: newVal == null ? null : formatAuditValue(newVal), assetName: existing.name }),
-      },
-    });
+    await logAudit({
+  userId: performedById ?? null,
+  action: 'UPDATE',
+  entityType: 'Asset',
+  entityId: id ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": key,
+    "oldValue": oldVal == null ? null : formatAuditValue(oldVal),
+    "newValue": newVal == null ? null : formatAuditValue(newVal),
+    "severity": classifySeverity('UPDATE', key),
+    "summary": generateSummary({ action: 'UPDATE', entityType: 'Asset', field: key, oldValue: oldVal == null ? null : formatAuditValue(oldVal), newValue: newVal == null ? null : formatAuditValue(newVal), assetName: existing.name }),
+  },
+});
   }
 
   // Auto-track assignment history when assignedTo changes
@@ -227,9 +247,20 @@ export async function deleteAsset(id: string, performedById: string, ipAddress?:
     data: { deletedAt: now, status: 'RETIRED' },
   });
 
-  await prisma.auditLog.create({
-    data: { entityType: 'Asset', entityId: id, action: 'SOFT_DELETE', performedById, ipAddress, userAgent, field: 'deletedAt', newValue: now.toISOString(), severity: 'HIGH', summary: generateSummary({ action: 'DELETE', entityType: 'Asset', assetName: existing?.name }) },
-  });
+  await logAudit({
+  userId: performedById ?? null,
+  action: 'SOFT_DELETE',
+  entityType: 'Asset',
+  entityId: id ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": 'deletedAt',
+    "newValue": now.toISOString(),
+    "severity": 'HIGH',
+    "summary": generateSummary({ action: 'DELETE', entityType: 'Asset', assetName: existing?.name }),
+  },
+});
 
   return asset;
 }
@@ -245,9 +276,20 @@ export async function checkoutAsset(assetId: string, userId: string, notes: stri
     prisma.asset.update({ where: { id: assetId }, data: { status: 'ASSIGNED', assignedTo: userId } }),
   ]);
 
-  await prisma.auditLog.create({
-    data: { entityType: 'Asset', entityId: assetId, action: 'CHECKOUT', performedById, ipAddress, userAgent, field: 'assignedTo', newValue: userId, severity: 'HIGH', summary: generateSummary({ action: 'CHECKOUT', entityType: 'Asset', assetName: asset?.name }) },
-  });
+  await logAudit({
+  userId: performedById ?? null,
+  action: 'CHECKOUT',
+  entityType: 'Asset',
+  entityId: assetId ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": 'assignedTo',
+    "newValue": userId,
+    "severity": 'HIGH',
+    "summary": generateSummary({ action: 'CHECKOUT', entityType: 'Asset', assetName: asset?.name }),
+  },
+});
 
   return assignment;
 }
@@ -269,9 +311,20 @@ export async function returnAsset(assetId: string, condition: string, notes: str
     prisma.asset.update({ where: { id: assetId }, data: { status: 'AVAILABLE', assignedTo: null } }),
   ]);
 
-  await prisma.auditLog.create({
-    data: { entityType: 'Asset', entityId: assetId, action: 'RETURN', performedById, ipAddress, userAgent, field: 'status', newValue: 'AVAILABLE', severity: 'MEDIUM', summary: generateSummary({ action: 'RETURN', entityType: 'Asset', assetName: asset?.name }) },
-  });
+  await logAudit({
+  userId: performedById ?? null,
+  action: 'RETURN',
+  entityType: 'Asset',
+  entityId: assetId ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": 'status',
+    "newValue": 'AVAILABLE',
+    "severity": 'MEDIUM',
+    "summary": generateSummary({ action: 'RETURN', entityType: 'Asset', assetName: asset?.name }),
+  },
+});
 
   return { returned: true };
 }
@@ -284,9 +337,21 @@ export async function uploadAssetImage(assetId: string, filename: string, perfor
   const imageUrl = `/uploads/${filename}`;
   await prisma.asset.update({ where: { id: assetId }, data: { imageUrl } });
 
-  await prisma.auditLog.create({
-    data: { entityType: 'Asset', entityId: assetId, action: 'UPDATE', performedById, userAgent, field: 'imageUrl', newValue: imageUrl, severity: 'MEDIUM', summary: generateSummary({ action: 'UPDATE', entityType: 'Asset', field: 'imageUrl', assetName: asset?.name }), oldImageUrl: (asset as any)?.imageUrl || null },
-  });
+  await logAudit({
+  userId: performedById ?? null,
+  action: 'UPDATE',
+  entityType: 'Asset',
+  entityId: assetId ?? null,
+  ipAddress: null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": 'imageUrl',
+    "newValue": imageUrl,
+    "severity": 'MEDIUM',
+    "summary": generateSummary({ action: 'UPDATE', entityType: 'Asset', field: 'imageUrl', assetName: asset?.name }),
+    "oldImageUrl": (asset as any)?.imageUrl || null,
+  },
+});
 
   return { imageUrl };
 }
@@ -308,11 +373,50 @@ export async function getAssetHistory(assetId: string, page: number, limit: numb
 
 // --- STATS ---
 export async function getAssetStats() {
-  const [byStatus, byType, byLocation, total] = await Promise.all([
+  const now = new Date();
+  const thirtyDays = new Date();
+  thirtyDays.setDate(now.getDate() + 30);
+
+  const [byStatus, byType, byLocation, total, warrantiesExpiringSoon, warrantiesExpired, warrantiesExpiringSoonList] = await Promise.all([
     prisma.asset.groupBy({ by: ['status'], where: { deletedAt: null }, _count: { status: true } }),
     prisma.asset.groupBy({ by: ['type'], where: { deletedAt: null }, _count: { type: true } }),
     prisma.asset.groupBy({ by: ['location'], where: { deletedAt: null }, _count: { location: true } }),
     prisma.asset.count({ where: { deletedAt: null } }),
+    // Warranties expiring within 30 days (not yet expired)
+    prisma.asset.count({
+      where: {
+        warrantyExpiry: { not: null, gte: now, lte: thirtyDays },
+        status: { not: 'RETIRED' },
+        deletedAt: null,
+      },
+    }),
+    // Warranties already expired (still active/assigned)
+    prisma.asset.count({
+      where: {
+        warrantyExpiry: { not: null, lt: now },
+        status: { in: ['AVAILABLE', 'ASSIGNED', 'PENDING_ASSIGNMENT', 'MAINTENANCE'] },
+        deletedAt: null,
+      },
+    }),
+    // List of assets expiring soon (max 10 for dashboard widget)
+    prisma.asset.findMany({
+      where: {
+        warrantyExpiry: { not: null, gte: now, lte: thirtyDays },
+        status: { not: 'RETIRED' },
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        serialNumber: true,
+        propertyNumber: true,
+        warrantyExpiry: true,
+        status: true,
+        assignedTo: true,
+      },
+      orderBy: { warrantyExpiry: 'asc' },
+      take: 10,
+    }),
   ]);
 
   return {
@@ -320,13 +424,19 @@ export async function getAssetStats() {
     byStatus: Object.fromEntries(byStatus.map(s => [s.status, s._count.status])),
     byType: Object.fromEntries(byType.map(t => [t.type, t._count.type])),
     byLocation: Object.fromEntries(byLocation.filter(l => l.location).map(l => [l.location, l._count.location])),
+    warrantiesExpiringSoon,
+    warrantiesExpired,
+    warrantiesExpiringSoonList: warrantiesExpiringSoonList.map(a => ({
+      ...a,
+      warrantyExpiry: a.warrantyExpiry!.toISOString(),
+    })),
   };
 }
 
 // --- DISPOSE ---
 export async function disposeAsset(
   id: string,
-  data: { reason: string; method: string; date: string },
+  data: { reason: string; method: string; date: string; forceDispose?: boolean },
   performedById: string,
   ipAddress?: string,
   userAgent?: string,
@@ -335,7 +445,54 @@ export async function disposeAsset(
   if (!existing) throw new Error('Asset not found');
   if (existing.status === 'RETIRED') throw new Error('Asset is already retired');
 
+  // ── Pre-disposal validation ──
+
+  // a. Active assignment check — hard block
+  const activeAssignment = await prisma.assignment.findFirst({
+    where: { assetId: id, returnedAt: null },
+  });
+  if (activeAssignment) {
+    const err: any = new Error('Asset is currently assigned. Return it before disposing.');
+    err.code = 'ASSET_STILL_ASSIGNED';
+    err.assignedTo = activeAssignment.personnelId;
+    err.statusCode = 409;
+    throw err;
+  }
+
+  // b. Open agreement document check — hard block
+  const openDoc = await prisma.agreementDocument.findFirst({
+    where: { assignments: { some: { assetId: id } }, status: 'issued' },
+  });
+  if (openDoc) {
+    const err: any = new Error('Asset has an open agreement document. Close it before disposing.');
+    err.code = 'OPEN_AGREEMENT_EXISTS';
+    err.documentNumber = openDoc.documentNumber;
+    err.statusCode = 409;
+    throw err;
+  }
+
+  // c. Pending maintenance schedule check — soft block (forceable)
+  const pendingSchedules = await prisma.maintenanceSchedule.findMany({
+    where: { assetId: id, status: 'pending' },
+  });
+  if (pendingSchedules.length > 0 && !data.forceDispose) {
+    const err: any = new Error('Asset has pending maintenance schedules.');
+    err.code = 'PENDING_MAINTENANCE';
+    err.scheduleCount = pendingSchedules.length;
+    err.canForce = true;
+    err.statusCode = 409;
+    throw err;
+  }
+
   const disposalDate = new Date(data.date);
+
+  // If forceDispose, cancel pending maintenance schedules
+  if (data.forceDispose && pendingSchedules.length > 0) {
+    await prisma.maintenanceSchedule.updateMany({
+      where: { assetId: id, status: 'pending' },
+      data: { status: 'cancelled' },
+    });
+  }
 
   const asset = await prisma.asset.update({
     where: { id },
@@ -351,21 +508,21 @@ export async function disposeAsset(
   const methodLabel = data.method.replace(/_/g, ' ').toLowerCase();
   const summary = `Disposed "${existing.name}" — ${methodLabel} on ${disposalDate.toLocaleDateString('en-PH')}: ${data.reason}`;
 
-  await prisma.auditLog.create({
-    data: {
-      entityType: 'Asset',
-      entityId: id,
-      action: 'DISPOSE',
-      performedById,
-      ipAddress,
-      userAgent,
-      field: '*',
-      oldValue: null,
-      newValue: JSON.stringify(data),
-      severity: 'HIGH',
-      summary,
-    },
-  });
+  await logAudit({
+  userId: performedById ?? null,
+  action: 'DISPOSE',
+  entityType: 'Asset',
+  entityId: id ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": '*',
+    "oldValue": null,
+    "newValue": JSON.stringify(data),
+    "severity": 'HIGH',
+    "summary": summary,
+  },
+});
 
   return asset;
 }

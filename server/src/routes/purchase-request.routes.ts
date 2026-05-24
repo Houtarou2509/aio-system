@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import * as prService from '../services/purchase-request.service';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, hasPermission } from '../middleware/auth';
 import { success, error } from '../utils/response';
 
 const router = Router();
@@ -78,6 +78,32 @@ router.patch('/:id/reject', authorize(['ADMIN']), async (req: Request, res: Resp
   } catch (err: any) {
     const status = err.message.includes('not found') ? 404 : 400;
     return error(res, err.message, status);
+  }
+});
+
+// POST /api/purchase-requests/:id/convert-to-asset — requires assets:create permission
+router.post('/:id/convert-to-asset', hasPermission('assets:create'), async (req: Request, res: Response) => {
+  try {
+    const { propertyNumber, serialNumber, location, supplierId, purchaseDate, purchasePrice, warrantyExpiry, warrantyNotes } = req.body;
+    const result = await prService.convertToAsset(
+      String(req.params.id),
+      req.user!.id,
+      { propertyNumber, serialNumber, location, supplierId, purchaseDate, purchasePrice, warrantyExpiry, warrantyNotes },
+      getClientIp(req),
+      String(req.headers['user-agent'] || ''),
+    );
+    return success(res, result, 201);
+  } catch (err: any) {
+    if (err.code === 'NOT_APPROVED') {
+      return error(res, err.message, 409, { code: 'NOT_APPROVED' });
+    }
+    if (err.code === 'ALREADY_CONVERTED') {
+      return error(res, err.message, 409, { code: 'ALREADY_CONVERTED', assetId: err.assetId });
+    }
+    if (err.code === 'NOT_FOUND') {
+      return error(res, err.message, 404);
+    }
+    return error(res, err.message, 400);
   }
 });
 

@@ -7,7 +7,7 @@ import {
   Plus, ScanLine, ClipboardList, Settings,
   PieChart, BarChart3, ShieldAlert, Activity,
   Clock, CalendarDays, Layers,
-  SlidersHorizontal, RefreshCw,
+  SlidersHorizontal, RefreshCw, AlertTriangle, ArrowRight,
 } from 'lucide-react';
 import { PermissionGate } from '../components/auth';
 import { CustomizePanel } from '../components/dashboard/CustomizePanel';
@@ -107,6 +107,22 @@ interface DashboardData {
   byStatus: Record<string, number>;
   byType: Record<string, number>;
   activityFeed: string[];
+}
+
+interface WarrantyAlertAsset {
+  id: string;
+  name: string;
+  serialNumber: string | null;
+  propertyNumber: string | null;
+  warrantyExpiry: string;
+  status: string;
+  assignedTo: string | null;
+}
+
+interface WarrantyStats {
+  warrantiesExpiringSoon: number;
+  warrantiesExpired: number;
+  warrantiesExpiringSoonList: WarrantyAlertAsset[];
 }
 
 interface UpcomingSchedule {
@@ -268,6 +284,7 @@ export default function DashboardPage() {
   const [warrantiesLoading, setWarrantiesLoading] = useState(true);
   const [locationStats, setLocationStats] = useState<LocationStat[]>([]);
   const [ageStats, setAgeStats] = useState<AgeStat[]>([]);
+  const [warrantyStats, setWarrantyStats] = useState<WarrantyStats | null>(null);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -305,6 +322,19 @@ export default function DashboardPage() {
       .then(r => r.json())
       .then(d => { if (d.success) setAgeStats(d.data); })
       .catch((e) => console.error('[Dashboard] Failed to load age stats:', e));
+
+    fetch('/api/assets/stats', { headers: h })
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          setWarrantyStats({
+            warrantiesExpiringSoon: d.data.warrantiesExpiringSoon ?? 0,
+            warrantiesExpired: d.data.warrantiesExpired ?? 0,
+            warrantiesExpiringSoonList: d.data.warrantiesExpiringSoonList ?? [],
+          });
+        }
+      })
+      .catch((e) => console.error('[Dashboard] Failed to load warranty stats:', e));
   }, []);
 
   /* ── Initial load ────────────────────────────────────── */
@@ -667,6 +697,83 @@ export default function DashboardPage() {
           </div>
         </div>
       </header>
+
+      {/* ═══════════════════════════════════════════════════════
+          WARRANTY EXPIRY ALERT CARDS
+          ═══════════════════════════════════════════════════════ */}
+      {warrantyStats && warrantyStats.warrantiesExpiringSoon > 0 && (
+        <section className="px-6 pt-3 pb-1">
+          <div className="rounded-xl border-2 border-[#f8931f]/40 bg-gradient-to-r from-[#f8931f]/8 via-[#f8931f]/4 to-transparent dark:from-[#f8931f]/10 dark:via-[#f8931f]/5 dark:to-transparent overflow-hidden">
+            <div className="px-5 pt-4 pb-3 flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/15">
+                <AlertTriangle className="h-5 w-5 text-[#f8931f]" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-[#012061] dark:text-slate-100">
+                  ⚠ {warrantyStats.warrantiesExpiringSoon} Warrant{warrantyStats.warrantiesExpiringSoon === 1 ? 'y' : 'ies'} Expiring Within 30 Days
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">These assets will fall out of warranty soon</p>
+              </div>
+            </div>
+            <div className="px-5 pb-3 space-y-1.5">
+              {warrantyStats.warrantiesExpiringSoonList.slice(0, 5).map(a => (
+                <div key={a.id} className="flex items-center justify-between rounded-lg bg-white/60 dark:bg-slate-800/60 px-3 py-2 border border-[#f8931f]/10 dark:border-[#f8931f]/20">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{a.name}</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0">{a.serialNumber || '—'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                      Expires: {new Date(a.warrantyExpiry).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                      a.status === 'ASSIGNED' ? 'bg-[#f8931f]/10 text-[#f8931f] border border-[#f8931f]/30' :
+                      a.status === 'AVAILABLE' ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' :
+                      'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600'
+                    }`}>
+                      {a.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 pb-4 pt-1">
+              <button
+                onClick={() => navigate('/assets?warrantyExpiring=1')}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#f8931f] hover:text-[#e0841a] transition-colors"
+              >
+                View all expiring warranties <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {warrantyStats && warrantyStats.warrantiesExpired > 0 && (
+        <section className="px-6 pt-3 pb-1">
+          <div className="rounded-xl border-2 border-[#7B1113]/40 bg-gradient-to-r from-[#7B1113]/8 via-[#7B1113]/4 to-transparent dark:from-[#7B1113]/10 dark:via-[#7B1113]/5 dark:to-transparent overflow-hidden">
+            <div className="px-5 pt-4 pb-3 flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#7B1113]/15">
+                <ShieldAlert className="h-5 w-5 text-[#7B1113]" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-[#012061] dark:text-slate-100">
+                  {warrantyStats.warrantiesExpired} Warrant{warrantyStats.warrantiesExpired === 1 ? 'y' : 'ies'} Already Expired
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">These assets are past warranty — repairs may not be covered</p>
+              </div>
+            </div>
+            <div className="px-5 pb-3">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {warrantyStats.warrantiesExpired} active asset{warrantyStats.warrantiesExpired !== 1 ? 's' : ''} with expired warranties.{' '}
+                <button onClick={() => navigate('/assets?warrantyExpired=1')} className="inline-flex items-center gap-1 text-[#7B1113] font-semibold hover:underline">
+                  View expired warranties <ArrowRight className="w-3 h-3" />
+                </button>
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ═══════════════════════════════════════════════════════
           KPI POWER TILES

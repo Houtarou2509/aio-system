@@ -1,9 +1,32 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '../components/ui/dialog';
 import { AddUserModal } from '../components/users/AddUserModal';
 import { EditUserModal } from '../components/users/EditUserModal';
-import { Users, Shield, Search, Edit3, UserX, UserCheck, UserPlus, Activity, Download } from 'lucide-react';
+import {
+  Users,
+  Shield,
+  Search,
+  Edit3,
+  UserX,
+  UserCheck,
+  UserPlus,
+  Activity,
+  Download,
+  ShieldOff,
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 
 interface User {
   id: string;
@@ -15,6 +38,7 @@ interface User {
   permissions: string[];
   lastLogin: string | null;
   createdAt: string;
+  twoFactorEnabled: boolean;
 }
 
 const getInitials = (name: string) =>
@@ -38,29 +62,68 @@ export default function UserManagementPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  // Dialogs
+  const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null);
+  const [reset2faTarget, setReset2faTarget] = useState<User | null>(null);
+
+  // Debounced search
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [search]);
+
+  // Reset page on filter change
+  useEffect(() => {
+    setPage(1);
+  }, [roleFilter, statusFilter]);
 
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchUsers = useCallback(async () => {
-    try {
-      setLoading(true);
-      const token = accessToken || localStorage.getItem('accessToken');
-      const res = await fetch('/api/users', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error?.message || 'Failed to fetch users');
-      setUsers(data.data);
-      console.log('fetchUsers result:', data.data);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [accessToken]);
+  const fetchUsers = useCallback(
+    async (overridePage?: number) => {
+      try {
+        setLoading(true);
+        const token = accessToken || localStorage.getItem('accessToken');
+        const params = new URLSearchParams();
+        const p = overridePage ?? page;
+        params.set('page', String(p));
+        params.set('limit', '10');
+        if (debouncedSearch) params.set('search', debouncedSearch);
+        if (roleFilter !== 'All') params.set('role', roleFilter);
+        if (statusFilter !== 'All') params.set('status', statusFilter);
+
+        const res = await fetch(`/api/users?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error?.message || 'Failed to fetch users');
+        setUsers(data.data);
+        setTotalPages(data.pagination?.totalPages ?? 1);
+        setTotalCount(data.pagination?.totalCount ?? data.data.length);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [accessToken, debouncedSearch, roleFilter, statusFilter, page],
+  );
 
   useEffect(() => {
     fetchUsers();
@@ -137,25 +200,64 @@ export default function UserManagementPage() {
     }
   };
 
-  const handleStatusToggle = async (user: User) => {
-    const newStatus = user.status === 'active' ? 'inactive' : 'active';
-    if (newStatus === 'inactive') {
-      const confirmed = window.confirm(
-        `Deactivate ${user.username}? They will no longer be able to log in.`
-      );
-      if (!confirmed) return;
+  // ── Deactivate via Dialog ──
+  const handleDeactivateConfirm = async () => {
+    if (!deactivateTarget) return;
+    try {
+      setActionLoading(deactivateTarget.id);
+      const token = accessToken || localStorage.getItem('accessToken');
+      const res = await fetch(`/api/users/${deactivateTarget.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: 'inactive' }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error?.message || 'Failed to update status');
+      showToast(`${deactivateTarget.username} is now inactive`);
+      setDeactivateTarget(null);
+      await fetchUsers();
+    } catch (err: any) {
+      showToast(err.message);
+    } finally {
+      setActionLoading(null);
     }
+  };
+
+  // ── Activate (no confirmation needed) ──
+  const handleActivate = async (user: User) => {
     try {
       setActionLoading(user.id);
       const token = accessToken || localStorage.getItem('accessToken');
       const res = await fetch(`/api/users/${user.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: 'active' }),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error?.message || 'Failed to update status');
-      showToast(`${user.username} is now ${newStatus}`);
+      showToast(`${user.username} is now active`);
+      await fetchUsers();
+    } catch (err: any) {
+      showToast(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // ── 2FA Reset via Dialog ──
+  const handle2faResetConfirm = async () => {
+    if (!reset2faTarget) return;
+    try {
+      setActionLoading(reset2faTarget.id);
+      const token = accessToken || localStorage.getItem('accessToken');
+      const res = await fetch(`/api/users/${reset2faTarget.id}/2fa`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error?.message || 'Failed to reset 2FA');
+      showToast(`2FA reset for ${reset2faTarget.username}`);
+      setReset2faTarget(null);
       await fetchUsers();
     } catch (err: any) {
       showToast(err.message);
@@ -167,26 +269,54 @@ export default function UserManagementPage() {
   // ── Export ──
   const [exportLoading, setExportLoading] = useState(false);
 
-  const handleExportCSV = () => {
+  const handleExportCSV = async () => {
     setExportLoading(true);
     try {
-      const headers = ['ID', 'Username', 'Full Name', 'Email', 'Role', 'Status', 'Last Login', 'Created At'];
+      const token = accessToken || localStorage.getItem('accessToken');
+      const params = new URLSearchParams();
+      params.set('limit', '999');
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (roleFilter !== 'All') params.set('role', roleFilter);
+      if (statusFilter !== 'All') params.set('status', statusFilter);
+
+      const res = await fetch(`/api/users?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error('Export failed');
+
+      const allUsers: User[] = data.data;
+      const headers = [
+        'ID',
+        'Username',
+        'Full Name',
+        'Email',
+        'Role',
+        'Status',
+        '2FA',
+        'Last Login',
+        'Created At',
+      ];
       const esc = (val: string | number | null | undefined) => {
         if (val == null) return '';
         const s = String(val);
-        if (s.includes(',') || s.includes('"') || s.includes('\n')) return `"${s.replace(/"/g, '""')}"`;
+        if (s.includes(',') || s.includes('"') || s.includes('\n'))
+          return `"${s.replace(/"/g, '""')}"`;
         return s;
       };
-      const rows = users.map(u => [
-        esc(u.id),
-        esc(u.username),
-        esc(u.fullName),
-        esc(u.email),
-        esc(u.role),
-        esc(u.status),
-        esc(u.lastLogin ? new Date(u.lastLogin).toISOString().split('T')[0] : ''),
-        esc(u.createdAt ? new Date(u.createdAt).toISOString().split('T')[0] : ''),
-      ].join(','));
+      const rows = allUsers.map((u) =>
+        [
+          esc(u.id),
+          esc(u.username),
+          esc(u.fullName),
+          esc(u.email),
+          esc(u.role),
+          esc(u.status),
+          esc(u.twoFactorEnabled ? 'Enabled' : 'Off'),
+          esc(u.lastLogin ? new Date(u.lastLogin).toISOString().split('T')[0] : ''),
+          esc(u.createdAt ? new Date(u.createdAt).toISOString().split('T')[0] : ''),
+        ].join(','),
+      );
       const csv = [headers.join(','), ...rows].join('\n');
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const a = document.createElement('a');
@@ -194,7 +324,7 @@ export default function UserManagementPage() {
       a.download = `users-export-${new Date().toISOString().split('T')[0]}.csv`;
       a.click();
       URL.revokeObjectURL(a.href);
-    } catch (err: any) {
+    } catch {
       // silently fail
     }
     setExportLoading(false);
@@ -202,23 +332,16 @@ export default function UserManagementPage() {
 
   // ── KPIs ──
   const kpis = {
-    totalUsers: users.length,
+    totalUsers: totalCount,
     activeAdmins: users.filter((u) => u.role === 'ADMIN' && u.status === 'active').length,
-    recentlyLoggedIn: users.filter((u) => u.status === 'active').length,
+    active: users.filter((u) => u.status === 'active').length,
+    staleAccounts: users.filter((u) => {
+      if (u.status !== 'active') return false;
+      if (u.lastLogin === null) return true;
+      const days = (Date.now() - new Date(u.lastLogin).getTime()) / (1000 * 60 * 60 * 24);
+      return days > 60;
+    }).length,
   };
-
-  // ── Filtered users ──
-  const filtered = users.filter((u) => {
-    const q = search.toLowerCase();
-    const matchSearch =
-      !search ||
-      u.username.toLowerCase().includes(q) ||
-      (u.fullName || '').toLowerCase().includes(q) ||
-      u.email.toLowerCase().includes(q);
-    const matchRole = roleFilter === 'All' || u.role === roleFilter;
-    const matchStatus = statusFilter === 'All' || u.status === statusFilter;
-    return matchSearch && matchRole && matchStatus;
-  });
 
   // ── Badges ──
   const roleBadge = (role: string) => {
@@ -226,7 +349,9 @@ export default function UserManagementPage() {
     return (
       <span
         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-          isNavy ? 'text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+          isNavy
+            ? 'text-white'
+            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
         }`}
         style={isNavy ? { backgroundColor: '#012061' } : undefined}
       >
@@ -251,8 +376,39 @@ export default function UserManagementPage() {
     );
   };
 
+  // ── Inactivity badge ──
+  const inactivityBadge = (u: User) => {
+    const isSelf = currentUser?.id === u.id;
+    if (isSelf) return null;
+    if (u.status !== 'active') return null;
+
+    if (u.lastLogin === null) {
+      return (
+        <span className="ml-1.5 inline-block rounded bg-[#f8931f] text-white text-xs px-1.5 py-0.5">
+          Never Logged In
+        </span>
+      );
+    }
+    const daysSince = (Date.now() - new Date(u.lastLogin).getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSince > 90) {
+      return (
+        <span className="ml-1.5 inline-block rounded bg-[#7B1113] text-white text-xs px-1.5 py-0.5">
+          90d+ Inactive
+        </span>
+      );
+    }
+    if (daysSince > 60) {
+      return (
+        <span className="ml-1.5 inline-block rounded bg-[#f8931f] text-white text-xs px-1.5 py-0.5">
+          60d+ Inactive
+        </span>
+      );
+    }
+    return null;
+  };
+
   // ── Loading ──
-  if (loading) {
+  if (loading && users.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <div
@@ -263,11 +419,11 @@ export default function UserManagementPage() {
     );
   }
 
-  if (error) {
+  if (error && users.length === 0) {
     return (
       <div className="p-8">
         <p className="text-red-600">{error}</p>
-        <Button variant="outline" onClick={fetchUsers} className="mt-2">
+        <Button variant="outline" onClick={() => fetchUsers()} className="mt-2">
           Retry
         </Button>
       </div>
@@ -288,14 +444,19 @@ export default function UserManagementPage() {
 
           {/* Right: Actions */}
           <div className="flex items-center gap-2">
-            <button onClick={handleExportCSV} disabled={exportLoading || users.length === 0}
+            <button
+              onClick={handleExportCSV}
+              disabled={exportLoading}
               className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors disabled:opacity-50"
             >
               <Download className="h-3.5 w-3.5" />
               {exportLoading ? 'Exporting…' : 'Export CSV'}
             </button>
             <button
-              onClick={() => { setServerErrors({}); setShowAddModal(true); }}
+              onClick={() => {
+                setServerErrors({});
+                setShowAddModal(true);
+              }}
               className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors"
             >
               <UserPlus className="h-3.5 w-3.5" /> Add User
@@ -309,7 +470,7 @@ export default function UserManagementPage() {
 
       {/* ═══ KPI TILES ═══════════════════════════════════════ */}
       <section className="px-6 pt-4 shrink-0">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
               <Users className="h-5 w-5 text-[#f8931f]" />
@@ -333,8 +494,17 @@ export default function UserManagementPage() {
               <Activity className="h-5 w-5 text-[#f8931f]" />
             </div>
             <div className="min-w-0">
-              <p className="text-xl font-bold leading-tight text-[#f8931f]">{kpis.recentlyLoggedIn}</p>
+              <p className="text-xl font-bold leading-tight text-[#f8931f]">{kpis.active}</p>
               <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Active</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
+              <AlertTriangle className="h-5 w-5 text-[#f8931f]" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xl font-bold leading-tight text-[#f8931f]">{kpis.staleAccounts}</p>
+              <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">Stale Accounts</p>
             </div>
           </div>
         </div>
@@ -377,6 +547,7 @@ export default function UserManagementPage() {
             <option value="All">Status: All</option>
             <option value="active">Status: Active</option>
             <option value="inactive">Status: Inactive</option>
+            <option value="stale">Status: Stale (60d+)</option>
           </select>
         </div>
       </section>
@@ -399,109 +570,226 @@ export default function UserManagementPage() {
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-5 max-w-xs">
               Add users to grant access to the system.
             </p>
-            <button onClick={() => { setServerErrors({}); setShowAddModal(true); }}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#f8931f] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors">
+            <button
+              onClick={() => {
+                setServerErrors({});
+                setShowAddModal(true);
+              }}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#f8931f] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors"
+            >
               <UserPlus className="h-4 w-4" /> Add User
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[#012061] text-left">
-                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">User</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Role</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Status</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Last Login</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filtered.map((u) => {
-                  const isSelf = currentUser?.id === u.id;
-                  const busy = actionLoading === u.id;
-                  return (
-                    <tr key={u.id} className="bg-white dark:bg-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all group">
-                      {/* User */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white bg-[#012061]">
-                            {getInitials(u.fullName || u.username)}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-[#012061] dark:text-slate-100">
-                              {u.fullName || u.username}
-                            </p>
-                            <p className="text-xs text-slate-400 dark:text-slate-500">{u.email}</p>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Role */}
-                      <td className="px-4 py-3">{roleBadge(u.role)}</td>
-
-                      {/* Status */}
-                      <td className="px-4 py-3">
-                        {u.status === 'active' ? (
-                          <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border border-emerald-200">
-                            Active
-                          </span>
-                        ) : (
-                          <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                            Inactive
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Last Login */}
-                      <td className="px-4 py-3">{formatDate(u.lastLogin)}</td>
-
-                      {/* Actions */}
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => { setServerErrors({}); setEditingUser(u); }}
-                            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-[#f8931f] transition-colors"
-                            title="Edit"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          {u.status === 'active' ? (
-                            <button
-                              className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950 text-slate-400 hover:text-[#7B1113] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                              disabled={isSelf || busy}
-                              onClick={() => handleStatusToggle(u)}
-                              title={isSelf ? 'Cannot deactivate your own account' : 'Deactivate'}
-                            >
-                              <UserX className="w-3.5 h-3.5" />
-                            </button>
-                          ) : (
-                            <button
-                              className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950 text-slate-400 hover:text-emerald-600 transition-colors"
-                              disabled={busy}
-                              onClick={() => handleStatusToggle(u)}
-                              title="Activate"
-                            >
-                              <UserCheck className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-slate-400 text-sm bg-white dark:bg-slate-800">
-                      No users match your filters.
-                    </td>
+          <>
+            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-[#012061] text-left">
+                    <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">User</th>
+                    <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Role</th>
+                    <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Status</th>
+                    <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">2FA</th>
+                    <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Last Login</th>
+                    <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase text-right">Actions</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {users.map((u) => {
+                    const isSelf = currentUser?.id === u.id;
+                    const busy = actionLoading === u.id;
+                    return (
+                      <tr
+                        key={u.id}
+                        className="bg-white dark:bg-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all group"
+                      >
+                        {/* User */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white bg-[#012061]">
+                              {getInitials(u.fullName || u.username)}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-[#012061] dark:text-slate-100">
+                                {u.fullName || u.username}
+                              </p>
+                              <p className="text-xs text-slate-400 dark:text-slate-500">{u.email}</p>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Role */}
+                        <td className="px-4 py-3">{roleBadge(u.role)}</td>
+
+                        {/* Status */}
+                        <td className="px-4 py-3">
+                          {u.status === 'active' ? (
+                            <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border border-emerald-200">
+                              Active
+                            </span>
+                          ) : (
+                            <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                              Inactive
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 2FA */}
+                        <td className="px-4 py-3">
+                          {u.twoFactorEnabled ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-700 dark:text-emerald-200">
+                              <Shield className="h-3 w-3" />
+                              Enabled
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-slate-500 dark:text-slate-400">
+                              Off
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Last Login */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center flex-wrap gap-1">
+                            {formatDate(u.lastLogin)}
+                            {inactivityBadge(u)}
+                          </div>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => {
+                                setServerErrors({});
+                                setEditingUser(u);
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-[#f8931f] transition-colors"
+                              title="Edit"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            {u.twoFactorEnabled && !isSelf && (
+                              <button
+                                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-[#7B1113] transition-colors"
+                                disabled={busy}
+                                onClick={() => setReset2faTarget(u)}
+                                title="Reset 2FA"
+                              >
+                                <ShieldOff className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {u.status === 'active' ? (
+                              <button
+                                className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950 text-slate-400 hover:text-[#7B1113] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                disabled={isSelf || busy}
+                                onClick={() => setDeactivateTarget(u)}
+                                title={isSelf ? 'Cannot deactivate your own account' : 'Deactivate'}
+                              >
+                                <UserX className="w-3.5 h-3.5" />
+                              </button>
+                            ) : (
+                              <button
+                                className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950 text-slate-400 hover:text-emerald-600 transition-colors"
+                                disabled={busy}
+                                onClick={() => handleActivate(u)}
+                                title="Activate"
+                              >
+                                <UserCheck className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ═══ PAGINATION ═════════════════════════════════ */}
+            <div className="flex items-center justify-between mt-4 pb-2">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {totalCount} user{totalCount !== 1 ? 's' : ''} total
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" /> Prev
+                </button>
+                <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Next <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
+
+      {/* ═══ DEACTIVATE DIALOG ══════════════════════════════ */}
+      <Dialog open={!!deactivateTarget} onOpenChange={(open: boolean) => { if (!open) setDeactivateTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deactivate User</DialogTitle>
+            <DialogDescription>
+              {deactivateTarget && (
+                <>
+                  <span className="font-semibold">{deactivateTarget.fullName || deactivateTarget.username}</span>
+                  {' '}(@{deactivateTarget.username}) will be deactivated.
+                  They will immediately lose access to the system.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button
+              className="bg-[#7B1113] hover:bg-[#9B1115] text-white"
+              onClick={handleDeactivateConfirm}
+              disabled={actionLoading === deactivateTarget?.id}
+            >
+              Deactivate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ RESET 2FA DIALOG ══════════════════════════════ */}
+      <Dialog open={!!reset2faTarget} onOpenChange={(open: boolean) => { if (!open) setReset2faTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset 2FA</DialogTitle>
+            <DialogDescription>
+              {reset2faTarget && (
+                <>
+                  <span className="font-semibold">{reset2faTarget.fullName || reset2faTarget.username}</span>'s
+                  two-factor authentication will be disabled. They will need to set it up again on next login.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button
+              className="bg-[#7B1113] hover:bg-[#9B1115] text-white"
+              onClick={handle2faResetConfirm}
+              disabled={actionLoading === reset2faTarget?.id}
+            >
+              Reset 2FA
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ═══ MODALS ════════════════════════════════════════ */}
       {showAddModal && (
@@ -511,7 +799,9 @@ export default function UserManagementPage() {
         <EditUserModal
           user={editingUser}
           isSelf={currentUser?.id === editingUser.id}
-          onSubmit={async (data) => { await handleEditUser(data); }}
+          onSubmit={async (data) => {
+            await handleEditUser(data);
+          }}
           onClose={() => setEditingUser(null)}
           serverErrors={serverErrors}
         />

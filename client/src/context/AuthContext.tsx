@@ -19,6 +19,7 @@ interface AuthState {
   isLoading: boolean;
   requiresTwoFactor: boolean;
   pendingTwoFactorUserId: string | null;
+  mustChangePassword: boolean;
 }
 
 interface AuthContextType extends AuthState {
@@ -27,6 +28,7 @@ interface AuthContextType extends AuthState {
   refreshAuth: () => Promise<void>;
   setup2Fa: () => Promise<{ secret: string; otpauthUrl: string }>;
   verify2Fa: (token: string) => Promise<void>;
+  clearMustChangePassword: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -40,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading: true,
     requiresTwoFactor: false,
     pendingTwoFactorUserId: null,
+    mustChangePassword: false,
   });
 
   const storeTokens = (accessToken: string, refreshToken: string) => {
@@ -79,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading: false,
       requiresTwoFactor: false,
       pendingTwoFactorUserId: null,
+      mustChangePassword: !!data.data.mustChangePassword,
     });
   }, []);
 
@@ -98,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading: false,
       requiresTwoFactor: false,
       pendingTwoFactorUserId: null,
+      mustChangePassword: false,
     });
   }, [state.accessToken]);
 
@@ -162,6 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           user: meData.data,
           isAuthenticated: true,
           isLoading: false,
+          mustChangePassword: !!meData.data.mustChangePassword,
         }));
       }
     } catch {
@@ -192,6 +198,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!data.success) throw new Error(data.error?.message || '2FA verification failed');
   }, [state.accessToken]);
 
+  const clearMustChangePassword = useCallback(() => {
+    setState(prev => ({ ...prev, mustChangePassword: false }));
+  }, []);
+
   // Listen for forced session-expired events from the API interceptor
   useEffect(() => {
     const handler = () => {
@@ -204,6 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading: false,
         requiresTwoFactor: false,
         pendingTwoFactorUserId: null,
+        mustChangePassword: false,
       });
     };
     window.addEventListener(AUTH_EXPIRED_EVENT, handler);
@@ -228,7 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, refreshAuth, setup2Fa, verify2Fa }}>
+    <AuthContext.Provider value={{ ...state, login, logout, refreshAuth, setup2Fa, verify2Fa, clearMustChangePassword }}>
       {children}
     </AuthContext.Provider>
   );

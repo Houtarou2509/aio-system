@@ -23,6 +23,8 @@ import SuppliersPage from './pages/SuppliersPage';
 import NotificationsPage from './pages/NotificationsPage';
 import MaintenanceCalendarPage from './pages/MaintenanceCalendarPage';
 import BackupManagementPage from './pages/BackupManagementPage';
+import AccountabilityReportPage from './pages/AccountabilityReportPage';
+import ChangePasswordPage from './pages/ChangePasswordPage';
 import './index.css';
 
 function App() {
@@ -34,6 +36,7 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/setup-2fa" element={<ProtectedRoute><Setup2FaPage /></ProtectedRoute>} />
+          <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
           <Route path="/guest/:token" element={<GuestAssetPage />} />
 
           {/* All authenticated routes share the sidebar layout */}
@@ -58,6 +61,7 @@ function App() {
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="maintenance-calendar" element={<MaintenanceCalendarPage />} />
             <Route path="backups" element={<ProtectedRoute requiredRole="ADMIN"><BackupManagementPage /></ProtectedRoute>} />
+            <Route path="accountability/report" element={<ProtectedRoute requiredRole="ADMIN"><AccountabilityReportPage /></ProtectedRoute>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

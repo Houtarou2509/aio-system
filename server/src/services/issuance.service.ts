@@ -1,3 +1,4 @@
+import { AUDIT_ACTIONS, logAudit } from './auditLog.service';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import * as crypto from 'crypto';
@@ -12,7 +13,59 @@ function resolveAssetStatusAfterReturn(returnCondition?: string): 'AVAILABLE' | 
   return 'AVAILABLE';
 }
 
+/* ─── Write an AssetConditionLog entry (never throws to caller) ─── */
+export async function createConditionLog(params: {
+  assetId: string;
+  assignmentId?: string;
+  event: 'issued' | 'returned' | 'transferred' | 'manual';
+  condition: string;
+  note?: string | null;
+  recordedById?: string | null;
+}): Promise<void> {
+  try {
+    await prisma.assetConditionLog.create({
+      data: {
+        assetId: params.assetId,
+        assignmentId: params.assignmentId ?? null,
+        event: params.event,
+        condition: params.condition,
+        note: params.note ?? null,
+        recordedById: params.recordedById ?? null,
+      },
+    });
+  } catch (err) {
+    console.error('[createConditionLog] Error:', err);
+    // Must not throw to caller
+  }
+}
 
+
+
+/* ─── Auto-close AgreementDocument when all linked assets are returned ─── */
+export async function checkAndCloseAgreementDocument(agreementDocumentId: string): Promise<void> {
+  try {
+    if (!agreementDocumentId) return;
+
+    const activeAssignments = await prisma.assignment.findMany({
+      where: {
+        agreementDocumentId,
+        returnedAt: null,
+      },
+      select: { id: true },
+    });
+
+    if (activeAssignments.length === 0) {
+      // All linked assignments have been returned — close the document
+      await prisma.agreementDocument.update({
+        where: { id: agreementDocumentId },
+        data: { status: 'returned' },
+      });
+    }
+  } catch (err) {
+    console.error('[checkAndCloseAgreementDocument] Error:', err);
+    // Must not throw to caller
+  }
+}
 
 /* ─── Get active issuance for asset (QR return) ─── */
 export async function getActiveIssuanceForAsset(assetId: string) {
@@ -168,29 +221,32 @@ export async function createIssuance(params: {
     return a;
   });
 
-  await prisma.auditLog.create({
-    data: {
-      entityType: 'Assignment',
-      entityId: assignment.id,
-      action: 'CHECKOUT',
-      performedById,
-      ipAddress,
+  logAudit({
+    userId: performedById ?? null,
+    action: AUDIT_ACTIONS.ISSUANCE_CREATED,
+    entityType: 'Assignment',
+    entityId: assignment.id,
+    ipAddress: ipAddress ?? null,
+    metadata: {
+      assetId,
+      personnelId,
+      documentNumber: assignment.agreementDocument?.documentNumber ?? null,
       userAgent,
       field: '*',
       newValue: `${asset.name} → ${personnel.fullName}`,
       severity: classifySeverity('CHECKOUT'),
       summary: generateSummary({ action: 'CHECKOUT', entityType: 'Assignment', assetName: asset.name, serialNumber: asset.serialNumber, newValue: personnel.fullName }),
     },
-  });
+  }).catch(() => {});
 
-  // Also log against the Asset entity so the Asset audit timeline shows handovers
-  await prisma.auditLog.create({
-    data: {
-      entityType: 'Asset',
-      entityId: assetId,
-      action: 'CHECKOUT',
-      performedById,
-      ipAddress,
+  // Also log against the Asset entity so the Asset audit timeline shows handovers.
+  logAudit({
+    userId: performedById ?? null,
+    action: 'CHECKOUT',
+    entityType: 'Asset',
+    entityId: assetId,
+    ipAddress: ipAddress ?? null,
+    metadata: {
       userAgent,
       field: 'status',
       oldValue: asset.status,
@@ -198,7 +254,17 @@ export async function createIssuance(params: {
       severity: 'HIGH',
       summary: generateSummary({ action: 'CHECKOUT', entityType: 'Asset', assetName: asset.name, serialNumber: asset.serialNumber, newValue: personnel.fullName }),
     },
-  });
+  }).catch(() => {});
+
+  // Condition log for issuance
+  createConditionLog({
+    assetId,
+    assignmentId: assignment.id,
+    event: 'issued',
+    condition: condition || 'Good',
+    note: notes || null,
+    recordedById: performedById,
+  }).catch(() => {});
 
   return assignment;
 }
@@ -275,7 +341,7 @@ export async function bulkIssueAssets(
   }
 
   // Create one immutable agreement document for the batch, then link all assignments to it.
-  const assignments = await prisma.$transaction(async (tx) => {
+  const { assignments, agreementDocument } = await prisma.$transaction(async (tx) => {
     const designationSnapshot = personnel.designation || null;
     const projectSnapshot = personnel.project || null;
     const document = await tx.agreementDocument.create({
@@ -328,36 +394,50 @@ export async function bulkIssueAssets(
       await tx.asset.update({ where: { id: aid }, data: { status: 'ASSIGNED' } });
       results.push(a);
     }
-    return results;
+    return { assignments: results, agreementDocument: document };
   });
+
+  logAudit({
+    userId: performedById ?? null,
+    action: AUDIT_ACTIONS.ISSUANCE_BULK_CREATED,
+    entityType: 'AgreementDocument',
+    entityId: agreementDocument.id,
+    ipAddress: ipAddress ?? null,
+    metadata: {
+      bulkBatchId,
+      assetCount: validAssetIds.length,
+      personnelId,
+      userAgent,
+    },
+  }).catch(() => {});
 
   // Create audit logs AFTER transaction (don't bloat the transaction)
   for (const a of assignments) {
     const assetData = assetMap.get(a.assetId);
     const assetName = assetData?.name ?? a.assetId;
 
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'Assignment',
-        entityId: a.id,
-        action: 'CHECKOUT',
-        performedById,
-        ipAddress,
+    logAudit({
+      userId: performedById ?? null,
+      action: 'CHECKOUT',
+      entityType: 'Assignment',
+      entityId: a.id,
+      ipAddress: ipAddress ?? null,
+      metadata: {
         userAgent,
         field: '*',
         newValue: `${assetName} → ${personnel.fullName}`,
         severity: classifySeverity('CHECKOUT'),
         summary: generateSummary({ action: 'CHECKOUT', entityType: 'Assignment', assetName, newValue: personnel.fullName }),
       },
-    });
+    }).catch(() => {});
 
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'Asset',
-        entityId: a.assetId,
-        action: 'CHECKOUT',
-        performedById,
-        ipAddress,
+    logAudit({
+      userId: performedById ?? null,
+      action: 'CHECKOUT',
+      entityType: 'Asset',
+      entityId: a.assetId,
+      ipAddress: ipAddress ?? null,
+      metadata: {
         userAgent,
         field: 'status',
         oldValue: assetData?.status || 'AVAILABLE',
@@ -365,7 +445,19 @@ export async function bulkIssueAssets(
         severity: 'HIGH',
         summary: generateSummary({ action: 'CHECKOUT', entityType: 'Asset', assetName }),
       },
-    });
+    }).catch(() => {});
+  }
+
+  // Condition logs for bulk issuance
+  for (const a of assignments) {
+    createConditionLog({
+      assetId: a.assetId,
+      assignmentId: a.id,
+      event: 'issued',
+      condition: condition || 'Good',
+      note: notes || null,
+      recordedById: performedById,
+    }).catch(() => {});
   }
 
   return {
@@ -407,6 +499,13 @@ export async function signIssuance(assignmentId: string, signerName: string, per
   });
 
   if (assignment.agreementDocumentId) {
+    // Compute signature hash for tamper-evidence
+    const doc = await prisma.agreementDocument.findUnique({ where: { id: assignment.agreementDocumentId } });
+    const signatureHash = crypto
+      .createHash('sha256')
+      .update([doc?.documentNumber || '', trimmedName, signedAt.toISOString()].join('|'))
+      .digest('hex');
+
     await prisma.agreementDocument.update({
       where: { id: assignment.agreementDocumentId },
       data: {
@@ -415,17 +514,18 @@ export async function signIssuance(assignmentId: string, signerName: string, per
         recipientSignatureName: trimmedName,
         recipientSignatureMethod: 'typed',
         recipientSignatureIp: ipAddress || null,
+        signatureHash,
       },
     });
   }
 
-  await prisma.auditLog.create({
-    data: {
-      entityType: 'Assignment',
-      entityId: assignmentId,
-      action: 'DIGITAL_SIGNOFF',
-      performedById,
-      ipAddress,
+  logAudit({
+    userId: performedById ?? null,
+    action: AUDIT_ACTIONS.ISSUANCE_SIGNED,
+    entityType: 'Assignment',
+    entityId: assignment.id,
+    ipAddress: ipAddress ?? null,
+    metadata: {
       userAgent,
       field: 'recipientSignedAt',
       oldValue: 'null',
@@ -433,7 +533,7 @@ export async function signIssuance(assignmentId: string, signerName: string, per
       severity: 'HIGH',
       summary: generateSummary({ action: 'UPDATED', entityType: 'Assignment', assetName: assignment.asset.name, serialNumber: assignment.asset.serialNumber, newValue: `Signed by ${trimmedName}` }),
     },
-  });
+  }).catch(() => {});
 
   return { signed: result.count, signedAt, signerName: trimmedName, batchId: assignment.bulkBatchId };
 }
@@ -441,12 +541,13 @@ export async function signIssuance(assignmentId: string, signerName: string, per
 /* ─── Return issuance ─── */
 export async function returnIssuance(
   assignmentId: string,
-  returnCondition?: string,
+  returnCondition?: string | null,
   performedById: string = 'system',
   ipAddress?: string,
   userAgent?: string,
   viaQR: boolean = false,
-  returnRemarks?: string | null,
+  returnNote?: string | null,
+  legacyReturnRemarks?: string | null,
 ) {
   const assignment = await prisma.assignment.findUnique({
     where: { id: assignmentId },
@@ -456,7 +557,10 @@ export async function returnIssuance(
   if (assignment.returnedAt) throw new Error('Asset already returned');
 
   const returnedAt = new Date();
-  const finalReturnCondition = returnCondition || assignment.condition || 'Good';
+  const storedReturnCondition = returnCondition?.trim() || null;
+  const storedReturnNote = returnNote?.trim() || null;
+  const legacyRemarks = legacyReturnRemarks?.trim() || null;
+  const finalReturnCondition = storedReturnCondition || assignment.condition || 'Good';
   const assetStatusAfterReturn = resolveAssetStatusAfterReturn(finalReturnCondition);
 
   const result = await prisma.$transaction(async (tx) => {
@@ -466,7 +570,10 @@ export async function returnIssuance(
         returnedAt,
         condition: finalReturnCondition,
         conditionAtReturn: finalReturnCondition,
-        returnRemarks: returnRemarks || null,
+        returnCondition: storedReturnCondition,
+        returnNote: storedReturnNote,
+        returnedById: performedById,
+        returnRemarks: storedReturnNote || legacyRemarks,
         returnedReceivedById: performedById,
         accountabilityStatus: 'RETURNED',
         accountabilityClosedAt: returnedAt,
@@ -484,13 +591,15 @@ export async function returnIssuance(
     return a;
   });
 
-  await prisma.auditLog.create({
-    data: {
-      entityType: 'Assignment',
-      entityId: assignmentId,
-      action: 'RETURN',
-      performedById,
-      ipAddress,
+  logAudit({
+    userId: performedById ?? null,
+    action: AUDIT_ACTIONS.ISSUANCE_RETURNED,
+    entityType: 'Assignment',
+    entityId: assignment.id,
+    ipAddress: ipAddress ?? null,
+    metadata: {
+      returnCondition: finalReturnCondition,
+      assetId: assignment.assetId,
       userAgent,
       field: 'returnedAt',
       oldValue: 'null',
@@ -505,16 +614,16 @@ export async function returnIssuance(
         viaQR,
       }),
     },
-  });
+  }).catch(() => {});
 
   // Also log against the Asset entity so the Asset audit timeline shows handovers
-  await prisma.auditLog.create({
-    data: {
-      entityType: 'Asset',
-      entityId: assignment.assetId,
-      action: 'RETURN',
-      performedById,
-      ipAddress,
+  logAudit({
+    userId: performedById ?? null,
+    action: 'RETURN',
+    entityType: 'Asset',
+    entityId: assignment.assetId,
+    ipAddress: ipAddress ?? null,
+    metadata: {
       userAgent,
       field: 'status',
       oldValue: 'ASSIGNED',
@@ -529,9 +638,421 @@ export async function returnIssuance(
         viaQR,
       }),
     },
-  });
+  }).catch(() => {});
+
+  // Condition log for return
+  createConditionLog({
+    assetId: assignment.assetId,
+    assignmentId: assignment.id,
+    event: 'returned',
+    condition: finalReturnCondition,
+    note: storedReturnNote || null,
+    recordedById: performedById,
+  }).catch(() => {});
+
+  // Auto-close AgreementDocument if all linked assets are now returned
+  if (assignment.agreementDocumentId) {
+    await checkAndCloseAgreementDocument(assignment.agreementDocumentId);
+  }
 
   return result;
+}
+
+/* ─── Bulk return issuances ─── */
+export async function bulkReturnAssets(
+  assignmentIds: string[],
+  returnCondition?: string | null,
+  returnNote?: string | null,
+  returnedById: string = 'system',
+  ipAddress?: string,
+  userAgent?: string,
+) {
+  const uniqueAssignmentIds = [...new Set(assignmentIds)];
+  if (uniqueAssignmentIds.length !== assignmentIds.length) {
+    throw new Error('Duplicate assignment IDs are not allowed');
+  }
+
+  const assignments = await prisma.assignment.findMany({
+    where: { id: { in: uniqueAssignmentIds } },
+    include: { asset: true, personnel: true },
+  });
+  const assignmentMap = new Map(assignments.map((assignment) => [assignment.id, assignment]));
+
+  const invalidDetails: Array<{ assignmentId: string; reason: string }> = [];
+  for (const assignmentId of uniqueAssignmentIds) {
+    const assignment = assignmentMap.get(assignmentId);
+    if (!assignment) {
+      invalidDetails.push({ assignmentId, reason: 'Assignment not found' });
+      continue;
+    }
+    if (assignment.returnedAt) {
+      invalidDetails.push({ assignmentId, reason: 'Assignment is already returned' });
+    }
+  }
+
+  if (invalidDetails.length > 0) {
+    const reasons = invalidDetails.map((detail) => `${detail.assignmentId}: ${detail.reason}`).join('; ');
+    throw new Error(`Bulk return failed. ${reasons}`);
+  }
+
+  const returnedAt = new Date();
+  const storedReturnCondition = returnCondition?.trim() || null;
+  const storedReturnNote = returnNote?.trim() || null;
+
+  const updatedAssignments = await prisma.$transaction(async (tx) => {
+    const updates = [];
+    for (const assignmentId of uniqueAssignmentIds) {
+      const assignment = assignmentMap.get(assignmentId)!;
+      const finalReturnCondition = storedReturnCondition || assignment.condition || 'Good';
+      const updatedAssignment = await tx.assignment.update({
+        where: { id: assignmentId },
+        data: {
+          returnedAt,
+          condition: finalReturnCondition,
+          conditionAtReturn: finalReturnCondition,
+          returnCondition: storedReturnCondition,
+          returnNote: storedReturnNote,
+          returnedById,
+          returnRemarks: storedReturnNote,
+          returnedReceivedById: returnedById,
+          accountabilityStatus: 'RETURNED',
+          accountabilityClosedAt: returnedAt,
+        },
+        include: {
+          asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
+          personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
+          agreement: { select: { id: true, name: true, title: true } },
+          agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
+        },
+      });
+
+      await tx.asset.update({ where: { id: assignment.assetId }, data: { status: 'AVAILABLE' } });
+      updates.push(updatedAssignment);
+    }
+    return updates;
+  });
+
+  for (const assignment of assignments) {
+    const finalReturnCondition = storedReturnCondition || assignment.condition || 'Good';
+    logAudit({
+      userId: returnedById ?? null,
+      action: AUDIT_ACTIONS.ISSUANCE_RETURNED,
+      entityType: 'Assignment',
+      entityId: assignment.id,
+      ipAddress: ipAddress ?? null,
+      metadata: {
+        returnCondition: finalReturnCondition,
+        returnNote: storedReturnNote,
+        assetId: assignment.assetId,
+        bulkReturn: true,
+        userAgent,
+        field: 'returnedAt',
+        oldValue: 'null',
+        newValue: returnedAt.toISOString(),
+        severity: classifySeverity('RETURN'),
+        summary: generateSummary({
+          action: 'RETURN',
+          entityType: 'Assignment',
+          assetName: assignment.asset.name,
+          serialNumber: assignment.asset.serialNumber,
+          newValue: assignment.personnel?.fullName || assignment.assignedTo || undefined,
+        }),
+      },
+    }).catch(() => {});
+  }
+
+  // Condition logs for bulk return
+  for (const assignment of assignments) {
+    const finalCond = storedReturnCondition || assignment.condition || 'Good';
+    createConditionLog({
+      assetId: assignment.assetId,
+      assignmentId: assignment.id,
+      event: 'returned',
+      condition: finalCond,
+      note: storedReturnNote || null,
+      recordedById: returnedById,
+    }).catch(() => {});
+  }
+
+  // Auto-close AgreementDocuments if all linked assets are now returned
+  const checkedDocIds = new Set<string>();
+  for (const assignment of assignments) {
+    if (assignment.agreementDocumentId && !checkedDocIds.has(assignment.agreementDocumentId)) {
+      checkedDocIds.add(assignment.agreementDocumentId);
+      await checkAndCloseAgreementDocument(assignment.agreementDocumentId);
+    }
+  }
+
+  return {
+    returned: updatedAssignments.length,
+    skipped: 0,
+    details: updatedAssignments.map((assignment) => ({
+      assignmentId: assignment.id,
+      assetId: assignment.assetId,
+      assetName: assignment.asset?.name ?? null,
+      returnedAt: assignment.returnedAt,
+      status: 'returned',
+    })),
+  };
+}
+
+
+/* ─── Transfer asset from one personnel to another ─── */
+export async function transferAsset(
+  params: {
+    fromAssignmentId: string;
+    toPersonnelId: string;
+    condition?: string | null;
+    transferNote?: string | null;
+    agreementTemplateId?: string | null;
+  },
+  performedById: string,
+  ipAddress?: string,
+  userAgent?: string,
+) {
+  const { fromAssignmentId, toPersonnelId, condition, transferNote, agreementTemplateId } = params;
+
+  // Fetch the current assignment
+  const currentAssignment = await prisma.assignment.findUnique({
+    where: { id: fromAssignmentId },
+    include: { asset: true, personnel: true },
+  });
+  if (!currentAssignment) throw new Error('Assignment not found');
+  if (currentAssignment.returnedAt) throw new Error('Assignment is not active — already returned');
+
+  // Verify target personnel
+  const toPersonnel = await prisma.personnel.findUnique({ where: { id: toPersonnelId } });
+  if (!toPersonnel) throw new Error('Target personnel not found');
+  if (toPersonnel.status !== 'active') throw new Error('Target personnel is not active');
+  if (!toPersonnel.isReadyForIssuance) throw new Error('Target personnel is not ready for issuance');
+
+  const assetId = currentAssignment.assetId;
+  const asset = currentAssignment.asset;
+  const fromPersonnelId = currentAssignment.personnelId;
+  const now = new Date();
+  const transferCondition = condition?.trim() || currentAssignment.condition || 'Good';
+
+  // Resolve agreement template for the new assignment (if provided)
+  let resolvedTemplate: Awaited<ReturnType<typeof resolveTemplate>> | null = null;
+  let agreementDocumentResult: any = null;
+
+  if (agreementTemplateId) {
+    resolvedTemplate = await resolveTemplate({
+      templateId: agreementTemplateId,
+      personnelId: toPersonnelId,
+      assetIds: [assetId],
+      condition: transferCondition,
+    });
+  } else {
+    // Use the default template
+    try {
+      resolvedTemplate = await resolveTemplate({
+        personnelId: toPersonnelId,
+        assetIds: [assetId],
+        condition: transferCondition,
+      });
+    } catch (_e) {
+      resolvedTemplate = null;
+    }
+  }
+
+  const cleanAgreementText = sanitizeAgreementText(resolvedTemplate?.resolvedText || '');
+  const documentTemplateId = resolvedTemplate?.templateId ?? agreementTemplateId ?? null;
+  const documentTemplateVersionId = resolvedTemplate?.templateVersionId ?? null;
+  const documentTemplateVersion = resolvedTemplate?.templateVersion ?? null;
+  const documentTitle = resolvedTemplate?.templateTitle ?? 'ISSUANCE & ACCOUNTABILITY AGREEMENT';
+
+  const designationSnapshot = toPersonnel.designation || null;
+  const projectSnapshot = toPersonnel.project || null;
+
+  // Run everything in a transaction — asset stays ASSIGNED throughout
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Close the old assignment
+    const oldAssignment = await tx.assignment.update({
+      where: { id: fromAssignmentId },
+      data: {
+        returnedAt: now,
+        returnCondition: transferCondition,
+        conditionAtReturn: transferCondition,
+        returnNote: transferNote || null,
+        returnRemarks: transferNote || null,
+        returnedById: performedById,
+        accountabilityStatus: 'TRANSFERRED',
+        accountabilityClosedAt: now,
+      },
+    });
+
+    // 2. Create new AgreementDocument for the receiving personnel (if template resolved)
+    let newAgreementDocumentId: string | null = null;
+    if (resolvedTemplate && cleanAgreementText) {
+      const doc = await tx.agreementDocument.create({
+        data: {
+          documentNumber: makeDocumentNumber(),
+          templateId: documentTemplateId,
+          templateVersionId: documentTemplateVersionId,
+          templateVersion: documentTemplateVersion,
+          title: documentTitle,
+          resolvedText: cleanAgreementText,
+          personnelId: toPersonnelId,
+          personnelNameSnapshot: toPersonnel.fullName,
+          designationSnapshot,
+          projectSnapshot,
+          assetSnapshot: [{
+            id: asset.id,
+            name: asset.name,
+            serialNumber: asset.serialNumber,
+            propertyNumber: asset.propertyNumber,
+            condition: transferCondition,
+          }],
+          issuedById: performedById,
+        },
+      });
+      newAgreementDocumentId = doc.id;
+      agreementDocumentResult = doc;
+    }
+
+    // 3. Create new assignment for the receiving personnel
+    const newAssignment = await tx.assignment.create({
+      data: {
+        assetId,
+        personnelId: toPersonnelId,
+        assignedTo: toPersonnel.fullName,
+        condition: transferCondition,
+        conditionAtIssue: transferCondition,
+        accountabilityStatus: 'PENDING_SIGNATURE',
+        notes: transferNote || null,
+        agreementText: cleanAgreementText || null,
+        agreementId: documentTemplateId || null,
+        agreementDocumentId: newAgreementDocumentId,
+      },
+      include: {
+        asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
+        personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
+        agreement: { select: { id: true, name: true, title: true } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
+      },
+    });
+
+    // 4. Asset.status stays ASSIGNED — no gap
+
+    // 5. Auto-close old AgreementDocument if all its assignments are now closed
+    if (currentAssignment.agreementDocumentId) {
+      const activeAssignments = await tx.assignment.findMany({
+        where: {
+          agreementDocumentId: currentAssignment.agreementDocumentId,
+          returnedAt: null,
+        },
+        select: { id: true },
+      });
+      if (activeAssignments.length === 0) {
+        await tx.agreementDocument.update({
+          where: { id: currentAssignment.agreementDocumentId },
+          data: { status: 'returned' },
+        });
+      }
+    }
+
+    return { oldAssignment, newAssignment };
+  });
+
+  // Audit logs (outside transaction — fire-and-forget)
+  logAudit({
+    userId: performedById ?? null,
+    action: AUDIT_ACTIONS.ISSUANCE_TRANSFERRED,
+    entityType: 'Assignment',
+    entityId: result.newAssignment.id,
+    ipAddress: ipAddress ?? null,
+    metadata: {
+      fromAssignmentId,
+      fromPersonnelId: fromPersonnelId || currentAssignment.assignedTo,
+      toPersonnelId,
+      assetId,
+      assetName: asset.name,
+      serialNumber: asset.serialNumber,
+      condition: transferCondition,
+      transferNote,
+      userAgent,
+      field: '*',
+      newValue: `Transfer: ${currentAssignment.assignedTo || fromPersonnelId} → ${toPersonnel.fullName}`,
+      severity: 'HIGH',
+      summary: generateSummary({
+        action: 'TRANSFER',
+        entityType: 'Assignment',
+        assetName: asset.name,
+        serialNumber: asset.serialNumber,
+        oldValue: currentAssignment.assignedTo || fromPersonnelId || undefined,
+        newValue: toPersonnel.fullName,
+      }),
+    },
+  }).catch(() => {});
+
+  // Also log against the Asset entity
+  logAudit({
+    userId: performedById ?? null,
+    action: 'TRANSFER',
+    entityType: 'Asset',
+    entityId: assetId,
+    ipAddress: ipAddress ?? null,
+    metadata: {
+      userAgent,
+      field: 'assignedTo',
+      oldValue: currentAssignment.assignedTo || fromPersonnelId,
+      newValue: toPersonnel.fullName,
+      severity: 'HIGH',
+      summary: generateSummary({
+        action: 'TRANSFER',
+        entityType: 'Asset',
+        assetName: asset.name,
+        serialNumber: asset.serialNumber,
+        oldValue: currentAssignment.assignedTo || fromPersonnelId || undefined,
+        newValue: toPersonnel.fullName,
+      }),
+    },
+  }).catch(() => {});
+
+  // Log the return side of the old assignment
+  logAudit({
+    userId: performedById ?? null,
+    action: AUDIT_ACTIONS.ISSUANCE_RETURNED,
+    entityType: 'Assignment',
+    entityId: fromAssignmentId,
+    ipAddress: ipAddress ?? null,
+    metadata: {
+      assetId,
+      transfer: true,
+      transferredTo: toPersonnelId,
+      condition: transferCondition,
+      transferNote,
+      userAgent,
+      field: 'returnedAt',
+      oldValue: 'null',
+      newValue: now.toISOString(),
+      severity: classifySeverity('RETURN'),
+      summary: generateSummary({
+        action: 'RETURN',
+        entityType: 'Assignment',
+        assetName: asset.name,
+        serialNumber: asset.serialNumber,
+        newValue: `${toPersonnel.fullName} (transfer)`,
+      }),
+    },
+  }).catch(() => {});
+
+  // Condition log for transfer (new assignment)
+  createConditionLog({
+    assetId,
+    assignmentId: result.newAssignment.id,
+    event: 'transferred',
+    condition: transferCondition,
+    note: transferNote || null,
+    recordedById: performedById,
+  }).catch(() => {});
+
+  return {
+    oldAssignment: result.oldAssignment,
+    newAssignment: result.newAssignment,
+    agreementDocument: agreementDocumentResult,
+  };
 }
 
 /* ─── Get available assets for issuance wizard ─── */
@@ -592,21 +1113,21 @@ export async function lockAssetsForIssuance(assetIds: string[], performedById: s
       });
       if (result.count === 1) {
         locked.push({ ...asset, status: 'PENDING_ASSIGNMENT' });
-        await tx.auditLog.create({
-          data: {
-            entityType: 'Asset',
-            entityId: assetId,
-            action: 'ISSUANCE_LOCK',
-            performedById,
-            ipAddress,
-            userAgent,
-            field: 'status',
-            oldValue: 'AVAILABLE',
-            newValue: 'PENDING_ASSIGNMENT',
-            severity: 'MEDIUM',
-            summary: generateSummary({ action: 'UPDATED', entityType: 'Asset', assetName: asset.name, serialNumber: asset.serialNumber, oldValue: 'AVAILABLE', newValue: 'PENDING_ASSIGNMENT' }),
-          },
-        });
+            logAudit({
+          userId: performedById ?? null,
+          action: 'ISSUANCE_LOCK',
+  entityType: 'Asset',
+  entityId: assetId ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": 'status',
+    "oldValue": 'AVAILABLE',
+    "newValue": 'PENDING_ASSIGNMENT',
+    "severity": 'MEDIUM',
+    "summary": generateSummary({ action: 'UPDATED', entityType: 'Asset', assetName: asset.name, serialNumber: asset.serialNumber, oldValue: 'AVAILABLE', newValue: 'PENDING_ASSIGNMENT' }),
+  },
+}).catch(() => {});
       } else {
         errors.push({ assetId, reason: 'Asset was locked by another issuance flow' });
       }
@@ -629,21 +1150,21 @@ export async function releaseAssetsFromIssuance(assetIds: string[], performedByI
     });
 
     for (const asset of assets) {
-      await tx.auditLog.create({
-        data: {
-          entityType: 'Asset',
-          entityId: asset.id,
-          action: 'ISSUANCE_UNLOCK',
-          performedById,
-          ipAddress,
-          userAgent,
-          field: 'status',
-          oldValue: 'PENDING_ASSIGNMENT',
-          newValue: 'AVAILABLE',
-          severity: 'LOW',
-          summary: generateSummary({ action: 'UPDATED', entityType: 'Asset', assetName: asset.name, serialNumber: asset.serialNumber, oldValue: 'PENDING_ASSIGNMENT', newValue: 'AVAILABLE' }),
-        },
-      });
+      logAudit({
+        userId: performedById ?? null,
+        action: 'ISSUANCE_UNLOCK',
+  entityType: 'Asset',
+  entityId: asset.id ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": 'status',
+    "oldValue": 'PENDING_ASSIGNMENT',
+    "newValue": 'AVAILABLE',
+    "severity": 'LOW',
+    "summary": generateSummary({ action: 'UPDATED', entityType: 'Asset', assetName: asset.name, serialNumber: asset.serialNumber, oldValue: 'PENDING_ASSIGNMENT', newValue: 'AVAILABLE' }),
+  },
+}).catch(() => {});
     }
   });
 

@@ -3,7 +3,7 @@ import * as issuanceService from '../services/issuance.service';
 import { authenticate, hasPermission } from '../middleware/auth';
 import { success, error } from '../utils/response';
 import { validate } from '../middleware/validate';
-import { createIssuanceSchema, returnIssuanceSchema, resolveTemplateSchema, bulkIssuanceSchema, resolveBulkTemplateSchema, assetLockSchema, signIssuanceSchema } from './issuance.schema';
+import { createIssuanceSchema, returnIssuanceSchema, bulkReturnSchema, resolveTemplateSchema, bulkIssuanceSchema, resolveBulkTemplateSchema, assetLockSchema, signIssuanceSchema, transferSchema } from './issuance.schema';
 
 const router = Router();
 
@@ -64,16 +64,35 @@ router.post('/', authenticate, hasPermission('issuances:create'), validate(creat
   }
 });
 
+
+/* ─── Bulk return issuances ─── */
+router.post('/bulk-return', authenticate, hasPermission('issuances:return'), validate(bulkReturnSchema), async (req: Request, res: Response) => {
+  try {
+    const result = await issuanceService.bulkReturnAssets(
+      req.body.assignmentIds,
+      req.body.returnCondition,
+      req.body.returnNote,
+      req.user!.id,
+      getClientIp(req),
+      getUA(req),
+    );
+    success(res, result);
+  } catch (e: any) {
+    error(res, e.message, 400);
+  }
+});
+
 /* ─── Return issuance ─── */
-router.post('/:id/return', authenticate, hasPermission('issuances:edit'), validate(returnIssuanceSchema), async (req: Request, res: Response) => {
+router.post('/:id/return', authenticate, hasPermission('issuances:return'), validate(returnIssuanceSchema), async (req: Request, res: Response) => {
   try {
     const result = await issuanceService.returnIssuance(
       String(req.params.id),
-      req.body.condition,
+      req.body.returnCondition,
       req.user!.id,
       getClientIp(req),
       getUA(req),
       req.body.viaQR || false,
+      req.body.returnNote,
       req.body.remarks,
     );
     success(res, result);
@@ -97,6 +116,29 @@ router.post('/:id/sign', authenticate, hasPermission('issuances:edit'), validate
   } catch (e: any) {
     const status = e.message.includes('not found') ? 404 : 400;
     error(res, e.message, status);
+  }
+});
+
+/* ─── Transfer asset between personnel ─── */
+router.post('/:id/transfer', authenticate, hasPermission('issuances:create'), validate(transferSchema), async (req: Request, res: Response) => {
+  try {
+    const result = await issuanceService.transferAsset(
+      {
+        fromAssignmentId: String(req.params.id),
+        toPersonnelId: req.body.toPersonnelId,
+        condition: req.body.condition,
+        transferNote: req.body.transferNote,
+        agreementTemplateId: req.body.agreementTemplateId,
+      },
+      req.user!.id,
+      getClientIp(req),
+      getUA(req),
+    );
+    success(res, result, 201);
+  } catch (e: any) {
+    if (e.message.includes('not found')) error(res, e.message, 404);
+    else if (e.message.includes('not active') || e.message.includes('not ready')) error(res, e.message, 400);
+    else error(res, e.message, 500);
   }
 });
 

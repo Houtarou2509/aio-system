@@ -3,14 +3,15 @@ import { useLookup } from '@/hooks/useLookup';
 import LookupTab from '@/components/lookup/LookupTab';
 import { useAuth } from '@/context/AuthContext';
 import {
-  Package, Factory, MapPin, Users,
+  Package, Factory, MapPin,
 } from 'lucide-react';
 
+// ASSIGNED_TO is deprecated — removed from visible categories.
+// Use Personnel profiles and Issuances for assignment tracking.
 const TABS = [
   { key: 'asset-types', label: 'Asset Types', icon: Package, category: 'asset-types' },
   { key: 'manufacturers', label: 'Manufacturers', icon: Factory, category: 'manufacturers' },
   { key: 'locations', label: 'Locations', icon: MapPin, category: 'locations' },
-  { key: 'assigned-to', label: 'Assigned To', icon: Users, category: 'assigned-to' },
 ];
 
 function LookupTabWrapper({ category }: { category: string }) {
@@ -41,7 +42,6 @@ export default function InventoryLookupPage() {
     'asset-types': 0,
     'manufacturers': 0,
     'locations': 0,
-    'assigned-to': 0,
   });
 
   useEffect(() => {
@@ -91,7 +91,7 @@ export default function InventoryLookupPage() {
 
       {/* ═══ KPI TILES ═══════════════════════════════════════ */}
       <section className="px-6 pt-4 shrink-0">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {TABS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}

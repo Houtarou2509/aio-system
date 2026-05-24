@@ -4,6 +4,7 @@ import { Doughnut, Bar } from 'react-chartjs-2';
 import {
   BarChart3, DollarSign, Wrench,
   TrendingUp, Download, Package,
+  CalendarDays, Filter, Loader2,
 } from 'lucide-react';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
@@ -33,6 +34,14 @@ interface MaintenanceCostData {
 interface AgeStat {
   label: string;
   count: number;
+}
+
+interface MaintenanceCostSummary {
+  totalCost: number;
+  totalLogs: number;
+  avgCostPerAsset: number;
+  topCostAssets: { assetId: string; assetName: string; serialNumber: string | null; totalCost: number }[];
+  costByAssetType: { type: string; totalCost: number; logCount: number }[];
 }
 
 /* ── Shared primitives ────────────────────────────────────── */
@@ -90,6 +99,10 @@ const STATUS_COLORS: Record<string, string> = {
   LOST: '#ef4444',
 };
 
+function formatPeso(value: number): string {
+  return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 /* ── CSV helpers ───────────────────────────────────────────── */
 
 function triggerCsv(filename: string, headers: string[], rows: string[][]) {
@@ -115,6 +128,31 @@ export default function ReportsPage() {
   const [ageStats, setAgeStats] = useState<AgeStat[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // System-wide maintenance cost summary (Phase 5-B)
+  const [costSummary, setCostSummary] = useState<MaintenanceCostSummary | null>(null);
+  const [costSummaryLoading, setCostSummaryLoading] = useState(false);
+  const [filterFrom, setFilterFrom] = useState('');
+  const [filterTo, setFilterTo] = useState('');
+  const [filterAssetType, setFilterAssetType] = useState('');
+
+  const fetchCostSummary = async () => {
+    setCostSummaryLoading(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const params = new URLSearchParams();
+      if (filterFrom) params.set('from', filterFrom);
+      if (filterTo) params.set('to', filterTo);
+      if (filterAssetType) params.set('assetType', filterAssetType);
+      const qs = params.toString();
+      const res = await fetch(`/api/maintenance/cost-summary${qs ? `?${qs}` : ''}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await res.json();
+      if (result.success) setCostSummary(result.data);
+    } catch { /* ignore */ }
+    finally { setCostSummaryLoading(false); }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
     const h = { Authorization: `Bearer ${token}` };
@@ -134,6 +172,11 @@ export default function ReportsPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  // Fetch system-wide cost summary on mount and when filters change
+  useEffect(() => {
+    fetchCostSummary();
+  }, [filterFrom, filterTo, filterAssetType]);
 
   /* ── Export handlers ───────────────────────────────────── */
 
@@ -161,6 +204,15 @@ export default function ReportsPage() {
       `maintenance-costs-${new Date().toISOString().split('T')[0]}.csv`,
       ['Asset', 'Total Cost', 'Entries', 'Purchase Price', 'Cost Ratio %'],
       maintenanceCosts.byAsset.map(a => [a.name, String(a.totalCost), String(a.maintenanceCount), String(a.purchasePrice), String(Math.round(a.costRatio))]),
+    );
+  };
+
+  const exportCostSummary = () => {
+    if (!costSummary) return;
+    triggerCsv(
+      `maintenance-summary-${new Date().toISOString().split('T')[0]}.csv`,
+      ['Asset', 'Serial No.', 'Total Cost'],
+      costSummary.topCostAssets.map(a => [a.assetName, a.serialNumber || '', String(a.totalCost)]),
     );
   };
 
@@ -411,6 +463,162 @@ export default function ReportsPage() {
                 </div>
               </BentoCard>
             </div>
+
+            {/* ═══ ROW 3: Maintenance Costs (system-wide summary) ═══ */}
+            <BentoCard>
+              <BentoCardTitle icon={DollarSign} accent="#012061" onExport={exportCostSummary}>Maintenance Costs Summary</BentoCardTitle>
+              <div className="px-5 pb-5">
+                {/* ── Date Range Filter ─── */}
+                <div className="flex flex-wrap items-end gap-3 mb-4 pb-4 border-b border-slate-100 dark:border-slate-700">
+                  <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                    <Filter className="w-3.5 h-3.5" />
+                    <span className="text-[10px] font-semibold tracking-widest uppercase">Filters</span>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">From</label>
+                    <input
+                      type="date"
+                      value={filterFrom}
+                      onChange={e => setFilterFrom(e.target.value)}
+                      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#012061]/20 focus:border-[#012061]"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">To</label>
+                    <input
+                      type="date"
+                      value={filterTo}
+                      onChange={e => setFilterTo(e.target.value)}
+                      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#012061]/20 focus:border-[#012061]"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">Asset Type</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Laptop"
+                      value={filterAssetType}
+                      onChange={e => setFilterAssetType(e.target.value)}
+                      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#012061]/20 focus:border-[#012061] w-28"
+                    />
+                  </div>
+                  {(filterFrom || filterTo || filterAssetType) && (
+                    <button
+                      onClick={() => { setFilterFrom(''); setFilterTo(''); setFilterAssetType(''); }}
+                      className="text-[10px] text-[#7B1113] hover:underline font-medium"
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+
+                {costSummaryLoading ? (
+                  <div className="flex items-center justify-center py-12 text-sm text-slate-400">
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                    Loading cost summary…
+                  </div>
+                ) : costSummary ? (
+                  <div className="space-y-5">
+                    {/* ── Summary Cards ─── */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="rounded-xl bg-[#012061] px-4 py-3 text-white shadow-sm">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <DollarSign className="w-3.5 h-3.5 text-white/60" />
+                          <span className="text-[10px] font-semibold uppercase tracking-widest text-white/60">Total Spend</span>
+                        </div>
+                        <p className="text-xl font-bold">{formatPeso(costSummary.totalCost)}</p>
+                      </div>
+                      <div className="rounded-xl bg-[#012061] px-4 py-3 text-white shadow-sm">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <CalendarDays className="w-3.5 h-3.5 text-white/60" />
+                          <span className="text-[10px] font-semibold uppercase tracking-widest text-white/60">Total Logs</span>
+                        </div>
+                        <p className="text-xl font-bold">{costSummary.totalLogs.toLocaleString()}</p>
+                      </div>
+                      <div className="rounded-xl bg-[#012061] px-4 py-3 text-white shadow-sm">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <TrendingUp className="w-3.5 h-3.5 text-white/60" />
+                          <span className="text-[10px] font-semibold uppercase tracking-widest text-white/60">Avg per Asset</span>
+                        </div>
+                        <p className="text-xl font-bold">{formatPeso(costSummary.avgCostPerAsset)}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {/* ── Top 10 Most Expensive Assets ─── */}
+                      <div>
+                        <div className="text-[10px] tracking-widest text-slate-400 uppercase font-semibold mb-2">
+                          Top 10 Most Expensive Assets
+                        </div>
+                        {costSummary.topCostAssets.length > 0 ? (
+                          <div className="rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="bg-[#012061]">
+                                  <th className="text-left text-white/70 uppercase tracking-widest text-[10px] font-semibold px-3 py-2">Asset</th>
+                                  <th className="text-left text-white/70 uppercase tracking-widest text-[10px] font-semibold px-3 py-2">Serial No.</th>
+                                  <th className="text-right text-white/70 uppercase tracking-widest text-[10px] font-semibold px-3 py-2">Total Cost</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                {costSummary.topCostAssets.map((a, i) => (
+                                  <tr key={a.assetId} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+                                    <td className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100">
+                                      <span className="text-slate-400 mr-1.5">{i + 1}.</span>
+                                      {a.assetName}
+                                    </td>
+                                    <td className="px-3 py-2 text-slate-500 dark:text-slate-400 font-mono text-[11px]">{a.serialNumber || '—'}</td>
+                                    <td className="px-3 py-2 text-right font-semibold text-[#f8931f]">{formatPeso(a.totalCost)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400 italic py-6 text-center">No assets with maintenance costs</p>
+                        )}
+                      </div>
+
+                      {/* ── Cost by Asset Type ─── */}
+                      <div>
+                        <div className="text-[10px] tracking-widest text-slate-400 uppercase font-semibold mb-2">
+                          Cost by Asset Type
+                        </div>
+                        {costSummary.costByAssetType.length > 0 ? (
+                          <div className="space-y-2">
+                            {costSummary.costByAssetType.map(t => {
+                              const pct = costSummary.totalCost > 0 ? (t.totalCost / costSummary.totalCost) * 100 : 0;
+                              return (
+                                <div key={t.type} className="rounded-lg border border-slate-100 dark:border-slate-700 p-3">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{t.type}</span>
+                                    <span className="text-xs font-bold text-[#f8931f]">{formatPeso(t.totalCost)}</span>
+                                  </div>
+                                  <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-[#012061] rounded-full transition-all"
+                                      style={{ width: `${Math.min(pct, 100)}%` }}
+                                    />
+                                  </div>
+                                  <div className="flex justify-between mt-1">
+                                    <span className="text-[10px] text-slate-400">{t.logCount} log{t.logCount !== 1 ? 's' : ''}</span>
+                                    <span className="text-[10px] text-slate-400">{pct.toFixed(1)}%</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400 italic py-6 text-center">No cost data by type</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic py-8 text-center">Unable to load maintenance cost summary</p>
+                )}
+              </div>
+            </BentoCard>
           </div>
         )}
       </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Trash2 } from 'lucide-react';
+import { X, Trash2, AlertTriangle, Ban, FileWarning } from 'lucide-react';
 import { Asset } from '../../lib/api';
 
 const DISPOSAL_METHODS = [
@@ -9,6 +9,15 @@ const DISPOSAL_METHODS = [
   { value: 'RETURNED_TO_VENDOR', label: 'Returned to Vendor' },
   { value: 'OTHER', label: 'Other' },
 ];
+
+type GuardError = {
+  code: string;
+  message: string;
+  assignedTo?: string;
+  documentNumber?: string;
+  scheduleCount?: number;
+  canForce?: boolean;
+};
 
 interface Props {
   asset: Asset;
@@ -22,20 +31,44 @@ export function DisposeAssetModal({ asset, onClose, onDisposed }: Props) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [guardError, setGuardError] = useState<GuardError | null>(null);
+  const [forceDisposing, setForceDisposing] = useState(false);
 
-  const handleSubmit = async () => {
+  const resetGuard = () => {
+    setGuardError(null);
+    setError(null);
+  };
+
+  const handleSubmit = async (forceDispose = false) => {
     if (!reason.trim()) { setError('Reason is required'); return; }
     setSubmitting(true);
     setError(null);
+    setGuardError(null);
     try {
       const token = localStorage.getItem('accessToken');
       const res = await fetch(`/api/assets/${asset.id}/dispose`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ reason: reason.trim(), method, date }),
+        body: JSON.stringify({ reason: reason.trim(), method, date, forceDispose }),
       });
       const data = await res.json();
-      if (!data.success) throw new Error(data.error?.message || 'Failed to dispose asset');
+      if (!data.success) {
+        // Check for structured guard errors
+        const details = data.error?.details || data.error;
+        if (details?.code) {
+          setGuardError({
+            code: details.code,
+            message: details.message || data.error?.message || 'Cannot dispose asset',
+            assignedTo: details.assignedTo,
+            documentNumber: details.documentNumber,
+            scheduleCount: details.scheduleCount,
+            canForce: details.canForce,
+          });
+          setSubmitting(false);
+          return;
+        }
+        throw new Error(data.error?.message || 'Failed to dispose asset');
+      }
       onDisposed();
     } catch (err: any) {
       setError(err.message);
@@ -43,6 +76,166 @@ export function DisposeAssetModal({ asset, onClose, onDisposed }: Props) {
       setSubmitting(false);
     }
   };
+
+  const handleForceDispose = async () => {
+    setForceDisposing(true);
+    try {
+      await handleSubmit(true);
+    } finally {
+      setForceDisposing(false);
+    }
+  };
+
+  // ─── Guard Error Dialogs ─────────────────────────────────────
+
+  // ASSET_STILL_ASSIGNED — hard block
+  if (guardError?.code === 'ASSET_STILL_ASSIGNED') {
+    return (
+      <>
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-[#7B1113]">
+              <div className="flex items-center gap-2.5">
+                <Ban className="h-4 w-4 text-white" />
+                <h2 className="text-sm font-bold text-white tracking-tight">Cannot Dispose — Asset is Assigned</h2>
+              </div>
+              <button onClick={onClose} className="p-1 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="px-5 py-6 space-y-4">
+              <div className="flex items-start gap-3 px-3 py-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                <AlertTriangle className="h-5 w-5 text-[#7B1113] shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-medium text-[#7B1113] dark:text-red-300">
+                    This asset is currently assigned to a personnel. Return it before disposing.
+                  </p>
+                  {guardError.assignedTo && (
+                    <p className="text-[10px] mt-1 text-red-500/80 dark:text-red-400/70">
+                      Assigned to: {guardError.assignedTo}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-end">
+              <button
+                onClick={onClose}
+                className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // OPEN_AGREEMENT_EXISTS — hard block
+  if (guardError?.code === 'OPEN_AGREEMENT_EXISTS') {
+    return (
+      <>
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-[#7B1113]">
+              <div className="flex items-center gap-2.5">
+                <FileWarning className="h-4 w-4 text-white" />
+                <h2 className="text-sm font-bold text-white tracking-tight">Cannot Dispose — Open Agreement Exists</h2>
+              </div>
+              <button onClick={onClose} className="p-1 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="px-5 py-6 space-y-4">
+              <div className="flex items-start gap-3 px-3 py-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                <AlertTriangle className="h-5 w-5 text-[#7B1113] shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-medium text-[#7B1113] dark:text-red-300">
+                    There is an open accountability agreement for this asset. Close or return it first.
+                  </p>
+                  {guardError.documentNumber && (
+                    <p className="text-[10px] mt-1 text-red-500/80 dark:text-red-400/70">
+                      Document: {guardError.documentNumber}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-end">
+              <button
+                onClick={onClose}
+                className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // PENDING_MAINTENANCE — soft block, can force
+  if (guardError?.code === 'PENDING_MAINTENANCE') {
+    return (
+      <>
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={resetGuard} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-[#f8931f]">
+              <div className="flex items-center gap-2.5">
+                <AlertTriangle className="h-4 w-4 text-white" />
+                <h2 className="text-sm font-bold text-white tracking-tight">Pending Maintenance Schedules</h2>
+              </div>
+              <button onClick={onClose} className="p-1 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="px-5 py-6 space-y-4">
+              <div className="flex items-start gap-3 px-3 py-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                <AlertTriangle className="h-5 w-5 text-[#f8931f] shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-medium text-amber-800 dark:text-amber-300">
+                    This asset has <strong>{guardError.scheduleCount}</strong> pending maintenance schedule{guardError.scheduleCount !== 1 ? 's' : ''}.
+                  </p>
+                  <p className="text-[10px] mt-1 text-amber-700/80 dark:text-amber-400/70">
+                    Disposing it will cancel all pending maintenance schedules. This cannot be undone.
+                  </p>
+                </div>
+              </div>
+              {error && (
+                <div className="px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-[11px] font-medium text-red-600 dark:text-red-300">
+                  {error}
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-end gap-2">
+              <button
+                onClick={onClose}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleForceDispose}
+                disabled={forceDisposing}
+                className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold text-white hover:opacity-90 transition-all duration-200 active:scale-95 disabled:opacity-50"
+                style={{ backgroundColor: '#7B1113' }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {forceDisposing ? 'Force Disposing…' : 'Force Dispose'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // ─── Normal Dispose Form ──────────────────────────────────────
 
   return (
     <>
@@ -133,7 +326,7 @@ export function DisposeAssetModal({ asset, onClose, onDisposed }: Props) {
               Cancel
             </button>
             <button
-              onClick={handleSubmit}
+              onClick={() => handleSubmit(false)}
               disabled={submitting}
               className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold text-white hover:opacity-90 transition-all duration-200 active:scale-95 disabled:opacity-50"
               style={{ backgroundColor: '#7B1113' }}

@@ -1,3 +1,4 @@
+import { logAudit } from './auditLog.service';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { classifySeverity, generateSummary } from '../utils/auditHelpers';
@@ -144,20 +145,20 @@ export async function createPersonnel(
     },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      entityType: 'Personnel',
-      entityId: personnel.id,
-      action: 'CREATE',
-      performedById,
-      ipAddress,
-      userAgent,
-      field: '*',
-      newValue: JSON.stringify(data),
-      severity: 'LOW',
-      summary: generateSummary({ action: 'CREATE', entityType: 'Personnel', assetName: personnel.fullName }),
-    },
-  });
+  await logAudit({
+  userId: performedById ?? null,
+  action: 'CREATE',
+  entityType: 'Personnel',
+  entityId: personnel.id ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": '*',
+    "newValue": JSON.stringify(data),
+    "severity": 'LOW',
+    "summary": generateSummary({ action: 'CREATE', entityType: 'Personnel', assetName: personnel.fullName }),
+  },
+});
 
   return personnel;
 }
@@ -245,19 +246,19 @@ export async function updatePersonnel(
   for (const [key, newVal] of Object.entries(data)) {
     const oldVal = (existing as any)[key];
     if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
-      await prisma.auditLog.create({
-        data: {
-          entityType: 'Personnel',
-          entityId: id,
-          action: 'UPDATE',
-          performedById,
-          ipAddress,
-          userAgent,
-          field: key,
-          oldValue: String(oldVal ?? ''),
-          newValue: String(newVal ?? ''),
-          severity: classifySeverity('UPDATE', key),
-          summary: generateSummary({
+      await logAudit({
+  userId: performedById ?? null,
+  action: 'UPDATE',
+  entityType: 'Personnel',
+  entityId: id ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": key,
+    "oldValue": String(oldVal ?? ''),
+    "newValue": String(newVal ?? ''),
+    "severity": classifySeverity('UPDATE', key),
+    "summary": generateSummary({
             action: 'UPDATE',
             entityType: 'Personnel',
             field: key,
@@ -265,12 +266,117 @@ export async function updatePersonnel(
             newValue: String(newVal ?? ''),
             assetName: existing.fullName,
           }),
-        },
-      });
+  },
+});
     }
   }
 
   return personnel;
+}
+
+/* ─── Personnel accountability summary ─── */
+export async function getPersonnelAccountability(personnelId: string) {
+  const personnel = await prisma.personnel.findUnique({
+    where: { id: personnelId },
+    select: {
+      id: true,
+      fullName: true,
+      designation: true,
+      project: true,
+      email: true,
+      designationLookup: { select: { name: true } },
+      projectLookup: { select: { name: true } },
+      institution: { select: { name: true } },
+    },
+  });
+  if (!personnel) throw new Error('Personnel not found');
+
+  const designation = personnel.designationLookup?.name || personnel.designation || null;
+  const project = personnel.projectLookup?.name || personnel.project || null;
+  const institution = personnel.institution?.name || null;
+
+  // Fetch all assignments for this personnel
+  const assignments = await prisma.assignment.findMany({
+    where: { personnelId },
+    orderBy: { assignedAt: 'desc' },
+    include: {
+      asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
+      agreementDocument: { select: { id: true, documentNumber: true, status: true } },
+    },
+  });
+
+  // Fetch all agreement documents for this personnel
+  const agreementDocuments = await prisma.agreementDocument.findMany({
+    where: { personnelId },
+    orderBy: { issuedAt: 'desc' },
+    select: {
+      id: true,
+      documentNumber: true,
+      status: true,
+      issuedAt: true,
+      recipientSignedAt: true,
+      signedPdfPath: true,
+      assetSnapshot: true,
+    },
+  });
+
+  const activeAssignments = assignments.filter(a => !a.returnedAt);
+  const returnedAssignments = assignments.filter(a => a.returnedAt);
+
+  const oldestActiveAssignment = activeAssignments.length > 0
+    ? activeAssignments.reduce((earliest, a) =>
+        new Date(a.assignedAt) < new Date(earliest.assignedAt) ? a : earliest
+      ).assignedAt
+    : null;
+
+  return {
+    personnel: {
+      id: personnel.id,
+      fullName: personnel.fullName,
+      designation,
+      project,
+      institution,
+      email: personnel.email,
+    },
+    summary: {
+      totalAssetsHeld: activeAssignments.length,
+      totalAssetsReturned: returnedAssignments.length,
+      totalAgreements: agreementDocuments.length,
+      oldestActiveIssuanceDate: oldestActiveAssignment,
+    },
+    activeAssignments: activeAssignments.map(a => ({
+      id: a.id,
+      assetId: a.assetId,
+      assetName: a.asset?.name ?? null,
+      serialNumber: a.asset?.serialNumber ?? null,
+      propertyNumber: a.asset?.propertyNumber ?? null,
+      condition: a.conditionAtIssue || a.condition || null,
+      assignedAt: a.assignedAt,
+      agreementDocumentId: a.agreementDocumentId ?? null,
+      documentNumber: a.agreementDocument?.documentNumber ?? null,
+    })),
+    returnedAssignments: returnedAssignments.map(a => ({
+      id: a.id,
+      assetId: a.assetId,
+      assetName: a.asset?.name ?? null,
+      serialNumber: a.asset?.serialNumber ?? null,
+      propertyNumber: a.asset?.propertyNumber ?? null,
+      condition: a.conditionAtReturn || a.condition || null,
+      returnCondition: a.returnCondition ?? null,
+      returnNote: a.returnNote ?? null,
+      assignedAt: a.assignedAt,
+      returnedAt: a.returnedAt!,
+    })),
+    agreementDocuments: agreementDocuments.map(doc => ({
+      id: doc.id,
+      documentNumber: doc.documentNumber,
+      status: doc.status,
+      issuedAt: doc.issuedAt,
+      assetCount: Array.isArray(doc.assetSnapshot) ? doc.assetSnapshot.length : 1,
+      recipientSignedAt: doc.recipientSignedAt,
+      signedPdfPath: doc.signedPdfPath,
+    })),
+  };
 }
 
 /* ─── Toggle personnel readiness for issuance ─── */
@@ -290,21 +396,21 @@ export async function togglePersonnelReadiness(
   });
 
   if (existing.isReadyForIssuance !== isReady) {
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'Personnel',
-        entityId: id,
-        action: 'UPDATE',
-        performedById,
-        ipAddress,
-        userAgent,
-        field: 'isReadyForIssuance',
-        oldValue: String(existing.isReadyForIssuance),
-        newValue: String(isReady),
-        severity: 'MEDIUM',
-        summary: `${existing.fullName} marked ${isReady ? 'ready' : 'not ready'} for issuance`,
-      },
-    });
+    await logAudit({
+  userId: performedById ?? null,
+  action: 'UPDATE',
+  entityType: 'Personnel',
+  entityId: id ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "field": 'isReadyForIssuance',
+    "oldValue": String(existing.isReadyForIssuance),
+    "newValue": String(isReady),
+    "severity": 'MEDIUM',
+    "summary": `${existing.fullName} marked ${isReady ? 'ready' : 'not ready'} for issuance`,
+  },
+});
   }
 
   return personnel;
@@ -333,18 +439,18 @@ export async function deletePersonnel(
     data: { status: 'inactive' },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      entityType: 'Personnel',
-      entityId: id,
-      action: 'SOFT_DELETE',
-      performedById,
-      ipAddress,
-      userAgent,
-      severity: 'HIGH',
-      summary: generateSummary({ action: 'DELETE', entityType: 'Personnel', assetName: existing.fullName }),
-    },
-  });
+  await logAudit({
+  userId: performedById ?? null,
+  action: 'SOFT_DELETE',
+  entityType: 'Personnel',
+  entityId: id ?? null,
+  ipAddress: ipAddress ?? null,
+  metadata: {
+    "userAgent": userAgent,
+    "severity": 'HIGH',
+    "summary": generateSummary({ action: 'DELETE', entityType: 'Personnel', assetName: existing.fullName }),
+  },
+});
 
   return personnel;
 }

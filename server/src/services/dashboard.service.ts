@@ -11,8 +11,8 @@ export async function getDashboardStats() {
     prisma.asset.groupBy({ by: ['type'], where: notDeleted, _count: { type: true } }),
     prisma.auditLog.findMany({
       take: 20,
-      orderBy: { performedAt: 'desc' },
-      include: { performedBy: { select: { username: true } } },
+      orderBy: { createdAt: 'desc' },
+      include: { user: { select: { username: true } } },
     }),
     prisma.asset.groupBy({ by: ['location'], where: notDeleted, _count: { location: true } }),
   ]);
@@ -20,19 +20,23 @@ export async function getDashboardStats() {
   const statusMap = Object.fromEntries(byStatus.map(s => [s.status, s._count.status]));
 
   const activityFeed = recentAudit.map(log => {
-    const user = (log.performedBy as any)?.username || 'System';
+    const metadata = log.metadata && typeof log.metadata === 'object' && !Array.isArray(log.metadata)
+      ? log.metadata as Record<string, unknown>
+      : {};
+    const user = log.user?.username || 'System';
     const action = log.action.toLowerCase();
     const entity = log.entityType;
-    const timestamp = new Date(log.performedAt).toLocaleString('en-PH', {
+    const timestamp = new Date(log.createdAt).toLocaleString('en-PH', {
       month: 'short', day: 'numeric', year: 'numeric',
       hour: 'numeric', minute: '2-digit',
     });
-    if (log.field === '*' || !log.field) {
+    const field = typeof metadata.field === 'string' ? metadata.field : '';
+    if (field === '*' || !field) {
       return `${user} ${action === 'create' ? 'added' : action === 'delete' ? 'removed' : action} ${entity} — ${timestamp}`;
     }
-    const oldVal = cleanActivityValue(log.oldValue);
-    const newVal = cleanActivityValue(log.newValue);
-    return `${user} changed ${log.field} from "${oldVal || '—'}" to "${newVal || '—'}" on ${entity} — ${timestamp}`;
+    const oldVal = cleanActivityValue(metadata.oldValue == null ? '' : String(metadata.oldValue));
+    const newVal = cleanActivityValue(metadata.newValue == null ? '' : String(metadata.newValue));
+    return `${user} changed ${field} from "${oldVal || '—'}" to "${newVal || '—'}" on ${entity} — ${timestamp}`;
   });
 
   return {

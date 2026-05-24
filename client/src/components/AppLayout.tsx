@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { BookOpen, Settings2, LayoutDashboard, Package, Wrench, Users, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, ScanLine } from 'lucide-react';
+import { BookOpen, Settings2, LayoutDashboard, Package, Wrench, Users, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, ScanLine, FileBarChart } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/notifications/NotificationBell';
@@ -22,6 +22,7 @@ const issuanceNav = [
   { to: '/issuances', label: 'Issuances', IconComponent: FileSignature, roles: ['ADMIN', 'STAFF_ADMIN'] },
   { to: '/accountability-lookup', label: 'Accountability Lookup', IconComponent: Database, roles: ['ADMIN', 'STAFF_ADMIN'] },
   { to: '/accountability/templates', label: 'Agreement Templates', IconComponent: FileText, roles: ['ADMIN'] },
+  { to: '/accountability/report', label: 'Accountability Report', IconComponent: FileBarChart, roles: ['ADMIN'] },
 ];
 
 const systemNav: Array<{ to: string; label: string; IconComponent: any; roles?: string[] }> = [

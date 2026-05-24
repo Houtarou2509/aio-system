@@ -34,7 +34,7 @@ describe('AI Suggestion Integration', () => {
   it('14. POST /api/ai/suggest { assetName: "MacBook Pro 14" } → returns suggestions from mock', async () => {
     mockSuggestAsset.mockResolvedValueOnce({
       suggestions: [
-        { type: 'Laptop', manufacturer: 'Apple', confidence: 0.95 },
+        { type: 'Laptop', manufacturer: 'Apple', usefulLifeYears: 5, warrantyYears: 3, confidence: 'high' },
       ],
       source: 'ai',
     });
@@ -50,6 +50,9 @@ describe('AI Suggestion Integration', () => {
     expect(res.body.data.suggestions.length).toBeGreaterThanOrEqual(1);
     expect(res.body.data.suggestions[0].type).toBe('Laptop');
     expect(res.body.data.suggestions[0].manufacturer).toBe('Apple');
+    expect(res.body.data.suggestions[0].usefulLifeYears).toBe(5);
+    expect(res.body.data.suggestions[0].warrantyYears).toBe(3);
+    expect(res.body.data.suggestions[0].confidence).toBe('high');
   });
 
   // 15
@@ -72,7 +75,7 @@ describe('AI Suggestion Integration', () => {
   // 16
   it('16. POST /api/ai/suggest (Staff) → 200', async () => {
     mockSuggestAsset.mockResolvedValueOnce({
-      suggestions: [{ type: 'EQUIPMENT', manufacturer: 'Dell', confidence: 0.8 }],
+      suggestions: [{ type: 'EQUIPMENT', manufacturer: 'Dell', usefulLifeYears: 7, warrantyYears: 3, confidence: 'high' }],
       source: 'local',
     });
 

@@ -55,7 +55,7 @@ describe('Phase 1 accountability lifecycle', () => {
   });
 
   afterEach(async () => {
-    await prisma.auditLog.deleteMany({ where: { performedById: actorId } });
+    await prisma.auditLog.deleteMany({ where: { userId: actorId } });
     await prisma.assignment.deleteMany({ where: { assignedTo: { startsWith: runId } } });
     await prisma.agreementDocument.deleteMany({ where: { personnelNameSnapshot: { startsWith: runId } } });
     await prisma.asset.deleteMany({ where: { name: { startsWith: runId } } });

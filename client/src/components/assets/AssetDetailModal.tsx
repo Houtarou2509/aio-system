@@ -30,6 +30,7 @@ import {
   ImageIcon,
   ZoomIn,
   Trash2,
+  Activity,
 } from 'lucide-react';
 
 /** Resolve asset image URL — prepend base path if relative */
@@ -102,6 +103,11 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
   const [frequentRepair, setFrequentRepair] = useState(false);
   const [showLightbox, setShowLightbox] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [conditionLogs, setConditionLogs] = useState<Array<{
+    id: string; event: string; condition: string; note: string | null;
+    recordedByName: string | null; recordedAt: string;
+  }> | null>(null);
+  const [conditionLoading, setConditionLoading] = useState(false);
 
   useEffect(() => {
     if (tab === 'maintenance') {
@@ -111,6 +117,16 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
         .then(r => r.json())
         .then(d => { if (d.meta?.frequentRepair) setFrequentRepair(true); })
         .catch((e) => console.error('[AssetDetailModal] Failed to check frequent repair:', e));
+    }
+    if (tab === 'condition') {
+      setConditionLoading(true);
+      fetch(`/api/assets/${asset.id}/condition-history`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
+      })
+        .then(r => r.json())
+        .then(d => { setConditionLogs(Array.isArray(d.data) ? d.data : []); })
+        .catch(() => { setConditionLogs([]); })
+        .finally(() => setConditionLoading(false));
     }
   }, [tab, asset.id]);
 
@@ -188,6 +204,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                 {[
                   { value: 'overview', label: 'Overview', icon: Info },
                   { value: 'financials', label: 'Financials', icon: DollarSign },
+                  { value: 'condition', label: 'Condition', icon: Activity },
                   { value: 'history', label: 'History', icon: User },
                   { value: 'maintenance', label: 'Maintenance', icon: Wrench },
                   { value: 'audit', label: 'Audit', icon: FileText },
@@ -242,7 +259,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                         <InfoRow label="Serial Number" value={asset.serialNumber || '—'} />
                         <InfoRow label="Property #" value={(asset as any).propertyNumber || '—'} />
                         <InfoRow label="Location" value={<span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3 text-slate-400" />{asset.location || '—'}</span>} />
-                        <InfoRow label="Assigned To" value={asset.assignedTo ? <span className="text-[#f8931f] font-semibold">{asset.assignedTo}</span> : <span className="text-slate-400 italic">Unassigned</span>} highlight={!!asset.assignedTo} />
+                        <InfoRow label="Assigned To (legacy)" value={asset.assignedTo ? <span className="text-[#f8931f] font-semibold">{asset.assignedTo}</span> : <span className="text-slate-400 italic">Unassigned</span>} highlight={!!asset.assignedTo} />
                         <InfoRow label="Status" value={<span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusConf.className}`}>{statusConf.label}</span>} />
                       </InfoCard>
 
@@ -288,6 +305,71 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
 
                 {/* ─── Financials Tab ─── */}
                 {tab === 'financials' && <FinancialsTab asset={asset} />}
+
+                {/* ─── Condition History Tab ─── */}
+                {tab === 'condition' && (
+                  <div className="space-y-4">
+                    {conditionLoading && (
+                      <div className="flex items-center justify-center py-12">
+                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#012061] border-t-transparent" />
+                        <span className="ml-3 text-sm text-slate-500">Loading condition history…</span>
+                      </div>
+                    )}
+                    {!conditionLoading && conditionLogs !== null && conditionLogs.length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                        <Activity className="w-10 h-10 mb-3 opacity-30" />
+                        <p className="text-sm">No condition history recorded yet.</p>
+                      </div>
+                    )}
+                    {!conditionLoading && conditionLogs !== null && conditionLogs.length > 0 && (
+                      <div className="relative pl-6">
+                        {/* Timeline connector line */}
+                        <div className="absolute left-[11px] top-2 bottom-2 w-px bg-slate-200 dark:bg-slate-700" />
+                        {conditionLogs.map((log) => {
+                          const eventConfig: Record<string, { bg: string; text: string; label: string }> = {
+                            issued:       { bg: 'bg-blue-50 dark:bg-blue-950', text: 'text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800', label: 'Issued' },
+                            returned:     { bg: 'bg-emerald-50 dark:bg-emerald-950', text: 'text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800', label: 'Returned' },
+                            transferred:  { bg: 'bg-orange-50 dark:bg-orange-950', text: 'text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800', label: 'Transferred' },
+                            manual:       { bg: 'bg-slate-50 dark:bg-slate-800', text: 'text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700', label: 'Manual' },
+                          };
+                          const cfg = eventConfig[log.event] || eventConfig.manual;
+                          return (
+                            <div key={log.id} className="relative pb-6 last:pb-0">
+                              {/* Timeline dot */}
+                              <div className={`absolute -left-6 top-1 flex h-5 w-5 items-center justify-center rounded-full ${cfg.bg} border-2 border-white dark:border-slate-900 shadow-sm`}>
+                                <div className={`h-2 w-2 rounded-full ${cfg.text.replace(/border-.*/, '').replace('text-', 'bg-')}`} />
+                              </div>
+                              {/* Card */}
+                              <div className={`rounded-xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-xs`}>
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cfg.text}`}>
+                                    {cfg.label}
+                                  </span>
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#012061]/5 dark:bg-slate-700/40 text-[#012061] dark:text-slate-100 border border-[#012061]/20">
+                                    {log.condition}
+                                  </span>
+                                </div>
+                                {log.note && (
+                                  <p className="text-xs text-slate-600 dark:text-slate-300 mb-2">{log.note}</p>
+                                )}
+                                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500">
+                                  <Clock className="w-3 h-3" />
+                                  <span>{new Date(log.recordedAt).toLocaleString()}</span>
+                                  {log.recordedByName && (
+                                    <>
+                                      <span className="mx-1">·</span>
+                                      <span>{log.recordedByName}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* ─── History Tab ─── */}
                 {tab === 'history' && (

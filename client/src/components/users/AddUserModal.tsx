@@ -2,11 +2,11 @@ import { useState, FormEvent, useEffect } from 'react';
 import { X, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { PermissionChecklist, getDefaultPermissions } from './PermissionChecklist';
 
+// GUEST role hidden until guest link flow is implemented
 const ROLES = [
   { value: 'ADMIN', label: 'Admin' },
   { value: 'STAFF_ADMIN', label: 'Staff-Admin' },
   { value: 'STAFF', label: 'Staff' },
-  { value: 'GUEST', label: 'Guest' },
 ];
 
 interface Props {
@@ -55,7 +55,7 @@ export function AddUserModal({ onSubmit, onClose, serverErrors }: Props) {
     if (!form.email.trim()) e.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email format';
     if (!form.password) e.password = 'Password is required';
-    else if (form.password.length < 8) e.password = 'Minimum 8 characters';
+    else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/.test(form.password)) e.password = 'Password must be 8+ chars with uppercase, number, and special character';
     if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
     if (!form.role) e.role = 'Role is required';
     setErrors(e);

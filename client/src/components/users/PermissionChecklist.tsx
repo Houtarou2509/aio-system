@@ -26,7 +26,7 @@ const CATEGORIES = [
   {
     key: 'issuances',
     label: 'Issuances',
-    permissions: ['issuances:view', 'issuances:create', 'issuances:edit'],
+    permissions: ['issuances:view', 'issuances:create', 'issuances:edit', 'issuances:return'],
   },
   {
     key: 'audit',
@@ -65,7 +65,7 @@ const ROLE_PRESETS: Record<string, string[]> = {
     'reports:view',
     'suppliers:view', 'suppliers:create', 'suppliers:edit', 'suppliers:delete',
     'purchase-requests:view', 'purchase-requests:create', 'purchase-requests:approve',
-    'issuances:view', 'issuances:create', 'issuances:edit',
+    'issuances:view', 'issuances:create', 'issuances:edit', 'issuances:return',
     'audit:view', 'audit:export',
     'users:view',
     'notifications:view',
@@ -180,8 +180,9 @@ export function PermissionChecklist({ selected, onChange }: Props) {
       </div>
 
       {/* ── Role presets ── */}
+      {/* GUEST preset hidden — no permissions defined */}
       <div className="flex flex-wrap gap-1.5">
-        {(['ADMIN', 'STAFF_ADMIN', 'STAFF', 'GUEST'] as const).map((role) => (
+        {(['ADMIN', 'STAFF_ADMIN', 'STAFF'] as const).map((role) => (
           <button
             key={role}
             type="button"
