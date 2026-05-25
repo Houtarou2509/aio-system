@@ -10,3 +10,4 @@ logs/
 server/prisma/dev.db
 *.db-journal
 .hermes/concern/
+*:Zone.Identifier
