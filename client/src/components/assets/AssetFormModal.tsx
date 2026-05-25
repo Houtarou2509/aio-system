@@ -1,11 +1,11 @@
-import { useState, FormEvent, useEffect, useRef } from 'react';
+import { useState, FormEvent, useEffect, useRef, useCallback } from 'react';
 import { Asset } from '../../lib/api';
 import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { useLookupOptions } from '@/hooks/useLookupOptions';
-import { Sparkles, X, Upload, Pencil, Plus } from 'lucide-react';
+import { Sparkles, X, Upload, Pencil, Plus, Camera, CameraOff, Check, RotateCcw } from 'lucide-react';
 
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
 
@@ -26,6 +26,14 @@ function getImageUrl(url: string | null | undefined): string {
 interface Supplier {
   id: string;
   name: string;
+}
+
+interface SuggestionResult {
+  type?: string;
+  manufacturer?: string;
+  usefulLifeYears?: number;
+  warrantyYears?: number;
+  confidence?: 'high' | 'medium' | 'low';
 }
 
 interface Props {
@@ -61,8 +69,18 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const [error, setError] = useState<string | null>(null);
   const [serialNumberError, setSerialNumberError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
+
+  // AI suggestion review state
+  const [suggestions, setSuggestions] = useState<SuggestionResult | null>(null);
+  const [suggestionNotes, setSuggestionNotes] = useState<{ type?: string; manufacturer?: string }>({});
+
   const [aiSuggestedFields, setAiSuggestedFields] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Camera availability state
+  const [cameraAvailable, setCameraAvailable] = useState<boolean | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
   // Supplier list
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -72,6 +90,26 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const { options: typeOptions, isLoading: typeLoading } = useLookupOptions('asset-types');
   const { options: manufacturerOptions, isLoading: manufacturerLoading } = useLookupOptions('manufacturers');
   const { options: locationOptions, isLoading: locationLoading } = useLookupOptions('locations');
+
+  // Check camera availability on mount
+  useEffect(() => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraAvailable(false);
+      return;
+    }
+    // Camera input support: check if the device has video input
+    // We also check if the HTML capture attribute is supported
+    try {
+      const testEl = document.createElement('input');
+      if (testEl.capture !== undefined) {
+        setCameraAvailable(true);
+      } else {
+        setCameraAvailable(false);
+      }
+    } catch {
+      setCameraAvailable(false);
+    }
+  }, []);
 
   // Fetch suppliers on mount
   useEffect(() => {
@@ -96,9 +134,82 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     return () => URL.revokeObjectURL(url);
   }, [imageFile]);
 
+  // Handle file upload via file input
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (file) {
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        setError('Please select a JPG, PNG, or WebP image.');
+        e.target.value = '';
+        return;
+      }
+      setError(null);
+      setImageFile(file);
+    }
+    // Reset input value so same file can be re-selected
+    e.target.value = '';
+  }, []);
+
+  // Handle camera capture
+  const handleCameraCapture = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (file) {
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        setError('Camera captured an unsupported format. Please try again or use Upload instead.');
+        e.target.value = '';
+        return;
+      }
+      setError(null);
+      setImageFile(file);
+      setCameraError(null);
+    }
+    e.target.value = '';
+  }, []);
+
+  // Open camera with error handling
+  const openCamera = useCallback(() => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraError('Camera is not available on this device.');
+      return;
+    }
+    // Try to get camera permission first
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then(stream => {
+        // Stop the stream immediately — we just needed permission
+        stream.getTracks().forEach(t => t.stop());
+        setCameraAvailable(true);
+        setCameraError(null);
+        cameraInputRef.current?.click();
+      })
+      .catch((err: DOMException) => {
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          setCameraError('Camera permission denied. You can still upload an image instead.');
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          setCameraError('No camera found on this device. You can still upload an image instead.');
+        } else {
+          setCameraError('Camera is not available. You can still upload an image instead.');
+        }
+        setCameraAvailable(false);
+      });
+  }, []);
+
+  const removeImage = useCallback(() => {
+    setImageFile(null);
+    if (!isEdit || !asset?.imageUrl) {
+      setImagePreview(null);
+    } else {
+      setImagePreview(getImageUrl(asset.imageUrl));
+    }
+  }, [isEdit, asset?.imageUrl]);
+
+  // ── AI Suggest ──
   const handleSuggest = async () => {
     if (!form.name.trim()) return;
     setSuggesting(true);
+    setSuggestions(null);
+    setSuggestionNotes({});
     try {
       const token = localStorage.getItem('accessToken');
       const res = await fetch('/api/ai/suggest', {
@@ -109,22 +220,86 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       const d = await res.json();
       if (d.success && d.data.suggestions?.length > 0) {
         const best = d.data.suggestions[0];
-        const suggested = new Set<string>();
-        if (best.type) { setForm(f => ({ ...f, type: best.type })); suggested.add('type'); }
-        if (best.manufacturer) { setForm(f => ({ ...f, manufacturer: best.manufacturer })); suggested.add('manufacturer'); }
-        if (best.usefulLifeYears != null) {
-          setForm(f => ({ ...f, usefulLifeYears: best.usefulLifeYears }));
-          suggested.add('usefulLifeYears');
+        const notes: { type?: string; manufacturer?: string } = {};
+
+        // Validate type against lookup options
+        if (best.type) {
+          const typeMatch = typeOptions.find(o => o.value.toLowerCase() === best.type.toLowerCase());
+          if (typeMatch) {
+            best.type = typeMatch.value; // use exact casing from lookup
+          } else {
+            notes.type = 'No matching lookup value';
+            delete best.type;
+          }
         }
-        if (best.warrantyYears != null && !form.warrantyExpiry && form.purchaseDate) {
-          const purchaseDate = new Date(form.purchaseDate);
-          purchaseDate.setFullYear(purchaseDate.getFullYear() + best.warrantyYears);
-          setForm(f => ({ ...f, warrantyExpiry: purchaseDate.toISOString().split('T')[0] }));
-          suggested.add('warrantyExpiry');
+
+        // Validate manufacturer against lookup options
+        if (best.manufacturer) {
+          const mfgMatch = manufacturerOptions.find(o => o.value.toLowerCase() === best.manufacturer.toLowerCase());
+          if (mfgMatch) {
+            best.manufacturer = mfgMatch.value; // use exact casing from lookup
+          } else {
+            notes.manufacturer = 'No matching lookup value';
+            delete best.manufacturer;
+          }
         }
-        setAiSuggestedFields(suggested);
+
+        // Check confidence
+        if (best.confidence === 'low' && !best.type && !best.manufacturer && best.usefulLifeYears == null) {
+          setSuggestionNotes({ type: 'No confident suggestion' });
+          setSuggesting(false);
+          return;
+        }
+
+        setSuggestionNotes(notes);
+        setSuggestions(best);
+      } else {
+        setSuggestionNotes({ type: 'No confident suggestion' });
       }
-    } catch {} finally { setSuggesting(false); }
+    } catch {
+      setSuggestionNotes({ type: 'Suggestion failed — try again' });
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
+  // Apply a single suggested field
+  const applySuggestion = (field: string, value: any) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+    setAiSuggestedFields(prev => new Set(prev).add(field));
+  };
+
+  // Apply all valid suggestions at once
+  const applyAllSuggestions = () => {
+    if (!suggestions) return;
+    const newSuggested = new Set(aiSuggestedFields);
+    if (suggestions.type != null) {
+      setForm(prev => ({ ...prev, type: suggestions.type! }));
+      newSuggested.add('type');
+    }
+    if (suggestions.manufacturer != null) {
+      setForm(prev => ({ ...prev, manufacturer: suggestions.manufacturer! }));
+      newSuggested.add('manufacturer');
+    }
+    if (suggestions.usefulLifeYears != null) {
+      setForm(prev => ({ ...prev, usefulLifeYears: suggestions.usefulLifeYears! }));
+      newSuggested.add('usefulLifeYears');
+    }
+    if (suggestions.warrantyYears != null && !form.warrantyExpiry && form.purchaseDate) {
+      const purchaseDate = new Date(form.purchaseDate);
+      purchaseDate.setFullYear(purchaseDate.getFullYear() + suggestions.warrantyYears);
+      setForm(prev => ({ ...prev, warrantyExpiry: purchaseDate.toISOString().split('T')[0] }));
+      newSuggested.add('warrantyExpiry');
+    }
+    setAiSuggestedFields(newSuggested);
+    setSuggestions(null);
+    setSuggestionNotes({});
+  };
+
+  // Dismiss suggestions
+  const dismissSuggestions = () => {
+    setSuggestions(null);
+    setSuggestionNotes({});
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -157,7 +332,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       data.depreciationMethod = form.depreciationMethod;
       data.usefulLifeYears = Number(form.usefulLifeYears);
       data.salvageValue = form.salvageValue !== '' ? Number(form.salvageValue) : 0;
-      // Supplier
+      // Supplier — explicitly null when none selected
       data.supplierId = form.supplierId || null;
 
       if (imageFile) {
@@ -228,46 +403,80 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* ═══ Asset Identity ═══ */}
 
-              {/* 1. Image */}
+              {/* 1. Image — Upload + Camera */}
               <div className="md:col-span-2">
-                <label className={labelClass}>Image</label>
+                <label className={labelClass}>Image <span className="text-slate-400 font-normal">(optional)</span></label>
                 <div className="flex items-center gap-4 mt-1">
                   {imagePreview && (
                     <div className="relative group">
                       <img src={imagePreview || ''} alt="Preview" className="h-20 w-20 rounded-lg object-cover border-2 border-[#012061]" />
                       <button
                         type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={removeImage}
+                        className="absolute -top-1.5 -right-1.5 rounded-full bg-[#7B1113] text-white p-0.5 shadow hover:bg-[#5a0e10] transition-colors"
+                        title="Remove image"
                       >
-                        <Upload className="w-4 h-4 text-white" />
+                        <X className="w-3 h-3" />
                       </button>
                     </div>
                   )}
                   <div className="flex flex-col gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      {imagePreview ? 'Change Image' : 'Upload Image'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {/* Upload button */}
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        {imagePreview ? 'Change Image' : 'Upload Image'}
+                      </button>
+                      {/* Camera button */}
+                      {cameraAvailable !== false && (
+                        <button
+                          type="button"
+                          onClick={openCamera}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                          Take Photo
+                        </button>
+                      )}
+                    </div>
+                    {/* Hidden file inputs */}
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="image/*"
-                      onChange={e => setImageFile(e.target.files?.[0] || null)}
+                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    <input
+                      ref={cameraInputRef}
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                      capture="environment"
+                      onChange={handleCameraCapture}
                       className="hidden"
                     />
                     {isEdit && asset?.imageUrl && !imageFile && (
-                      <span className="text-[10px] text-slate-400">Current image — click to replace</span>
+                      <span className="text-[10px] text-slate-400">Current image — click to replace or take a new photo</span>
+                    )}
+                    {imageFile && (
+                      <span className="text-[10px] text-slate-400">New image ready — will replace current on save</span>
                     )}
                   </div>
                 </div>
+                {/* Camera permission error */}
+                {cameraError && (
+                  <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <CameraOff className="w-3 h-3" />
+                    {cameraError}
+                  </p>
+                )}
               </div>
 
-              {/* 2. Name + AI Suggest */}
+              {/* 2. Name + Suggest Fields */}
               <div className="md:col-span-2 flex gap-2">
                 <div className="flex-1">
                   <label className={labelClass}>Name *</label>
@@ -278,17 +487,107 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                     type="button"
                     onClick={handleSuggest}
                     disabled={suggesting || !form.name.trim()}
-                    title="AI suggest type & manufacturer"
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-[#f8931f] hover:bg-[#f8931f]/10 disabled:opacity-40 transition-colors"
+                    title="Suggest type, manufacturer, and useful life based on asset name"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium text-[#f8931f] hover:bg-[#f8931f]/10 disabled:opacity-40 transition-colors whitespace-nowrap"
                   >
-                    <Sparkles className="w-4 h-4" />
+                    <Sparkles className="w-3.5 h-3.5" />
+                    {suggesting ? 'Suggesting...' : 'Suggest fields'}
                   </button>
                 </div>
               </div>
 
+              {/* Suggestion review panel */}
+              {suggestions && (
+                <div className="md:col-span-2 rounded-lg border border-[#f8931f]/30 bg-[#f8931f]/5 dark:bg-[#f8931f]/10 px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-[#f8931f]">AI Suggestions</span>
+                    <span className="text-[10px] text-slate-400">Review before applying</span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {suggestions.type != null && (
+                      <SuggestionChip
+                        label="Type"
+                        value={suggestions.type}
+                        note={suggestionNotes.type}
+                        applied={aiSuggestedFields.has('type')}
+                        onApply={() => applySuggestion('type', suggestions.type!)}
+                      />
+                    )}
+                    {suggestions.manufacturer != null && (
+                      <SuggestionChip
+                        label="Manufacturer"
+                        value={suggestions.manufacturer}
+                        note={suggestionNotes.manufacturer}
+                        applied={aiSuggestedFields.has('manufacturer')}
+                        onApply={() => applySuggestion('manufacturer', suggestions.manufacturer!)}
+                      />
+                    )}
+                    {suggestions.usefulLifeYears != null && (
+                      <SuggestionChip
+                        label="Useful Life"
+                        value={`${suggestions.usefulLifeYears} years`}
+                        onApply={() => applySuggestion('usefulLifeYears', suggestions.usefulLifeYears!)}
+                        applied={aiSuggestedFields.has('usefulLifeYears')}
+                      />
+                    )}
+                    {suggestions.warrantyYears != null && form.purchaseDate && !form.warrantyExpiry && (
+                      <SuggestionChip
+                        label="Warranty Expiry"
+                        value={`${suggestions.warrantyYears} years from purchase`}
+                        onApply={() => {
+                          const purchaseDate = new Date(form.purchaseDate);
+                          purchaseDate.setFullYear(purchaseDate.getFullYear() + suggestions.warrantyYears!);
+                          applySuggestion('warrantyExpiry', purchaseDate.toISOString().split('T')[0]);
+                        }}
+                        applied={aiSuggestedFields.has('warrantyExpiry')}
+                      />
+                    )}
+                  </div>
+                  {/* No matches message */}
+                  {(suggestionNotes.type === 'No matching lookup value' || suggestionNotes.type === 'No confident suggestion') && (
+                    <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                      {suggestionNotes.type === 'No confident suggestion'
+                        ? 'No confident suggestion found for this asset name.'
+                        : 'Some suggestions did not match existing lookup values and were excluded.'}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 mt-3 pt-2 border-t border-[#f8931f]/20">
+                    <button
+                      type="button"
+                      onClick={applyAllSuggestions}
+                      className="inline-flex items-center gap-1 rounded-md bg-[#f8931f] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#e0841a] transition-colors"
+                    >
+                      <Check className="w-3 h-3" />
+                      Apply all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={dismissSuggestions}
+                      className="inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Standalone "no confident suggestion" banner (when suggestions object is null but notes exist) */}
+              {!suggestions && suggestionNotes.type && (
+                <div className="md:col-span-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50 px-4 py-3">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-slate-400" />
+                    {suggestionNotes.type}
+                  </p>
+                </div>
+              )}
+
               {/* 3. Type */}
               <div>
-                <label className={labelClass}>Type *</label>
+                <label className={labelClass}>
+                  Type *
+                  {aiSuggestedFields.has('type') && <span className="ml-1 text-[#f8931f] text-[10px]">AI suggested</span>}
+                </label>
                 <Select value={form.type} onValueChange={(val) => val != null && set('type', val)} disabled={typeLoading}>
                   <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
                     <SelectValue placeholder={typeLoading ? 'Loading...' : 'Select type'} />
@@ -305,13 +604,16 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 4. Manufacturer */}
               <div>
-                <label className={labelClass}>Manufacturer</label>
-                <Select value={form.manufacturer || 'none'} onValueChange={(val) => val != null && set('manufacturer', val === 'none' ? '' : val)} disabled={manufacturerLoading}>
+                <label className={labelClass}>
+                  Manufacturer
+                  {aiSuggestedFields.has('manufacturer') && <span className="ml-1 text-[#f8931f] text-[10px]">AI suggested</span>}
+                </label>
+                <Select value={form.manufacturer || ''} onValueChange={(val) => set('manufacturer', val ?? '')} disabled={manufacturerLoading}>
                   <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
-                    <SelectValue placeholder={manufacturerLoading ? 'Loading...' : 'Select manufacturer'} />
+                    <SelectValue placeholder={manufacturerLoading ? 'Loading...' : 'None'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="">None</SelectItem>
                     {mergeWithFallback(manufacturerOptions, form.manufacturer).map((opt) => (
                       <SelectItem key={opt.id} value={opt.value}>
                         {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
@@ -360,15 +662,15 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               <div>
                 <label className={labelClass}>Supplier</label>
                 <Select
-                  value={form.supplierId || 'none'}
-                  onValueChange={(val) => setForm(prev => ({ ...prev, supplierId: val === 'none' ? null : val }))}
+                  value={form.supplierId ?? ''}
+                  onValueChange={(val) => setForm(prev => ({ ...prev, supplierId: val === '' ? null : val }))}
                   disabled={suppliersLoading}
                 >
                   <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
-                    <SelectValue placeholder={suppliersLoading ? 'Loading...' : 'Select supplier'} />
+                    <SelectValue placeholder={suppliersLoading ? 'Loading...' : 'None'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">— None —</SelectItem>
+                    <SelectItem value="">None</SelectItem>
                     {suppliers.map((s) => (
                       <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                     ))}
@@ -379,12 +681,12 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               {/* 10. Location */}
               <div>
                 <label className={labelClass}>Location</label>
-                <Select value={form.location || 'none'} onValueChange={(val) => val != null && set('location', val === 'none' ? '' : val)} disabled={locationLoading}>
+                <Select value={form.location || ''} onValueChange={(val) => set('location', val ?? '')} disabled={locationLoading}>
                   <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
-                    <SelectValue placeholder={locationLoading ? 'Loading...' : 'Select location'} />
+                    <SelectValue placeholder={locationLoading ? 'Loading...' : 'None'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="">None</SelectItem>
                     {mergeWithFallback(locationOptions, form.location).map((opt) => (
                       <SelectItem key={opt.id} value={opt.value}>
                         {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
@@ -486,6 +788,40 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+/** Small chip component for individual suggestion review */
+function SuggestionChip({ label, value, note, applied, onApply }: {
+  label: string;
+  value: string;
+  note?: string;
+  applied: boolean;
+  onApply: () => void;
+}) {
+  return (
+    <div className={`rounded-md border px-3 py-2 text-xs ${applied ? 'border-[#f8931f]/40 bg-[#f8931f]/10' : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700'}`}>
+      <div className="text-[10px] text-slate-400 mb-0.5">{label}</div>
+      {note ? (
+        <div className="text-amber-600 dark:text-amber-400 italic">{note}</div>
+      ) : (
+        <div className="font-medium text-slate-800 dark:text-slate-200">{value}</div>
+      )}
+      {!applied && !note && (
+        <button
+          type="button"
+          onClick={onApply}
+          className="mt-1 text-[10px] text-[#f8931f] hover:underline"
+        >
+          Apply
+        </button>
+      )}
+      {applied && (
+        <span className="mt-1 text-[10px] text-green-600 flex items-center gap-0.5">
+          <Check className="w-2.5 h-2.5" /> Applied
+        </span>
+      )}
     </div>
   );
 }
