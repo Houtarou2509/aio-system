@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import {
   BarChart3, DollarSign, Wrench,
   TrendingUp, Download, Package,
   CalendarDays, Filter, Loader2,
+  ArrowRight, Clock,
 } from 'lucide-react';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement);
@@ -46,15 +48,15 @@ interface MaintenanceCostSummary {
 
 /* ── Shared primitives ────────────────────────────────────── */
 
-function BentoCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+function BentoCard({ children, className = '', as: Component = 'div', ...props }: { children: React.ReactNode; className?: string; as?: React.ElementType; [key: string]: any }) {
   return (
-    <div className={`rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] dark:shadow-none overflow-hidden ${className}`}>
+    <Component className={`rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] dark:shadow-none overflow-hidden ${className}`} {...props}>
       {children}
-    </div>
+    </Component>
   );
 }
 
-function BentoCardTitle({ icon: Icon, children, accent = '#014da3', onExport }: { icon: React.ElementType; children: React.ReactNode; accent?: string; onExport?: () => void }) {
+function BentoCardTitle({ icon: Icon, children, accent = '#014da3', onExport, exportLabel }: { icon: React.ElementType; children: React.ReactNode; accent?: string; onExport?: () => void; exportLabel?: string }) {
   return (
     <div className="px-5 pt-4 pb-3 flex items-center justify-between">
       <div className="flex items-center gap-2.5">
@@ -65,7 +67,7 @@ function BentoCardTitle({ icon: Icon, children, accent = '#014da3', onExport }: 
       </div>
       <div className="flex items-center gap-2">
         {onExport && (
-          <button onClick={onExport} className="p-1.5 rounded-md text-slate-300 hover:text-[#f8931f] hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="Export CSV">
+          <button onClick={e => { e.stopPropagation(); onExport(); }} className="p-1.5 rounded-md text-slate-300 hover:text-[#f8931f] hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title={exportLabel || 'Export CSV'}>
             <Download className="h-3.5 w-3.5" />
           </button>
         )}
@@ -87,6 +89,16 @@ function StatRow({ label, value, highlight, subtitle }: { label: string; value: 
         {subtitle && <span className="text-[10px] text-slate-300 dark:text-slate-600 ml-1">{subtitle}</span>}
       </div>
       <span className={`text-xs font-bold tabular-nums ${highlight ? 'text-[#f8931f]' : 'text-slate-700 dark:text-slate-300'}`}>{value}</span>
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, title, description }: { icon?: React.ElementType; title: string; description: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-10 text-center">
+      {Icon && <Icon className="h-8 w-8 text-slate-200 dark:text-slate-700 mb-3" />}
+      <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-1">{title}</p>
+      <p className="text-xs text-slate-400 dark:text-slate-500 max-w-[280px] leading-relaxed">{description}</p>
     </div>
   );
 }
@@ -122,11 +134,13 @@ function triggerCsv(filename: string, headers: string[], rows: string[][]) {
    ═════════════════════════════════════════════════════════════ */
 
 export default function ReportsPage() {
+  const navigate = useNavigate();
   const [valuation, setValuation] = useState<ValuationData | null>(null);
   const [utilization, setUtilization] = useState<UtilizationData | null>(null);
   const [maintenanceCosts, setMaintenanceCosts] = useState<MaintenanceCostData | null>(null);
   const [ageStats, setAgeStats] = useState<AgeStat[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // System-wide maintenance cost summary (Phase 5-B)
   const [costSummary, setCostSummary] = useState<MaintenanceCostSummary | null>(null);
@@ -135,7 +149,7 @@ export default function ReportsPage() {
   const [filterTo, setFilterTo] = useState('');
   const [filterAssetType, setFilterAssetType] = useState('');
 
-  const fetchCostSummary = async () => {
+  const fetchCostSummary = useCallback(async () => {
     setCostSummaryLoading(true);
     try {
       const token = localStorage.getItem('accessToken');
@@ -151,7 +165,7 @@ export default function ReportsPage() {
       if (result.success) setCostSummary(result.data);
     } catch { /* ignore */ }
     finally { setCostSummaryLoading(false); }
-  };
+  }, [filterFrom, filterTo, filterAssetType]);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -170,13 +184,24 @@ export default function ReportsPage() {
         if (a.success) setAgeStats(a.data);
       })
       .catch(console.error)
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setLastUpdated(new Date());
+      });
   }, []);
 
   // Fetch system-wide cost summary on mount and when filters change
   useEffect(() => {
     fetchCostSummary();
-  }, [filterFrom, filterTo, filterAssetType]);
+  }, [fetchCostSummary]);
+
+  /* ── Derived insights ───────────────────────────────────── */
+
+  const highestValueType = valuation?.byType
+    ?.filter(t => t.totalPrice > 0)
+    .sort((a, b) => b.totalPrice - a.totalPrice)[0];
+
+  const mostUtilizedAsset = utilization?.topUtilized?.[0];
 
   /* ── Export handlers ───────────────────────────────────── */
 
@@ -237,6 +262,8 @@ export default function ReportsPage() {
     cornerRadius: 8,
   };
 
+  const cardHoverLink = 'cursor-pointer hover:border-slate-200 dark:hover:border-slate-600 hover:shadow-sm transition-all';
+
   return (
     <div className="min-h-dvh bg-[#f1f3f5] dark:bg-slate-900">
       {/* ═══ NAVY HEADER ══════════════════════════════════ */}
@@ -251,6 +278,12 @@ export default function ReportsPage() {
               <p className="text-[11px] text-slate-400 font-medium">Analytics & Financial Insights</p>
             </div>
           </div>
+          {lastUpdated && (
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+              <Clock className="h-3 w-3" />
+              <span>Last updated: {lastUpdated.toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+          )}
         </div>
       </header>
 
@@ -267,12 +300,100 @@ export default function ReportsPage() {
         ) : (
           <div className="space-y-4">
 
+            {/* ═══ EXECUTIVE SUMMARY ═════════════════════ */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <button
+                onClick={() => navigate('/aio-system/assets')}
+                className="rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 px-4 py-3 text-left hover:border-slate-200 dark:hover:border-slate-600 hover:shadow-sm transition-all group"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#014da3]/10">
+                    <DollarSign className="h-3.5 w-3.5 text-[#014da3]" />
+                  </div>
+                  <span className="text-[10px] font-semibold tracking-widest uppercase text-slate-400 dark:text-slate-500">Inventory Value</span>
+                </div>
+                <p className="text-lg font-bold text-slate-900 dark:text-white tabular-nums">
+                  {valuation ? `₱${valuation.totalPurchasePrice.toLocaleString()}` : '—'}
+                </p>
+                <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-400 group-hover:text-[#014da3] transition-colors">
+                  <span>View assets</span>
+                  <ArrowRight className="h-2.5 w-2.5" />
+                </div>
+              </button>
+
+              <button
+                onClick={() => navigate('/aio-system/assets')}
+                className="rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 px-4 py-3 text-left hover:border-slate-200 dark:hover:border-slate-600 hover:shadow-sm transition-all group"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#f8931f]/15">
+                    <TrendingUp className="h-3.5 w-3.5 text-[#f8931f]" />
+                  </div>
+                  <span className="text-[10px] font-semibold tracking-widest uppercase text-slate-400 dark:text-slate-500">Highest Value Type</span>
+                </div>
+                <p className="text-lg font-bold text-slate-900 dark:text-white truncate">
+                  {highestValueType ? highestValueType.type : '—'}
+                </p>
+                {highestValueType && (
+                  <p className="text-[10px] text-slate-400 mt-0.5">₱{highestValueType.totalPrice.toLocaleString()} · {highestValueType.count} asset{highestValueType.count !== 1 ? 's' : ''}</p>
+                )}
+                <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-400 group-hover:text-[#f8931f] transition-colors">
+                  <span>View assets</span>
+                  <ArrowRight className="h-2.5 w-2.5" />
+                </div>
+              </button>
+
+              <button
+                onClick={() => navigate('/aio-system/issuances')}
+                className="rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 px-4 py-3 text-left hover:border-slate-200 dark:hover:border-slate-600 hover:shadow-sm transition-all group"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/10">
+                    <BarChart3 className="h-3.5 w-3.5 text-emerald-600" />
+                  </div>
+                  <span className="text-[10px] font-semibold tracking-widest uppercase text-slate-400 dark:text-slate-500">Most Utilized</span>
+                </div>
+                <p className="text-lg font-bold text-slate-900 dark:text-white truncate">
+                  {mostUtilizedAsset ? mostUtilizedAsset.name : '—'}
+                </p>
+                {mostUtilizedAsset && (
+                  <p className="text-[10px] text-slate-400 mt-0.5">{mostUtilizedAsset.checkoutCount} checkout{mostUtilizedAsset.checkoutCount !== 1 ? 's' : ''} · {mostUtilizedAsset.type}</p>
+                )}
+                <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-400 group-hover:text-emerald-600 transition-colors">
+                  <span>View issuances</span>
+                  <ArrowRight className="h-2.5 w-2.5" />
+                </div>
+              </button>
+
+              <button
+                onClick={() => navigate('/aio-system/maintenance-calendar')}
+                className="rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 px-4 py-3 text-left hover:border-slate-200 dark:hover:border-slate-600 hover:shadow-sm transition-all group"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#7B1113]/10">
+                    <Wrench className="h-3.5 w-3.5 text-[#7B1113]" />
+                  </div>
+                  <span className="text-[10px] font-semibold tracking-widest uppercase text-slate-400 dark:text-slate-500">Maintenance Logs</span>
+                </div>
+                <p className="text-lg font-bold text-slate-900 dark:text-white tabular-nums">
+                  {maintenanceCosts ? maintenanceCosts.totalMaintenanceCount : '—'}
+                </p>
+                {maintenanceCosts && maintenanceCosts.totalCost > 0 && (
+                  <p className="text-[10px] text-slate-400 mt-0.5">₱{maintenanceCosts.totalCost.toLocaleString()} total spend</p>
+                )}
+                <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-400 group-hover:text-[#7B1113] transition-colors">
+                  <span>View maintenance</span>
+                  <ArrowRight className="h-2.5 w-2.5" />
+                </div>
+              </button>
+            </div>
+
             {/* ═══ ROW 1: Valuation + Utilization ═══════════ */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
               {/* ── Inventory Valuation ───────────────────── */}
-              <BentoCard>
-                <BentoCardTitle icon={DollarSign} accent="#014da3" onExport={exportValuation}>Inventory Valuation</BentoCardTitle>
+              <BentoCard as="button" className={cardHoverLink} onClick={() => navigate('/aio-system/assets')}>
+                <BentoCardTitle icon={DollarSign} accent="#014da3" onExport={exportValuation} exportLabel="Export inventory valuation">Inventory Valuation</BentoCardTitle>
                 <div className="px-5 pb-5">
                   {valuation ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -295,7 +416,7 @@ export default function ReportsPage() {
                         </div>
                       </div>
                       {/* Chart */}
-                      <div className="h-52">
+                      <div className="min-h-[200px]">
                         {valuation.byStatus.length > 0 ? (
                           <Doughnut
                             data={{
@@ -314,17 +435,17 @@ export default function ReportsPage() {
                       </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-400 italic py-8 text-center">No valuation data yet</p>
+                    <EmptyState icon={DollarSign} title="No valuation data yet" description="Asset values and distribution will appear here once inventory items with purchase prices are added." />
                   )}
                 </div>
               </BentoCard>
 
               {/* ── Asset Utilization ──────────────────────── */}
-              <BentoCard>
-                <BentoCardTitle icon={TrendingUp} accent="#014da3" onExport={exportUtilization}>Top Utilized Assets</BentoCardTitle>
+              <BentoCard as="button" className={cardHoverLink} onClick={() => navigate('/aio-system/issuances')}>
+                <BentoCardTitle icon={TrendingUp} accent="#014da3" onExport={exportUtilization} exportLabel="Export top utilized assets">Top Utilized Assets</BentoCardTitle>
                 <div className="px-5 pb-5">
                   {utilization && utilization.topUtilized.length > 0 ? (
-                    <div className="h-[340px]">
+                    <div className="min-h-[280px]">
                       <Bar
                         data={{
                           labels: utilization.topUtilized.map(a => a.name.length > 20 ? a.name.slice(0, 19) + '…' : a.name),
@@ -362,7 +483,7 @@ export default function ReportsPage() {
                       />
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-400 italic py-16 text-center">No checkout history yet</p>
+                    <EmptyState icon={TrendingUp} title="No checkout history yet" description="Asset usage will appear here after issuances are created and assets are assigned to personnel." />
                   )}
                 </div>
               </BentoCard>
@@ -372,8 +493,8 @@ export default function ReportsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
               {/* ── Maintenance Cost Analysis ─────────────── */}
-              <BentoCard>
-                <BentoCardTitle icon={Wrench} accent="#014da3" onExport={exportMaintenance}>Maintenance Cost Analysis</BentoCardTitle>
+              <BentoCard as="button" className={cardHoverLink} onClick={() => navigate('/aio-system/maintenance-calendar')}>
+                <BentoCardTitle icon={Wrench} accent="#014da3" onExport={exportMaintenance} exportLabel="Export maintenance cost analysis">Maintenance Cost Analysis</BentoCardTitle>
                 <div className="px-5 pb-5">
                   {maintenanceCosts && maintenanceCosts.totalCost > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -397,7 +518,7 @@ export default function ReportsPage() {
                         </div>
                       </div>
                       {/* Chart */}
-                      <div className="h-52">
+                      <div className="min-h-[200px]">
                         <Bar
                           data={{
                             labels: maintenanceCosts.byAsset.map(a => a.name.length > 14 ? a.name.slice(0, 13) + '…' : a.name),
@@ -421,17 +542,17 @@ export default function ReportsPage() {
                       </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-400 italic py-8 text-center">No maintenance data yet</p>
+                    <EmptyState icon={Wrench} title="No maintenance cost data yet" description="Repair and service costs will appear here once maintenance logs with cost data are recorded. This chart tracks recorded maintenance costs, not overdue maintenance tasks." />
                   )}
                 </div>
               </BentoCard>
 
               {/* ── Asset Age Distribution ────────────────── */}
-              <BentoCard>
+              <BentoCard as="button" className={cardHoverLink} onClick={() => navigate('/aio-system/assets')}>
                 <BentoCardTitle icon={Package} accent="#014da3">Age Distribution</BentoCardTitle>
                 <div className="px-5 pb-5">
                   {ageStats.length > 0 ? (
-                    <div className="h-[320px] flex items-center justify-center">
+                    <div className="min-h-[260px] flex items-center justify-center">
                       <Doughnut
                         data={{
                           labels: ageStats.map(a => a.label),
@@ -458,7 +579,7 @@ export default function ReportsPage() {
                       />
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-400 italic py-20 text-center">No purchase date data available</p>
+                    <EmptyState icon={Package} title="No purchase date data available" description="Asset age distribution will appear once assets have purchase or acquisition dates recorded." />
                   )}
                 </div>
               </BentoCard>
@@ -466,7 +587,7 @@ export default function ReportsPage() {
 
             {/* ═══ ROW 3: Maintenance Costs (system-wide summary) ═══ */}
             <BentoCard>
-              <BentoCardTitle icon={DollarSign} accent="#012061" onExport={exportCostSummary}>Maintenance Costs Summary</BentoCardTitle>
+              <BentoCardTitle icon={DollarSign} accent="#012061" onExport={exportCostSummary} exportLabel="Export maintenance costs summary">Maintenance Costs Summary</BentoCardTitle>
               <div className="px-5 pb-5">
                 {/* ── Date Range Filter ─── */}
                 <div className="flex flex-wrap items-end gap-3 mb-4 pb-4 border-b border-slate-100 dark:border-slate-700">
@@ -575,7 +696,7 @@ export default function ReportsPage() {
                             </table>
                           </div>
                         ) : (
-                          <p className="text-xs text-slate-400 italic py-6 text-center">No assets with maintenance costs</p>
+                          <EmptyState icon={DollarSign} title="No assets with maintenance costs" description="Add maintenance logs with cost data to begin tracking repair spending per asset." />
                         )}
                       </div>
 
@@ -609,13 +730,13 @@ export default function ReportsPage() {
                             })}
                           </div>
                         ) : (
-                          <p className="text-xs text-slate-400 italic py-6 text-center">No cost data by type</p>
+                          <EmptyState icon={DollarSign} title="No cost data by type" description="Cost breakdown by asset type will appear once maintenance logs with cost data are recorded." />
                         )}
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-400 italic py-8 text-center">Unable to load maintenance cost summary</p>
+                  <EmptyState icon={DollarSign} title="Unable to load maintenance cost summary" description="Try refreshing the page. If the problem persists, check that the maintenance service is available." />
                 )}
               </div>
             </BentoCard>

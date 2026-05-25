@@ -148,7 +148,7 @@ export default function UserManagementPage() {
       const result = await res.json();
       if (!result.success) {
         if (result.error?.message?.includes('Username')) {
-          setServerErrors({ username: 'Username already taken' });
+          setServerErrors({ username: 'Username is already taken' });
         } else if (result.error?.message?.includes('Email')) {
           setServerErrors({ email: 'Email already in use' });
         } else {
@@ -184,7 +184,7 @@ export default function UserManagementPage() {
       const result = await res.json();
       if (!result.success) {
         if (result.error?.message?.includes('Username')) {
-          setServerErrors({ username: 'Username already taken' });
+          setServerErrors({ username: 'Username is already taken' });
         } else if (result.error?.message?.includes('Email')) {
           setServerErrors({ email: 'Email already in use' });
         } else {

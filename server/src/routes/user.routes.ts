@@ -89,12 +89,12 @@ router.post('/', validate(createUserSchema), async (req: Request, res: Response)
   try {
     const { fullName, username, email, password, role, permissions } = req.body;
 
-    // Check unique constraints
+    // Check unique constraints (case-insensitive for username)
     const existing = await prisma.user.findFirst({
-      where: { OR: [{ username }, { email }] },
+      where: { OR: [{ username: { equals: username, mode: 'insensitive' } }, { email }] },
     });
     if (existing) {
-      if (existing.username === username) return error(res, 'Username already exists', 409);
+      if (existing.username.toLowerCase() === username.toLowerCase()) return error(res, 'Username is already taken', 409);
       return error(res, 'Email already exists', 409);
     }
 
@@ -186,12 +186,14 @@ router.put('/:id', validate(updateUserSchema), async (req: Request, res: Respons
       if (email) orClauses.push({ email });
       const conflict = await prisma.user.findFirst({
         where: {
-          OR: orClauses,
+          OR: orClauses.map(c => c.username
+            ? { username: { equals: c.username, mode: 'insensitive' } }
+            : c),
           id: { not: id },
         },
       });
       if (conflict) {
-        if (conflict.username === username) return error(res, 'Username already exists', 409);
+        if (conflict.username.toLowerCase() === (username?.toLowerCase() ?? '')) return error(res, 'Username is already taken', 409);
         return error(res, 'Email already exists', 409);
       }
     }

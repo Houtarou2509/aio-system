@@ -78,8 +78,10 @@ export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }:
   const validate = (): boolean => {
     const e: Record<string, string> = {};
     if (!form.fullName.trim()) e.fullName = 'Full name is required';
-    if (!form.username.trim()) e.username = 'Username is required';
-    else if (!/^[a-zA-Z0-9_]{3,20}$/.test(form.username)) e.username = '3-20 chars, alphanumeric + underscore';
+    const trimmedUsername = form.username.trim();
+    if (!trimmedUsername) e.username = 'Username is required';
+    else if (trimmedUsername.length < 3) e.username = 'Username must be at least 3 characters';
+    else if (!/^[a-zA-Z0-9._-]+$/.test(trimmedUsername)) e.username = 'Username can only contain letters, numbers, dots, hyphens, and underscores';
     if (!form.email.trim()) e.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email format';
     if (showPwSection) {
@@ -98,7 +100,7 @@ export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }:
     try {
       const payload: { fullName: string; username: string; email: string; role: string; password?: string; permissions: string[] } = {
         fullName: form.fullName.trim(),
-        username: form.username.trim(),
+        username: form.username.trim().toLowerCase(),
         email: form.email.trim(),
         role: form.role,
         permissions,

@@ -92,7 +92,7 @@ export default function ChangePasswordPage() {
               Change Your Password
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 text-center mt-2">
-              Your password was set by an administrator. Please set a new password to continue.
+              Your administrator created a temporary password for your account. Please set your own password to continue.
             </p>
           </div>
 

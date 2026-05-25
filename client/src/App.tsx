@@ -10,6 +10,7 @@ import DashboardPage from './pages/DashboardPage';
 import AssetsPage from './pages/AssetsPage';
 import AuditPage from './pages/AuditPage';
 import GuestAssetPage from './pages/GuestAssetPage';
+import AgreementVerificationPage from './pages/AgreementVerificationPage';
 import SettingsPage from './pages/SettingsPage';
 import UserManagementPage from './pages/UserManagementPage';
 import InventoryLookupPage from './pages/InventoryLookupPage';
@@ -38,6 +39,7 @@ function App() {
           <Route path="/setup-2fa" element={<ProtectedRoute><Setup2FaPage /></ProtectedRoute>} />
           <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
           <Route path="/guest/:token" element={<GuestAssetPage />} />
+          <Route path="/agreements/verify/:documentNumber" element={<AgreementVerificationPage />} />
 
           {/* All authenticated routes share the sidebar layout */}
           <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>

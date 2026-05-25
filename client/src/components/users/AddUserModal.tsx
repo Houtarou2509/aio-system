@@ -1,5 +1,5 @@
 import { useState, FormEvent, useEffect } from 'react';
-import { X, UserPlus, Eye, EyeOff } from 'lucide-react';
+import { X, UserPlus, Eye, EyeOff, Info } from 'lucide-react';
 import { PermissionChecklist, getDefaultPermissions } from './PermissionChecklist';
 
 // GUEST role hidden until guest link flow is implemented
@@ -50,12 +50,19 @@ export function AddUserModal({ onSubmit, onClose, serverErrors }: Props) {
   const validate = (): boolean => {
     const e: Record<string, string> = {};
     if (!form.fullName.trim()) e.fullName = 'Full name is required';
-    if (!form.username.trim()) e.username = 'Username is required';
-    else if (!/^[a-zA-Z0-9_]{3,20}$/.test(form.username)) e.username = '3-20 chars, alphanumeric + underscore';
+
+    const trimmedUsername = form.username.trim();
+    if (!trimmedUsername) e.username = 'Username is required';
+    else if (trimmedUsername.length < 3) e.username = 'Username must be at least 3 characters';
+    else if (!/^[a-zA-Z0-9._-]+$/.test(trimmedUsername)) e.username = 'Username can only contain letters, numbers, dots, hyphens, and underscores';
+
     if (!form.email.trim()) e.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email format';
-    if (!form.password) e.password = 'Password is required';
-    else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$/.test(form.password)) e.password = 'Password must be 8+ chars with uppercase, number, and special character';
+
+    // Temporary password — simple requirement: min 6 chars
+    if (!form.password) e.password = 'Temporary password is required';
+    else if (form.password.length < 6) e.password = 'Temporary password must be at least 6 characters';
+
     if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
     if (!form.role) e.role = 'Role is required';
     setErrors(e);
@@ -69,7 +76,8 @@ export function AddUserModal({ onSubmit, onClose, serverErrors }: Props) {
     try {
       await onSubmit({
         fullName: form.fullName.trim(),
-        username: form.username.trim(),
+        // Normalize username to lowercase before sending
+        username: form.username.trim().toLowerCase(),
         email: form.email.trim(),
         password: form.password,
         role: form.role,
@@ -126,8 +134,9 @@ export function AddUserModal({ onSubmit, onClose, serverErrors }: Props) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass}>Username <span className="text-red-500">*</span></label>
-                  <input type="text" value={form.username} onChange={set('username')} className={inputClass} placeholder="e.g. jdoe" />
-                  {fieldError('username') && <p className="text-xs text-red-500 mt-1">{fieldError('username')}</p>}
+                  <input type="text" value={form.username} onChange={set('username')} className={inputClass} placeholder="e.g. juan.delacruz" />
+                  <p className="text-[10px] text-slate-400 mt-1">Will be saved as lowercase</p>
+                  {fieldError('username') && <p className="text-xs text-red-500 mt-0.5">{fieldError('username')}</p>}
                 </div>
                 <div>
                   <label className={labelClass}>Email <span className="text-red-500">*</span></label>
@@ -136,27 +145,34 @@ export function AddUserModal({ onSubmit, onClose, serverErrors }: Props) {
                 </div>
               </div>
 
-              {/* Password & Confirm — side by side */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass}>Password <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <input type={showPw ? 'text' : 'password'} value={form.password} onChange={set('password')} className={`${inputClass} pr-10`} placeholder="Min. 8 characters" />
-                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
-                      {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {fieldError('password') && <p className="text-xs text-red-500 mt-1">{fieldError('password')}</p>}
+              {/* Temporary Password & Confirm — side by side */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <label className={`${labelClass} mb-0`}>Temporary Password <span className="text-red-500">*</span></label>
+                  <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                    <Info className="w-2.5 h-2.5" />
+                    User will set their own strong password on first login
+                  </span>
                 </div>
-                <div>
-                  <label className={labelClass}>Confirm Password <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <input type={showCp ? 'text' : 'password'} value={form.confirmPassword} onChange={set('confirmPassword')} className={`${inputClass} pr-10`} placeholder="Re-enter password" />
-                    <button type="button" onClick={() => setShowCp(!showCp)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
-                      {showCp ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="relative">
+                      <input type={showPw ? 'text' : 'password'} value={form.password} onChange={set('password')} className={`${inputClass} pr-10`} placeholder="Min. 6 characters" />
+                      <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                        {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {fieldError('password') && <p className="text-xs text-red-500 mt-1">{fieldError('password')}</p>}
                   </div>
-                  {fieldError('confirmPassword') && <p className="text-xs text-red-500 mt-1">{fieldError('confirmPassword')}</p>}
+                  <div>
+                    <div className="relative">
+                      <input type={showCp ? 'text' : 'password'} value={form.confirmPassword} onChange={set('confirmPassword')} className={`${inputClass} pr-10`} placeholder="Re-enter password" />
+                      <button type="button" onClick={() => setShowCp(!showCp)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                        {showCp ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {fieldError('confirmPassword') && <p className="text-xs text-red-500 mt-1">{fieldError('confirmPassword')}</p>}
+                  </div>
                 </div>
               </div>
 

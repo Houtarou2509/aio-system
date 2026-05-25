@@ -300,7 +300,7 @@ export default function AgreementDocumentDetailModal({
                   <button
                     type="button"
                     onClick={async () => {
-                      const url = `${window.location.origin}/api/agreements/verify/${details.documentNumber}`;
+                      const url = `${window.location.origin}/aio-system/agreements/verify/${details.documentNumber}`;
                       try {
                         await navigator.clipboard.writeText(url);
                         setCopiedLink('copied');

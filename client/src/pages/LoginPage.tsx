@@ -1,12 +1,12 @@
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useRef, useEffect } from 'react';
 import { useNavigate, Navigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import {
   Loader2, ArrowRight, User, Lock, AlertTriangle,
   Eye, EyeOff, ArrowLeft, ShieldEllipsis,
+  HelpCircle, X,
 } from 'lucide-react';
-import { Checkbox } from '../components/ui/checkbox';
 
 /* ═════════════════════════════════════════════════════
    SHARED LAYOUT SHELL — SPLIT SCREEN
@@ -46,7 +46,7 @@ function LayoutShell({ children }: { children: React.ReactNode }) {
             AIO SYSTEM
           </h1>
           <p className="text-slate-300 text-sm tracking-wide leading-relaxed max-w-[280px] mx-auto">
-            Unified Asset &amp; Inventory Research Management
+            Unified Asset, Inventory, and Accountability Management
           </p>
 
           {/* Decorative line */}
@@ -86,6 +86,45 @@ function LayoutShell({ children }: { children: React.ReactNode }) {
 }
 
 /* ═════════════════════════════════════════════════════
+   HELP & SUPPORT MODAL
+   ═════════════════════════════════════════════════════ */
+function HelpSupportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-sm rounded-xl bg-white dark:bg-slate-800 shadow-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-[#012061] dark:text-slate-100">Help &amp; Support</h2>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+          For account access issues, contact your system administrator.
+        </p>
+        <div className="mt-4 rounded-lg bg-[#012061]/5 dark:bg-slate-700 p-3">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Administrators can reset passwords, manage accounts, and update 2FA settings from the Users panel.
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="mt-5 w-full py-2.5 px-4 bg-[#f8931f] text-white font-semibold rounded-xl hover:bg-[#e0841a] transition-colors text-sm"
+        >
+          Got it
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ═════════════════════════════════════════════════════
    LOGIN PAGE
    ═════════════════════════════════════════════════════ */
 export default function LoginPage() {
@@ -98,7 +137,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const twoFaInputRef = useRef<HTMLInputElement>(null);
+  const twoFaFormRef = useRef<HTMLFormElement>(null);
 
   if (isAuthenticated) return <Navigate to="/" replace />;
 
@@ -110,7 +151,7 @@ export default function LoginPage() {
       await login(email, password);
       if (!requiresTwoFactor) navigate('/');
     } catch (c: any) {
-      setErr(c.message || 'Invalid username or password.');
+      setErr('Invalid email or password.');
     } finally {
       setLoading(false);
     }
@@ -124,11 +165,18 @@ export default function LoginPage() {
       await login(email, password, twoFactorToken);
       navigate('/');
     } catch (c: any) {
-      setErr(c.message || 'Invalid 2FA code');
+      setErr('Invalid or expired authentication code.');
     } finally {
       setLoading(false);
     }
   };
+
+  // Auto-submit 2FA when 6 digits are entered
+  useEffect(() => {
+    if (requiresTwoFactor && twoFactorToken.length === 6 && twoFaFormRef.current) {
+      twoFaFormRef.current.requestSubmit();
+    }
+  }, [twoFactorToken, requiresTwoFactor]);
 
   /* ═════════════════════════════════════════════════════
      2FA VIEW
@@ -145,8 +193,8 @@ export default function LoginPage() {
         </div>
 
         <button
-          onClick={() => { /* soft reset */ }}
-          className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-[#012061] dark:hover:text-slate-100 dark:text-slate-100 transition-colors mb-8"
+          onClick={() => { setTwoFactorToken(''); setErr(''); }}
+          className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-[#012061] dark:hover:text-slate-100 transition-colors mb-8"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to sign in
@@ -169,18 +217,24 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handle2FaSubmit} className="space-y-6">
+        <form ref={twoFaFormRef} onSubmit={handle2FaSubmit} className="space-y-6">
           <div className="space-y-2">
             <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Authentication Code
             </label>
             <div className="relative">
               <input
+                ref={twoFaInputRef}
                 type="text"
                 inputMode="numeric"
                 maxLength={6}
                 value={twoFactorToken}
                 onChange={e => setTwoFactorToken(e.target.value.replace(/\D/g, ''))}
+                onPaste={e => {
+                  const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+                  setTwoFactorToken(pasted);
+                  e.preventDefault();
+                }}
                 placeholder="000000"
                 className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 text-center text-2xl font-semibold tracking-[0.5em] placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-[#f8931f]/30 focus:border-[#f8931f] transition-all"
                 autoFocus
@@ -286,24 +340,15 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#012061] dark:text-slate-100/40 hover:text-[#012061] dark:hover:text-slate-100 dark:text-slate-100 transition-colors"
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#012061] dark:text-slate-100/40 hover:text-[#012061] dark:hover:text-slate-100 transition-colors"
             >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
         </div>
 
-        {/* Remember Me & Forgot Password */}
-        <div className="flex items-center justify-between pt-1">
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="remember"
-              checked={rememberMe}
-              onCheckedChange={(checked: boolean) => setRememberMe(checked)}
-              className="border-slate-300 dark:border-slate-600 data-[state=checked]:bg-[#f8931f] data-[state=checked]:border-[#f8931f]"
-            />
-            <label htmlFor="remember" className="text-xs text-slate-500 dark:text-slate-400 cursor-pointer select-none">Remember me</label>
-          </div>
+        {/* Forgot Password row */}
+        <div className="flex items-center justify-end pt-1">
           <Link to="/forgot-password" className="text-xs text-slate-500 dark:text-slate-400 hover:text-[#f8931f] transition-colors">Forgot password?</Link>
         </div>
 
@@ -328,8 +373,17 @@ export default function LoginPage() {
         <p className="text-slate-400 text-xs">
           &copy; {new Date().getFullYear()} Office Asset Manager
         </p>
-        <a href="#" className="text-[10px] text-slate-400 hover:text-[#012061] dark:hover:text-slate-100 dark:text-slate-100 transition-colors tracking-wide uppercase" onClick={e => e.preventDefault()}>Help &amp; Support</a>
+        <button
+          type="button"
+          onClick={() => setShowHelp(true)}
+          className="text-[10px] text-slate-400 hover:text-[#012061] dark:hover:text-slate-100 transition-colors tracking-wide uppercase inline-flex items-center gap-1"
+        >
+          <HelpCircle className="w-3 h-3" />
+          Help &amp; Support
+        </button>
       </div>
+
+      <HelpSupportModal open={showHelp} onClose={() => setShowHelp(false)} />
     </LayoutShell>
   );
 }

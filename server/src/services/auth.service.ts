@@ -46,13 +46,13 @@ export async function login(email: string, password: string, twoFactorToken?: st
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     console.warn('[AUTH] Login failed: user not found for email:', email);
-    throw new Error('Invalid credentials');
+    throw new Error('Invalid email or password.');
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
     console.warn('[AUTH] Login failed: password mismatch for email:', email, '| hash length:', user.passwordHash.length);
-    throw new Error('Invalid credentials');
+    throw new Error('Invalid email or password.');
   }
 
   // Status check
@@ -68,7 +68,7 @@ export async function login(email: string, password: string, twoFactorToken?: st
       encoding: 'base32',
       token: twoFactorToken,
     });
-    if (!verified) throw new Error('Invalid 2FA token');
+    if (!verified) throw new Error('Invalid or expired authentication code');
   }
 
   const permissions = parsePermissions(user.permissions);
@@ -199,7 +199,7 @@ export async function validate2Fa(userId: string, token: string) {
     token,
   });
 
-  if (!verified) throw new Error('Invalid 2FA token');
+  if (!verified) throw new Error('Invalid or expired authentication code');
 
   return { valid: true };
 }

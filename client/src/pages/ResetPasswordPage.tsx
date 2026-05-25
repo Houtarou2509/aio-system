@@ -1,6 +1,6 @@
-import { useState, FormEvent } from 'react';
+import { useState, useMemo, FormEvent } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { Lock, ArrowLeft, ArrowRight, Loader2, CheckCircle2, AlertTriangle, Eye, EyeOff } from 'lucide-react';
+import { Lock, ArrowLeft, ArrowRight, Loader2, CheckCircle2, AlertTriangle, Eye, EyeOff, XCircle } from 'lucide-react';
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -13,6 +13,18 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [success, setSuccess] = useState(false);
+
+  // Password strength criteria
+  const criteria = useMemo(() => {
+    const hasLength = password.length >= 8;
+    const hasUpper = /[A-Z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecial = /[^A-Za-z0-9]/.test(password);
+    return { hasLength, hasUpper, hasNumber, hasSpecial };
+  }, [password]);
+
+  const metCount = Object.values(criteria).filter(Boolean).length;
+  const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
 
   if (!token) {
     return (
@@ -41,12 +53,17 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     setErr('');
 
-    if (password.length < 6) {
-      setErr('Password must be at least 6 characters');
+    // Strong password validation
+    if (password.length < 8) {
+      setErr('Password must be at least 8 characters.');
+      return;
+    }
+    if (metCount < 4) {
+      setErr('Password does not meet all strength requirements.');
       return;
     }
     if (password !== confirmPassword) {
-      setErr('Passwords do not match');
+      setErr('Passwords do not match.');
       return;
     }
 
@@ -89,6 +106,10 @@ export default function ResetPasswordPage() {
       </div>
     );
   }
+
+  const strengthLabel = metCount <= 2 ? 'Weak' : metCount === 3 ? 'Medium' : 'Strong';
+  const strengthColor = metCount <= 2 ? 'text-red-500' : metCount === 3 ? 'text-orange-500' : 'text-green-500';
+  const barColor = metCount <= 2 ? 'bg-red-500' : metCount === 3 ? 'bg-orange-500' : 'bg-green-500';
 
   return (
     <div className="min-h-dvh w-full flex bg-light-bg dark:bg-slate-900">
@@ -133,7 +154,7 @@ export default function ResetPasswordPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  placeholder="Min. 6 characters"
+                  placeholder="Min. 8 characters"
                   required
                   className="w-full pl-10 pr-10 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f8931f]/30 focus:border-[#f8931f] transition-all hover:border-slate-300"
                 />
@@ -147,6 +168,40 @@ export default function ResetPasswordPage() {
               </div>
             </div>
 
+            {/* Strength indicator */}
+            {password.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500 dark:text-slate-400">Strength:</span>
+                  <span className={`font-semibold ${strengthColor}`}>{strengthLabel}</span>
+                </div>
+                <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${barColor}`}
+                    style={{ width: `${(metCount / 4) * 100}%` }}
+                  />
+                </div>
+                <ul className="space-y-1 text-xs">
+                  <li className={`flex items-center gap-1.5 ${criteria.hasLength ? 'text-green-600 dark:text-green-400' : 'text-slate-400'}`}>
+                    {criteria.hasLength ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                    At least 8 characters
+                  </li>
+                  <li className={`flex items-center gap-1.5 ${criteria.hasUpper ? 'text-green-600 dark:text-green-400' : 'text-slate-400'}`}>
+                    {criteria.hasUpper ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                    One uppercase letter
+                  </li>
+                  <li className={`flex items-center gap-1.5 ${criteria.hasNumber ? 'text-green-600 dark:text-green-400' : 'text-slate-400'}`}>
+                    {criteria.hasNumber ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                    One number
+                  </li>
+                  <li className={`flex items-center gap-1.5 ${criteria.hasSpecial ? 'text-green-600 dark:text-green-400' : 'text-slate-400'}`}>
+                    {criteria.hasSpecial ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                    One special character
+                  </li>
+                </ul>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Confirm Password</label>
               <div className="relative">
@@ -159,14 +214,24 @@ export default function ResetPasswordPage() {
                   onChange={e => setConfirmPassword(e.target.value)}
                   placeholder="Re-enter new password"
                   required
-                  className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f8931f]/30 focus:border-[#f8931f] transition-all hover:border-slate-300"
+                  className={`w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border rounded-xl text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f8931f]/30 focus:border-[#f8931f] transition-all hover:border-slate-300 ${
+                    confirmPassword.length > 0 && !passwordsMatch
+                      ? 'border-red-400 dark:border-red-500'
+                      : 'border-slate-200 dark:border-slate-700'
+                  }`}
                 />
               </div>
+              {confirmPassword.length > 0 && !passwordsMatch && (
+                <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+              )}
+              {passwordsMatch && (
+                <p className="text-xs text-green-500 mt-1">Passwords match</p>
+              )}
             </div>
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || metCount < 4 || !passwordsMatch}
               className="w-full py-3 px-4 bg-[#f8931f] text-white font-semibold rounded-xl shadow-lg shadow-[#f8931f]/20 hover:bg-[#e0841a] hover:shadow-xl transform transition-all active:scale-[0.98] flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (

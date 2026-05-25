@@ -1161,7 +1161,7 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
     // Verification URL footnote for signed documents
     if (recipientSignedAt && documentNumber) {
       const baseUrl = process.env.APP_BASE_URL || 'http://localhost:3000';
-      const verifyUrl = `${baseUrl}/api/agreements/verify/${documentNumber}`;
+      const verifyUrl = `${baseUrl}/aio-system/agreements/verify/${documentNumber}`;
       const verifyY = sigLabelY + 14;
       doc.font('Helvetica').fontSize(7).fillColor('#94a3b8');
       doc.text(`Document authenticity can be verified at: ${verifyUrl}`, M, verifyY, { width: CW, align: 'center', lineBreak: false });
