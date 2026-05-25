@@ -60,11 +60,84 @@ function extractRelativeTime(text: string): string {
 
 function extractActionType(text: string): string {
   const upper = text.toUpperCase();
+  if (upper.includes('CHECKOUT') || upper.includes('BULK_CREATED')) return 'CREATED';
+  if (upper.includes('AGREEMENT.PDF_VIEWED')) return 'LOG';
+  if (upper.includes('CHANGED PHOTOURL') || upper.includes('CHANGED EMAIL')) return 'UPDATED';
+  if (upper.includes('CHANGED RETURNEDAT') || upper.includes('CHANGED RETURNEE')) return 'UPDATED';
+  if (upper.includes('CHANGED STATUS')) return 'UPDATED';
   const keywords = ['CREATED', 'UPDATED', 'DELETED', 'ASSIGNED', 'UNASSIGNED', 'TRANSFERRED', 'RETIRE', 'MAINTENANCE', 'AUDIT', 'SCAN'];
   for (const kw of keywords) {
     if (upper.includes(kw)) return kw;
   }
   return 'LOG';
+}
+
+function humanizeActionType(type: string): string {
+  const map: Record<string, string> = {
+    CREATED: 'Created',
+    UPDATED: 'Updated',
+    DELETED: 'Deleted',
+    ASSIGNED: 'Assigned',
+    UNASSIGNED: 'Unassigned',
+    TRANSFERRED: 'Transferred',
+    RETIRE: 'Retired',
+    MAINTENANCE: 'Maintenance',
+    AUDIT: 'Audit',
+    SCAN: 'Scanned',
+    LOG: 'Activity',
+  };
+  return map[type] || type;
+}
+
+function humanizeActivity(raw: string): { actor: string; action: string; context: string } {
+  const cleaned = cleanActivityText(raw);
+
+  // "uppidrdf changed photoUrl from ..."
+  if (/changed photoUrl/i.test(cleaned)) {
+    const actor = cleaned.split(' ')[0];
+    return { actor, action: 'Profile photo updated', context: '' };
+  }
+
+  // "uppidrdf agreement.pdf_viewed AgreementDocument — May 25, 2026..."
+  if (/agreement\.pdf_viewed/i.test(cleaned)) {
+    const actor = cleaned.split(' ')[0];
+    return { actor, action: 'Agreement PDF viewed', context: '' };
+  }
+
+  // "uppidrdf changed returnedAt from ... to ... on Assignment — ..."
+  if (/changed returnedAt/i.test(cleaned)) {
+    const actor = cleaned.split(' ')[0];
+    return { actor, action: 'Asset returned', context: '' };
+  }
+
+  // "uppidrdf changed recipientSignedAt from null to ... on Assignment"
+  if (/changed recipientSignedAt/i.test(cleaned)) {
+    const actor = cleaned.split(' ')[0];
+    return { actor, action: 'Agreement signed', context: '' };
+  }
+
+  // "uppidrdf changed status from AVAILABLE to PENDING_ASSIGNMENT on Asset — ..."
+  const statusMatch = cleaned.match(/changed status from "(\w+)" to "(\w+)"/i) || cleaned.match(/changed status from (\w+) to (\w+)/i);
+  if (statusMatch) {
+    const actor = cleaned.split(' ')[0];
+    return { actor, action: `Status changed: ${statusMatch[1]} → ${statusMatch[2]}`, context: '' };
+  }
+
+  // "uppidrdf checkout Assignment — ..."
+  if (/checkout\s+Assignment/i.test(cleaned)) {
+    const actor = cleaned.split(' ')[0];
+    return { actor, action: 'Asset checked out', context: '' };
+  }
+
+  // "uppidrdf issuance.bulk_created AgreementDocument — ..."
+  if (/issuance\.bulk_created/i.test(cleaned)) {
+    const actor = cleaned.split(' ')[0];
+    return { actor, action: 'Bulk issuance created', context: '' };
+  }
+
+  // Fallback: truncate
+  const actor = cleaned.split(' ')[0] || '';
+  return { actor, action: truncateFeed(cleaned, 60), context: '' };
 }
 
 function relativeDate(iso: string): string {
@@ -189,7 +262,8 @@ function BentoCard({ children, className = '' }: { children: React.ReactNode; cl
   );
 }
 
-function BentoCardTitle({ icon: Icon, children, accent = '#f8931f' }: { icon: React.ElementType; children: React.ReactNode; accent?: string }) {
+function BentoCardTitle({ icon: Icon, children, accent = '#f8931f', linkTo, linkLabel }: { icon: React.ElementType; children: React.ReactNode; accent?: string; linkTo?: string; linkLabel?: string }) {
+  const navigate = useNavigate();
   return (
     <div className="px-5 pt-4 pb-3 flex items-center justify-between">
       <div className="flex items-center gap-2.5">
@@ -198,7 +272,17 @@ function BentoCardTitle({ icon: Icon, children, accent = '#f8931f' }: { icon: Re
         </div>
         <h3 className="text-xs font-bold tracking-widest uppercase text-slate-500 dark:text-slate-400">{children}</h3>
       </div>
-      <div className="h-[3px] w-8 rounded-full" style={{ backgroundColor: accent }} />
+      <div className="flex items-center gap-2">
+        {linkTo && (
+          <button
+            onClick={() => navigate(linkTo)}
+            className="text-[10px] font-semibold text-[#f8931f] hover:text-[#e0841a] hover:underline transition-colors flex items-center gap-0.5"
+          >
+            {linkLabel || 'View details'} <ArrowRight className="w-2.5 h-2.5" />
+          </button>
+        )}
+        <div className="h-[3px] w-8 rounded-full" style={{ backgroundColor: accent }} />
+      </div>
     </div>
   );
 }
@@ -216,6 +300,14 @@ function useClock() {
 
 function KpiBar() {
   const [data, setData] = useState<KpiData | null>(null);
+  const navigate = useNavigate();
+
+  const KPI_ROUTES: Record<string, string> = {
+    totalAssets: '/assets',
+    totalAssigned: '/assets?status=ASSIGNED',
+    underMaintenance: '/maintenance',
+    available: '/assets?status=AVAILABLE',
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -246,8 +338,10 @@ function KpiBar() {
       {KPI_CARDS.map(({ key, label, icon: Icon, color }) => (
         <div
           key={key}
-          className="group flex items-center gap-3 px-4 py-4 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-xl border border-slate-100 dark:border-slate-700 transition-all duration-200 hover:bg-white dark:hover:bg-slate-700/80 hover:shadow-lg hover:scale-[1.02]"
+          onClick={() => navigate(KPI_ROUTES[key] || '/assets')}
+          className="group flex items-center gap-3 px-4 py-4 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-xl border border-slate-100 dark:border-slate-700 transition-all duration-200 hover:bg-white dark:hover:bg-slate-700/80 hover:shadow-lg hover:border-slate-200 dark:hover:border-slate-600 hover:ring-1 hover:ring-slate-200/60 dark:hover:ring-slate-600/40 cursor-pointer"
           style={{ borderLeftWidth: '4px', borderLeftColor: color }}
+          title={`Go to ${label.toLowerCase()}`}
         >
           <div
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors duration-200"
@@ -399,8 +493,8 @@ export default function DashboardPage() {
       case 'status-distribution':
         return (
           <BentoCard>
-            <BentoCardTitle icon={PieChart} accent="#014da3">Status Distribution</BentoCardTitle>
-            <div className="px-5 pb-5 h-56 flex items-center justify-center">
+            <BentoCardTitle icon={PieChart} accent="#014da3" linkTo="/assets" linkLabel="View assets">Status Distribution</BentoCardTitle>
+            <div className="px-5 pb-4 h-48 flex items-center justify-center">
               {statusData && Object.keys(data!.byStatus).length > 0 ? (
                 <Doughnut
                   data={statusData}
@@ -416,8 +510,8 @@ export default function DashboardPage() {
       case 'assets-by-type':
         return (
           <BentoCard>
-            <BentoCardTitle icon={BarChart3} accent="#014da3">Assets by Type</BentoCardTitle>
-            <div className="px-5 pb-5 h-56 flex items-center justify-center">
+            <BentoCardTitle icon={BarChart3} accent="#014da3" linkTo="/assets" linkLabel="View assets">Assets by Type</BentoCardTitle>
+            <div className="px-5 pb-4 h-48 flex items-center justify-center">
               {typeData && Object.keys(data!.byType).length > 0 ? (
                 <Bar
                   data={typeData}
@@ -440,8 +534,8 @@ export default function DashboardPage() {
       case 'warranty-maintenance':
         return (
           <BentoCard className="flex flex-col">
-            <BentoCardTitle icon={ShieldAlert} accent="#7B1113">Warranty & Maintenance</BentoCardTitle>
-            <div className="flex-1 px-5 pb-4 overflow-y-auto space-y-1 min-h-0 h-56" style={{ scrollbarWidth: 'thin' }}>
+            <BentoCardTitle icon={ShieldAlert} accent="#7B1113" linkTo="/maintenance" linkLabel="View maintenance">Warranty & Maintenance</BentoCardTitle>
+            <div className="flex-1 px-5 pb-4 overflow-y-auto space-y-1 min-h-0 h-48" style={{ scrollbarWidth: 'thin' }}>
               <div className="flex items-center gap-1.5 pt-0.5 pb-1">
                 <Wrench className="h-3 w-3 shrink-0 text-[#f8931f]" />
                 <span className="text-[10px] tracking-widest text-slate-400 dark:text-slate-500 uppercase font-medium">Maintenance</span>
@@ -496,8 +590,8 @@ export default function DashboardPage() {
       case 'assets-by-location':
         return (
           <BentoCard>
-            <BentoCardTitle icon={Layers} accent="#014da3">Assets by Location</BentoCardTitle>
-            <div className="px-5 pb-5 h-52 flex items-center justify-center">
+            <BentoCardTitle icon={Layers} accent="#014da3" linkTo="/assets" linkLabel="View assets">Assets by Location</BentoCardTitle>
+            <div className="px-5 pb-4 h-44 flex items-center justify-center">
               {locationStats.length === 0 ? (
                 <div className="flex flex-col items-center gap-2">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700">
@@ -534,8 +628,8 @@ export default function DashboardPage() {
       case 'assets-by-age':
         return (
           <BentoCard>
-            <BentoCardTitle icon={PieChart} accent="#014da3">Assets by Age</BentoCardTitle>
-            <div className="px-5 pb-5 h-52 flex items-center justify-center">
+            <BentoCardTitle icon={PieChart} accent="#014da3" linkTo="/assets" linkLabel="View assets">Assets by Age</BentoCardTitle>
+            <div className="px-5 pb-4 h-44 flex items-center justify-center">
               {ageStats.length === 0 ? (
                 <div className="flex flex-col items-center gap-2">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700">
@@ -563,7 +657,7 @@ export default function DashboardPage() {
       case 'activity-timeline':
         return (
           <BentoCard className="flex flex-col">
-            <BentoCardTitle icon={Activity} accent="#014da3">Activity Timeline</BentoCardTitle>
+            <BentoCardTitle icon={Activity} accent="#014da3" linkTo="/audit" linkLabel="View audit log">Activity Timeline</BentoCardTitle>
             <div className="flex-1 px-5 pb-4 overflow-y-auto" style={{ scrollbarWidth: 'thin', maxHeight: 400 }}>
               {data!.activityFeed.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-center">
@@ -579,27 +673,31 @@ export default function DashboardPage() {
                   {data!.activityFeed.map((item, i) => {
                     const actionType = extractActionType(cleanActivityText(item));
                     const badgeStyle = ACTION_BADGE_STYLE[actionType] || ACTION_BADGE_STYLE.LOG;
+                    const { actor, action } = humanizeActivity(item);
+                    const rawText = cleanActivityText(item);
                     return (
                       <div
                         key={i}
-                        className="relative flex items-start gap-3 py-3 group transition-all duration-200 hover:translate-x-1 cursor-default"
+                        className="relative flex items-start gap-3 py-2.5 group transition-all duration-200 hover:translate-x-1 cursor-default"
+                        title={rawText}
                       >
-                        <div className={`absolute left-[-23px] top-4 h-[8px] w-[8px] rounded-full border-2 border-white dark:border-slate-800 ${
+                        <div className={`absolute left-[-23px] top-3.5 h-[8px] w-[8px] rounded-full border-2 border-white dark:border-slate-800 ${
                           actionType === 'DELETED' ? 'bg-red-500' :
                           actionType === 'CREATED' ? 'bg-blue-500' :
                           actionType === 'UPDATED' ? 'bg-amber-500' :
                           actionType === 'ASSIGNED' ? 'bg-emerald-500' : 'bg-[#f8931f]'
                         }`} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs text-slate-700 dark:text-slate-300 font-medium leading-relaxed line-clamp-2">
-                            {truncateFeed(cleanActivityText(item))}
+                          <p className="text-xs text-slate-700 dark:text-slate-300 font-medium leading-relaxed">
+                            <span className="text-[#012061] dark:text-slate-100 font-semibold">{actor}</span>{' '}
+                            <span>{action}</span>
                           </p>
-                          <div className="flex items-center gap-2 mt-1.5">
+                          <div className="flex items-center gap-2 mt-1">
                             <span className="text-[10px] text-slate-400 tabular-nums">
-                              {extractRelativeTime(cleanActivityText(item))}
+                              {extractRelativeTime(rawText)}
                             </span>
                             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${badgeStyle}`}>
-                              {actionType}
+                              {humanizeActionType(actionType)}
                             </span>
                           </div>
                         </div>
@@ -624,7 +722,7 @@ export default function DashboardPage() {
           COMMAND CENTER HEADER
           ═══════════════════════════════════════════════════════ */}
       <header className="sticky top-0 z-30 bg-[#012061] shadow-[0_1px_0_#f8931f,0_4px_16px_rgba(1,32,97,0.3)]">
-        <div className="flex items-center justify-between px-6 py-3">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3">
           {/* Left: brand + title */}
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/15">
@@ -643,22 +741,23 @@ export default function DashboardPage() {
             <span className="text-[#f8931f] font-bold">{now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
           </div>
 
-          {/* Right: quick actions */}
-          <div className="flex items-center gap-1.5">
-            <button onClick={() => navigate('/assets')} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200">
+          {/* Right: quick actions — primary always visible, secondary collapse on small screens */}
+          <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
+            <button onClick={() => navigate('/assets')} title="Go to Assets page" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200">
               <Package className="h-3.5 w-3.5 text-[#f8931f]" />
               <span className="hidden sm:inline">Assets</span>
             </button>
-            <button onClick={() => navigate('/assets?action=scan')} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200">
+            <button onClick={() => navigate('/assets?action=scan')} title="Scan barcode or QR code" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200">
               <ScanLine className="h-3.5 w-3.5 text-[#f8931f]" />
               <span className="hidden sm:inline">Scan</span>
             </button>
             <PermissionGate permissions={['assets:create']}>
-              <button onClick={() => navigate('/assets?action=create')} className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold bg-[#f8931f] text-white hover:bg-[#e0841a] transition-all duration-200 shadow-lg shadow-[#f8931f]/25 hover:shadow-xl hover:shadow-[#f8931f]/30 active:scale-95">
+              <button onClick={() => navigate('/assets?action=create')} title="Add new asset" className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold bg-[#f8931f] text-white hover:bg-[#e0841a] transition-all duration-200 shadow-lg shadow-[#f8931f]/25 hover:shadow-xl hover:shadow-[#f8931f]/30 active:scale-95">
                 <Plus className="h-3.5 w-3.5" /> Add
               </button>
             </PermissionGate>
-            <button onClick={() => navigate('/audit')} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 hidden sm:inline-flex">
+            {/* Secondary actions — hidden on small screens */}
+            <button onClick={() => navigate('/audit')} title="View audit log" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 hidden md:inline-flex">
               <ClipboardList className="h-3.5 w-3.5 text-[#f8931f]" />
               Audit
             </button>
@@ -670,7 +769,7 @@ export default function DashboardPage() {
                   ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
               }`}
-              title={liveEnabled ? 'Click to pause auto-refresh' : 'Click to resume auto-refresh'}
+              title={liveEnabled ? 'Live refresh enabled — click to pause' : 'Live refresh disabled — click to resume'}
             >
               {isRefreshing ? (
                 <RefreshCw className="h-2.5 w-2.5 animate-spin" />
@@ -685,12 +784,12 @@ export default function DashboardPage() {
                 {liveEnabled ? 'Live' : 'Paused'}
               </span>
             </button>
-            <button onClick={() => setCustomizeOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200">
+            <button onClick={() => setCustomizeOpen(true)} title="Customize dashboard widgets" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 hidden md:inline-flex">
               <SlidersHorizontal className="h-3.5 w-3.5 text-[#f8931f]" />
-              <span className="hidden sm:inline">Customize</span>
+              <span className="hidden lg:inline">Customize</span>
             </button>
             <PermissionGate permissions={['settings:view']}>
-              <button onClick={() => navigate('/settings')} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 hidden sm:inline-flex">
+              <button onClick={() => navigate('/settings')} title="System settings" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 hidden md:inline-flex">
                 <Settings className="h-3.5 w-3.5 text-[#f8931f]" />
               </button>
             </PermissionGate>
@@ -702,7 +801,7 @@ export default function DashboardPage() {
           WARRANTY EXPIRY ALERT CARDS
           ═══════════════════════════════════════════════════════ */}
       {warrantyStats && warrantyStats.warrantiesExpiringSoon > 0 && (
-        <section className="px-6 pt-3 pb-1">
+        <section className="px-4 sm:px-6 pt-3 pb-1">
           <div className="rounded-xl border-2 border-[#f8931f]/40 bg-gradient-to-r from-[#f8931f]/8 via-[#f8931f]/4 to-transparent dark:from-[#f8931f]/10 dark:via-[#f8931f]/5 dark:to-transparent overflow-hidden">
             <div className="px-5 pt-4 pb-3 flex items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/15">
@@ -717,7 +816,7 @@ export default function DashboardPage() {
             </div>
             <div className="px-5 pb-3 space-y-1.5">
               {warrantyStats.warrantiesExpiringSoonList.slice(0, 5).map(a => (
-                <div key={a.id} className="flex items-center justify-between rounded-lg bg-white/60 dark:bg-slate-800/60 px-3 py-2 border border-[#f8931f]/10 dark:border-[#f8931f]/20">
+                <div key={a.id} className="flex flex-col sm:flex-row sm:items-center justify-between rounded-lg bg-white/60 dark:bg-slate-800/60 px-3 py-2 border border-[#f8931f]/10 dark:border-[#f8931f]/20 gap-1 sm:gap-0">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{a.name}</span>
                     <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0">{a.serialNumber || '—'}</span>
@@ -750,7 +849,7 @@ export default function DashboardPage() {
       )}
 
       {warrantyStats && warrantyStats.warrantiesExpired > 0 && (
-        <section className="px-6 pt-3 pb-1">
+        <section className="px-4 sm:px-6 pt-3 pb-1">
           <div className="rounded-xl border-2 border-[#7B1113]/40 bg-gradient-to-r from-[#7B1113]/8 via-[#7B1113]/4 to-transparent dark:from-[#7B1113]/10 dark:via-[#7B1113]/5 dark:to-transparent overflow-hidden">
             <div className="px-5 pt-4 pb-3 flex items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#7B1113]/15">
@@ -778,14 +877,14 @@ export default function DashboardPage() {
       {/* ═══════════════════════════════════════════════════════
           KPI POWER TILES
           ═══════════════════════════════════════════════════════ */}
-      <section className="px-6 pt-4 pb-1">
+      <section className="px-4 sm:px-6 pt-4 pb-1">
         <KpiBar />
       </section>
 
       {/* ═══════════════════════════════════════════════════════
           DASHBOARD CONTENT
           ═══════════════════════════════════════════════════════ */}
-      <div className="px-6 pb-8">
+      <div className="px-4 sm:px-6 pb-8">
         {loading || !data ? (
           <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
             {Array.from({ length: 3 }).map((_, i) => (

@@ -367,6 +367,65 @@ router.post(
 );
 
 /* ═══════════════════════════════════════════════════════
+   DOCUMENT DETAILS BY DOCUMENT NUMBER
+   ═══════════════════════════════════════════════════════ */
+
+// GET /api/agreements/document/:documentNumber  (auth required)
+router.get(
+  '/document/:documentNumber',
+  authenticate,
+  hasPermission('issuances:view'),
+  async (req: Request, res: Response) => {
+    try {
+      const documentNumber = req.params.documentNumber as string;
+
+      const doc = await prisma.agreementDocument.findUnique({
+        where: { documentNumber },
+        select: {
+          id: true,
+          documentNumber: true,
+          title: true,
+          status: true,
+          issuedAt: true,
+          personnelNameSnapshot: true,
+          designationSnapshot: true,
+          projectSnapshot: true,
+          institutionSnapshot: true,
+          assetSnapshot: true,
+          propertyOfficerName: true,
+          authorizedRepName: true,
+          recipientSignedAt: true,
+          recipientSignatureName: true,
+          signedPdfPath: true,
+          signedUploadedAt: true,
+          templateVersion: true,
+          personnelId: true,
+          assignments: {
+            select: {
+              id: true,
+              assignedAt: true,
+              returnedAt: true,
+              condition: true,
+              asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true } },
+            },
+            orderBy: { assignedAt: 'desc' },
+          },
+        },
+      });
+
+      if (!doc) {
+        return error(res, 'No agreement found for this number.', 404);
+      }
+
+      return success(res, doc);
+    } catch (err: any) {
+      console.error('[Agreement Document Details Error]', err);
+      return error(res, err.message || 'Failed to fetch document details', 500);
+    }
+  },
+);
+
+/* ═══════════════════════════════════════════════════════
    PUBLIC SIGNATURE VERIFICATION
    ═══════════════════════════════════════════════════════ */
 

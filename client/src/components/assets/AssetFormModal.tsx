@@ -5,7 +5,7 @@ import {
   SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { useLookupOptions } from '@/hooks/useLookupOptions';
-import { Sparkles, X, Upload, Pencil, Plus, ChevronDown, ChevronUp } from 'lucide-react';
+import { Sparkles, X, Upload, Pencil, Plus } from 'lucide-react';
 
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
 
@@ -61,7 +61,6 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const [error, setError] = useState<string | null>(null);
   const [serialNumberError, setSerialNumberError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
-  const [depreciationOpen, setDepreciationOpen] = useState(false);
   const [aiSuggestedFields, setAiSuggestedFields] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -116,7 +115,6 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
         if (best.usefulLifeYears != null) {
           setForm(f => ({ ...f, usefulLifeYears: best.usefulLifeYears }));
           suggested.add('usefulLifeYears');
-          setDepreciationOpen(true);
         }
         if (best.warrantyYears != null && !form.warrantyExpiry && form.purchaseDate) {
           const purchaseDate = new Date(form.purchaseDate);
@@ -202,12 +200,12 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-black/50"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-xl bg-white dark:bg-slate-800 shadow-xl" onClick={e => e.stopPropagation()}>
+      <div className="w-[95vw] max-w-5xl max-h-[90vh] flex flex-col rounded-xl bg-white dark:bg-slate-800 shadow-xl" onClick={e => e.stopPropagation()}>
 
         {/* ── Header ── */}
-        <div className="bg-[#012061] px-6 py-4 flex items-center justify-between shrink-0">
+        <div className="bg-[#012061] px-6 py-4 flex items-center justify-between shrink-0 rounded-t-xl">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-[#f8931f] text-white">
               {isEdit ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
@@ -225,11 +223,13 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
         {/* ── Form ── */}
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
           {/* Scrollable fields */}
-          <div className="flex-1 overflow-y-auto px-6">
-            <div className="grid grid-cols-2 gap-4 py-4">
+          <div className="flex-1 overflow-y-auto px-5 md:px-6 pr-3 md:pr-4 pt-5 pb-24 md:pb-28 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb:hover]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-600 dark:[&::-webkit-scrollbar-thumb:hover]:bg-slate-500">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+
+              {/* ═══ Asset Identity ═══ */}
 
               {/* 1. Image */}
-              <div className="col-span-2">
+              <div className="md:col-span-2">
                 <label className={labelClass}>Image</label>
                 <div className="flex items-center gap-4 mt-1">
                   {imagePreview && (
@@ -268,7 +268,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               </div>
 
               {/* 2. Name + AI Suggest */}
-              <div className="col-span-2 flex gap-2">
+              <div className="md:col-span-2 flex gap-2">
                 <div className="flex-1">
                   <label className={labelClass}>Name *</label>
                   <input value={form.name} onChange={e => set('name', e.target.value)} required className={inputClass} placeholder="Asset name" />
@@ -328,7 +328,20 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                 {serialNumberError && <p className="mt-1 text-xs text-[#7B1113]">{serialNumberError}</p>}
               </div>
 
-              {/* 6. Price */}
+              {/* 6. Property Number */}
+              <div>
+                <label className={labelClass}>Property #</label>
+                <input value={form.propertyNumber} onChange={e => set('propertyNumber', e.target.value)} placeholder="e.g. PROP-00123" className={inputClass} />
+              </div>
+
+              {/* ── Section: Purchase Details ── */}
+              <div className="md:col-span-2 flex items-center gap-3 pt-4 pb-1">
+                <div className="w-1.5 h-3.5 rounded-full bg-[#f8931f]" />
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest whitespace-nowrap">Purchase Details</span>
+                <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+              </div>
+
+              {/* 7. Price */}
               <div>
                 <label className={labelClass}>Price *</label>
                 <div className="relative">
@@ -337,13 +350,13 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                 </div>
               </div>
 
-              {/* 7. Purchase Date */}
+              {/* 8. Purchase Date */}
               <div>
                 <label className={labelClass}>Purchase Date{isEdit ? '' : ' *'}</label>
                 <input type="date" value={form.purchaseDate} onChange={e => set('purchaseDate', e.target.value)} {...(isEdit ? {} : { required: true })} className={inputClass} />
               </div>
 
-              {/* 7a. Supplier */}
+              {/* 9. Supplier */}
               <div>
                 <label className={labelClass}>Supplier</label>
                 <Select
@@ -363,13 +376,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                 </Select>
               </div>
 
-              {/* 8. Property # */}
-              <div>
-                <label className={labelClass}>Property #</label>
-                <input value={form.propertyNumber} onChange={e => set('propertyNumber', e.target.value)} placeholder="e.g. PROP-00123" className={inputClass} />
-              </div>
-
-              {/* 9. Location */}
+              {/* 10. Location */}
               <div>
                 <label className={labelClass}>Location</label>
                 <Select value={form.location || 'none'} onValueChange={(val) => val != null && set('location', val === 'none' ? '' : val)} disabled={locationLoading}>
@@ -387,7 +394,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                 </Select>
               </div>
 
-              {/* 10. Status */}
+              {/* 11. Status */}
               <div>
                 <label className={labelClass}>Status *</label>
                 <select value={form.status} onChange={e => set('status', e.target.value)} required className={inputClass}>
@@ -395,81 +402,81 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                 </select>
               </div>
 
-              {/* 11. Remarks */}
-              <div className="col-span-2">
+              {/* ── Section: Notes & Warranty ── */}
+              <div className="md:col-span-2 flex items-center gap-3 pt-4 pb-1">
+                <div className="w-1.5 h-3.5 rounded-full bg-[#f8931f]" />
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest whitespace-nowrap">Notes & Warranty</span>
+                <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+              </div>
+
+              {/* 12. Remarks */}
+              <div className="md:col-span-2">
                 <label className={labelClass}>Remarks</label>
                 <textarea rows={3} value={form.remarks} onChange={e => set('remarks', e.target.value)} placeholder="Any additional notes..." className={`${inputClass} resize-none`} />
               </div>
 
-              {/* 12. Warranty Section */}
-              <div className="col-span-2">
-                <div className="border-t border-slate-100 dark:border-slate-700 my-2" />
-                <label className={labelClass}>Warranty (Optional)</label>
-                <div className="grid grid-cols-2 gap-3 mt-1">
+              {/* 13. Warranty Section */}
+              <div className="md:col-span-2 pt-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] text-slate-400 block mb-1">
-                      Expiry date
+                      Warranty expiry date
                       {aiSuggestedFields.has('warrantyExpiry') && <span className="ml-1 text-[#f8931f]">AI suggested</span>}
                     </label>
                     <input type="date" value={form.warrantyExpiry} onChange={e => set('warrantyExpiry', e.target.value)} className={inputClass} />
                   </div>
                   <div>
-                    <label className="text-[10px] text-slate-400 block mb-1">Notes</label>
+                    <label className="text-[10px] text-slate-400 block mb-1">Warranty notes</label>
                     <input type="text" value={form.warrantyNotes} onChange={e => set('warrantyNotes', e.target.value)} placeholder="e.g. 3-year on-site" className={inputClass} />
                   </div>
                 </div>
               </div>
 
-              {/* 13. Depreciation Settings (Collapsible) */}
-              <div className="col-span-2">
-                <button
-                  type="button"
-                  onClick={() => setDepreciationOpen(!depreciationOpen)}
-                  className="flex items-center gap-2 w-full text-left border-l-4 border-[#012061] pl-3 py-1 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
-                >
-                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wider">Depreciation Settings</span>
-                  {depreciationOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                </button>
-                <p className="text-[10px] text-slate-400 mt-0.5 pl-3 border-l-4 border-transparent">These values are used to calculate the asset's book value over time.</p>
-                {depreciationOpen && (
-                  <div className="grid grid-cols-3 gap-3 mt-3">
-                    <div>
-                      <label className={labelClass}>Depreciation Method</label>
-                      <select value={form.depreciationMethod} onChange={e => set('depreciationMethod', e.target.value)} className={inputClass}>
-                        <option value="straight_line">Straight Line</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className={labelClass}>
-                        Useful Life (Years)
-                        {aiSuggestedFields.has('usefulLifeYears') && <span className="ml-1 text-[#f8931f]">AI suggested</span>}
-                      </label>
-                      <input type="number" min={1} max={50} value={form.usefulLifeYears} onChange={e => setForm(prev => ({ ...prev, usefulLifeYears: Number(e.target.value) || 5 }))} className={inputClass} />
-                      <p className="text-[10px] text-slate-400 mt-0.5">How many years is this asset expected to last?</p>
-                    </div>
-                    <div>
-                      <label className={labelClass}>Salvage Value (₱)</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">₱</span>
-                        <input type="number" step="0.01" min={0} value={form.salvageValue} onChange={e => set('salvageValue', e.target.value)} className={`${inputClass} pl-8`} />
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Estimated resale/scrap value at end of useful life.</p>
-                    </div>
+              {/* 14. Depreciation Settings */}
+              <div className="md:col-span-2 mt-1">
+                <div className="flex items-center gap-3 pt-4 pb-1">
+                  <div className="w-1.5 h-3.5 rounded-full bg-[#f8931f]" />
+                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest whitespace-nowrap">Depreciation Settings</span>
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                </div>
+                <p className="text-[10px] text-slate-400 mb-3">These values are used to calculate the asset's book value over time.</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className={labelClass}>Depreciation Method</label>
+                    <select value={form.depreciationMethod} onChange={e => set('depreciationMethod', e.target.value)} className={inputClass}>
+                      <option value="straight_line">Straight Line</option>
+                    </select>
                   </div>
-                )}
+                  <div>
+                    <label className={labelClass}>
+                      Useful Life (Years)
+                      {aiSuggestedFields.has('usefulLifeYears') && <span className="ml-1 text-[#f8931f]">AI suggested</span>}
+                    </label>
+                    <input type="number" min={1} max={50} value={form.usefulLifeYears} onChange={e => setForm(prev => ({ ...prev, usefulLifeYears: Number(e.target.value) || 5 }))} className={inputClass} />
+                    <p className="text-[10px] text-slate-400 mt-0.5">How many years is this asset expected to last?</p>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Salvage Value (₱)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">₱</span>
+                      <input type="number" step="0.01" min={0} value={form.salvageValue} onChange={e => set('salvageValue', e.target.value)} className={`${inputClass} pl-8`} />
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Estimated resale/scrap value at end of useful life.</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
           {/* ── Error ── */}
           {error && (
-            <div className="px-6 pt-2 shrink-0">
+            <div className="px-5 md:px-6 pt-2 shrink-0">
               <p className="text-sm text-[#7B1113] bg-[#7B1113]/10 border border-[#7B1113]/20 rounded-lg px-4 py-2">{error}</p>
             </div>
           )}
 
           {/* ── Footer ── */}
-          <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-100 dark:border-slate-700 shrink-0">
+          <div className="flex justify-end gap-2 px-5 md:px-6 py-4 border-t border-slate-100 dark:border-slate-700 shrink-0">
             <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-[#012061] dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
               Cancel
             </button>

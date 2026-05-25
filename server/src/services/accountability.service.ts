@@ -36,6 +36,7 @@ export async function getAccountabilityReport(params: {
   from?: string;
   to?: string;
   overdueAfterDays?: number;
+  documentNumber?: string;
   format: 'json' | 'csv';
   page?: number;
   limit?: number;
@@ -47,6 +48,7 @@ export async function getAccountabilityReport(params: {
     from,
     to,
     overdueAfterDays,
+    documentNumber,
     format,
     page = 1,
     limit = 50,
@@ -71,6 +73,13 @@ export async function getAccountabilityReport(params: {
   if (project) {
     where.personnel = {
       project: { contains: project, mode: 'insensitive' },
+    };
+  }
+
+  // Document number filter — goes through agreementDocument relation
+  if (documentNumber) {
+    where.agreementDocument = {
+      documentNumber: { contains: documentNumber, mode: 'insensitive' },
     };
   }
 

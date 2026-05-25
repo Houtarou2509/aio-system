@@ -21,6 +21,7 @@ router.get(
       const overdueAfterDays = req.query.overdueAfterDays
         ? parseInt(req.query.overdueAfterDays as string, 10)
         : undefined;
+      const documentNumber = req.query.documentNumber as string | undefined;
       const format = (req.query.format as string) === 'csv' ? 'csv' : 'json';
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
@@ -43,6 +44,7 @@ router.get(
         from,
         to,
         overdueAfterDays,
+        documentNumber,
         format,
         page,
         limit,

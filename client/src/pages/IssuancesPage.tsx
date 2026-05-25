@@ -641,7 +641,7 @@ export default function IssuancesPage() {
 
           {/* Right: Actions */}
           <div className="flex items-center gap-2">
-            <button onClick={() => setShowQRReturn(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors">
+            <button onClick={() => setShowQRReturn(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 transition-colors" title="Return assets using QR code">
               <QrCode className="h-3.5 w-3.5" /> QR Return
             </button>
             <PermissionGate permissions={['issuances:create']}>
@@ -657,15 +657,15 @@ export default function IssuancesPage() {
       <div className="flex-1 flex flex-col overflow-auto bg-light-bg dark:bg-slate-900">
 
       {/* ═══ KPI TILES ═══════════════════════════════════════ */}
-      <section className="px-4 sm:px-6 pt-4 shrink-0">
+      <section className="px-4 sm:px-6 pt-3 shrink-0">
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
           {KPI_CARDS.map(({ key, label, icon: Icon, value }) => (
-            <div key={key} className="flex flex-col items-center text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 sm:p-4">
-              <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
-                  <Icon className="h-5 w-5 text-[#f8931f]" />
+            <div key={key} className="flex flex-col items-center text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5 sm:px-4 sm:py-3">
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
+                  <Icon className="h-4 w-4 text-[#f8931f]" />
                 </div>
-                <p className="text-xl sm:text-2xl font-bold leading-tight text-[#f8931f]">{value}</p>
+                <p className="text-lg sm:text-xl font-bold leading-tight text-[#f8931f]">{value}</p>
               </div>
               <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">{label}</p>
             </div>
@@ -744,11 +744,11 @@ export default function IssuancesPage() {
         ) : issuances.length === 0 ? (
           <EmptyState onAdd={() => setShowBulkWizard(true)} />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+          <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-300px)] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="bg-[#012061] text-left">
-                  <th className="px-4 py-2.5 w-10">
+                  <th className="px-4 py-2.5 w-10 bg-[#012061]">
                     <span
                       onClick={toggleSelectAll}
                       className={`inline-flex items-center justify-center w-4 h-4 rounded border cursor-pointer ${
@@ -765,11 +765,11 @@ export default function IssuancesPage() {
                       )}
                     </span>
                   </th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Asset Details</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Assigned Personnel</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Issuance Date</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Return Status</th>
-                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase text-center w-40">Actions</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase bg-[#012061]">Asset Details</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase bg-[#012061]">Assigned Personnel</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase bg-[#012061]">Issuance Date</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase bg-[#012061]">Return Status</th>
+                  <th className="px-4 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase bg-[#012061] text-center w-40">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -811,6 +811,7 @@ export default function IssuancesPage() {
                         {new Date(iss.assignedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                       </td>
                       <td className="px-4 py-4">
+                        {/* Return status */}
                         {iss.returnedAt ? (
                           <div className="flex items-center gap-1.5">
                             <CheckCircle2 className="w-3 h-3 text-emerald-500" />
@@ -824,23 +825,29 @@ export default function IssuancesPage() {
                             <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Active</span>
                           </div>
                         )}
-                        {iss.recipientSignedAt && (
-                          <div className="mt-1 text-[10px] font-semibold text-[#012061] dark:text-slate-200">
-                            Signed by {iss.recipientSignatureName || 'recipient'}
+
+                        {/* Document status — separated */}
+                        {(iss.recipientSignedAt || iss.agreementDocument?.status) && (
+                          <div className="mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-700/50 space-y-1">
+                            {iss.recipientSignedAt && (
+                              <div className="text-[10px] font-semibold text-[#012061] dark:text-slate-200">
+                                Signed by {iss.recipientSignatureName || 'recipient'}
+                              </div>
+                            )}
+                            {iss.agreementDocument?.signedPdfPath && (
+                              <div className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                <CheckCircle2 className="h-3 w-3" /> Signed PDF on file
+                              </div>
+                            )}
+                            <DocStatusBadge status={iss.agreementDocument?.status} />
+                            {iss.recipientSignedAt && iss.agreementDocument?.documentNumber && (
+                              <VerifiedBadge
+                                signedAt={iss.recipientSignedAt}
+                                signatoryName={iss.recipientSignatureName}
+                                documentNumber={iss.agreementDocument.documentNumber}
+                              />
+                            )}
                           </div>
-                        )}
-                        {iss.agreementDocument?.signedPdfPath && (
-                          <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                            <CheckCircle2 className="h-3 w-3" /> Signed PDF on file
-                          </div>
-                        )}
-                        <DocStatusBadge status={iss.agreementDocument?.status} />
-                        {iss.recipientSignedAt && iss.agreementDocument?.documentNumber && (
-                          <VerifiedBadge
-                            signedAt={iss.recipientSignedAt}
-                            signatoryName={iss.recipientSignatureName}
-                            documentNumber={iss.agreementDocument.documentNumber}
-                          />
                         )}
                       </td>
                       <td className="px-4 py-4 text-center">
@@ -850,7 +857,7 @@ export default function IssuancesPage() {
                               <button
                                 onClick={() => openTransferModal(iss)}
                                 className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all group-hover:shadow-sm"
-                                title="Transfer Asset"
+                                title="Transfer asset to another personnel"
                               >
                                 <ArrowRightLeft className="w-4 h-4" />
                               </button>
@@ -865,7 +872,7 @@ export default function IssuancesPage() {
                               <button
                                 onClick={() => openReturnModal([iss])}
                                 className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all group-hover:shadow-sm"
-                                title="Return Asset"
+                                title="Return this asset"
                               >
                                 <RotateCcw className="w-4 h-4" />
                               </button>
@@ -876,7 +883,7 @@ export default function IssuancesPage() {
                               <button
                                 onClick={() => openSignModal(iss)}
                                 className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all group-hover:shadow-sm"
-                                title="Digital Sign-off"
+                                title="Digital sign-off"
                               >
                                 <PenLine className="w-4 h-4" />
                               </button>
@@ -889,39 +896,45 @@ export default function IssuancesPage() {
                                 if (url) window.open(url, '_blank', 'noopener,noreferrer');
                               }}
                               className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all group-hover:shadow-sm"
-                              title="View Signed Copy"
+                              title="View signed agreement document"
                             >
                               <FileText className="w-4 h-4" />
                             </button>
                           )}
-                          <button
-                            onClick={() => openAgreementPreview({
-                              personnelName: iss.personnel?.fullName,
-                              position: iss.personnel?.position || undefined,
-                              department: iss.personnel?.department || undefined,
-                              project: iss.personnel?.project || undefined,
-                              assetName: iss.asset?.name,
-                              serialNumber: iss.asset?.serialNumber || undefined,
-                              propertyNumber: iss.asset?.propertyNumber || undefined,
-                              condition: iss.condition,
-                              templateId: iss.agreementId || undefined,
-                              agreementText: iss.agreementDocument?.resolvedText || iss.agreementText || undefined,
-                              title: iss.agreementDocument?.title || undefined,
-                              documentNumber: iss.agreementDocument?.documentNumber || undefined,
-                              propertyOfficerName: iss.agreementDocument?.propertyOfficerName || undefined,
-                              authorizedRepName: iss.agreementDocument?.authorizedRepName || undefined,
-                              agreementDocumentId: iss.agreementDocument?.id || undefined,
-                              signedPdfPath: iss.agreementDocument?.signedPdfPath || undefined,
-                              signedUploadedAt: iss.agreementDocument?.signedUploadedAt || undefined,
-                              personnelId: iss.personnelId || undefined,
-                              recipientSignedAt: iss.recipientSignedAt || undefined,
-                              recipientSignatureName: iss.recipientSignatureName || undefined,
-                            })}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#012061] dark:hover:text-white transition-all group-hover:shadow-sm"
-                            title="View Agreement"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </button>
+                          {iss.agreementDocument || iss.agreementText ? (
+                            <button
+                              onClick={() => openAgreementPreview({
+                                personnelName: iss.personnel?.fullName,
+                                position: iss.personnel?.position || undefined,
+                                department: iss.personnel?.department || undefined,
+                                project: iss.personnel?.project || undefined,
+                                assetName: iss.asset?.name,
+                                serialNumber: iss.asset?.serialNumber || undefined,
+                                propertyNumber: iss.asset?.propertyNumber || undefined,
+                                condition: iss.condition,
+                                templateId: iss.agreementId || undefined,
+                                agreementText: iss.agreementDocument?.resolvedText || iss.agreementText || undefined,
+                                title: iss.agreementDocument?.title || undefined,
+                                documentNumber: iss.agreementDocument?.documentNumber || undefined,
+                                propertyOfficerName: iss.agreementDocument?.propertyOfficerName || undefined,
+                                authorizedRepName: iss.agreementDocument?.authorizedRepName || undefined,
+                                agreementDocumentId: iss.agreementDocument?.id || undefined,
+                                signedPdfPath: iss.agreementDocument?.signedPdfPath || undefined,
+                                signedUploadedAt: iss.agreementDocument?.signedUploadedAt || undefined,
+                                personnelId: iss.personnelId || undefined,
+                                recipientSignedAt: iss.recipientSignedAt || undefined,
+                                recipientSignatureName: iss.recipientSignatureName || undefined,
+                              })}
+                              className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#012061] dark:hover:text-white transition-all group-hover:shadow-sm"
+                              title="View agreement document"
+                            >
+                              <FileText className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <span className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-300 dark:text-slate-600 cursor-not-allowed" title="No agreement document available">
+                              <FileText className="w-4 h-4" />
+                            </span>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -951,7 +964,7 @@ export default function IssuancesPage() {
                         <button
                           onClick={toggleBatch}
                           className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 cursor-pointer transition-colors"
-                          title={isExpanded ? 'Collapse batch details' : 'Expand to return individual assets'}
+                          title={isExpanded ? 'Collapse issuance' : 'Expand issuance'}
                         >
                           {isExpanded
                             ? <ChevronDown className="w-3.5 h-3.5 text-[#012061]" />
@@ -966,8 +979,9 @@ export default function IssuancesPage() {
                           </button>
                           <ul className="space-y-0.5">
                             {batchItems.map(bi => (
-                              <li key={bi.id} className={`flex items-center gap-1.5 text-xs ${bi.returnedAt ? 'text-slate-400 dark:text-slate-500 line-through' : 'text-slate-600 dark:text-slate-400'}`}>
+                              <li key={bi.id} className={`flex items-center gap-1.5 text-xs ${bi.returnedAt ? 'text-slate-400 dark:text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>
                                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${bi.returnedAt ? 'bg-emerald-400' : 'bg-[#f8931f]/40'}`} />
+                                {bi.returnedAt && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 shrink-0" />}
                                 {bi.asset?.name || '—'}
                                 {bi.asset?.serialNumber && <span className="text-slate-400">· {bi.asset.serialNumber}</span>}
                               </li>
@@ -989,6 +1003,7 @@ export default function IssuancesPage() {
                         {new Date(first.assignedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                       </td>
                       <td className="px-4 py-4 align-top pt-5">
+                        {/* Return status */}
                         {allReturned ? (
                           <div className="flex items-center gap-1.5">
                             <CheckCircle2 className="w-3 h-3 text-emerald-500" />
@@ -1011,23 +1026,29 @@ export default function IssuancesPage() {
                             <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Active</span>
                           </div>
                         )}
-                        {first.recipientSignedAt && (
-                          <div className="mt-1 text-[10px] font-semibold text-[#012061] dark:text-slate-200">
-                            Signed by {first.recipientSignatureName || 'recipient'}
+
+                        {/* Document status — separated */}
+                        {(first.recipientSignedAt || batchAgreementDocument?.status) && (
+                          <div className="mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-700/50 space-y-1">
+                            {first.recipientSignedAt && (
+                              <div className="text-[10px] font-semibold text-[#012061] dark:text-slate-200">
+                                Signed by {first.recipientSignatureName || 'recipient'}
+                              </div>
+                            )}
+                            {batchAgreementDocument?.signedPdfPath && (
+                              <div className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                                <CheckCircle2 className="h-3 w-3" /> Signed PDF on file
+                              </div>
+                            )}
+                            <DocStatusBadge status={batchAgreementDocument?.status} />
+                            {first.recipientSignedAt && batchAgreementDocument?.documentNumber && (
+                              <VerifiedBadge
+                                signedAt={first.recipientSignedAt}
+                                signatoryName={first.recipientSignatureName}
+                                documentNumber={batchAgreementDocument.documentNumber}
+                              />
+                            )}
                           </div>
-                        )}
-                        {batchAgreementDocument?.signedPdfPath && (
-                          <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                            <CheckCircle2 className="h-3 w-3" /> Signed PDF on file
-                          </div>
-                        )}
-                        <DocStatusBadge status={batchAgreementDocument?.status} />
-                        {first.recipientSignedAt && batchAgreementDocument?.documentNumber && (
-                          <VerifiedBadge
-                            signedAt={first.recipientSignedAt}
-                            signatoryName={first.recipientSignatureName}
-                            documentNumber={batchAgreementDocument.documentNumber}
-                          />
                         )}
                       </td>
                       <td className="px-4 py-4 text-center align-middle">
@@ -1048,7 +1069,7 @@ export default function IssuancesPage() {
                               <button
                                 onClick={() => openSignModal(first)}
                                 className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all group-hover:shadow-sm"
-                                title="Digital Sign-off Batch"
+                                title="Digital sign-off for batch"
                               >
                                 <PenLine className="w-4 h-4" />
                               </button>
@@ -1061,11 +1082,12 @@ export default function IssuancesPage() {
                               if (url) window.open(url, '_blank', 'noopener,noreferrer');
                             }}
                             className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all group-hover:shadow-sm"
-                            title="View Signed Copy"
+                            title="View signed agreement document"
                           >
                             <FileText className="w-4 h-4" />
                           </button>
                         )}
+                        {batchAgreementDocument || first.agreementText ? (
                         <button
                           onClick={() => openAgreementPreview({
                             personnelName: first.personnel?.fullName,
@@ -1096,10 +1118,15 @@ export default function IssuancesPage() {
                             recipientSignatureName: first.recipientSignatureName || undefined,
                           })}
                           className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#012061] dark:hover:text-white transition-all group-hover:shadow-sm"
-                          title="View Agreement"
+                          title="View agreement document"
                         >
                           <FileText className="w-4 h-4" />
                         </button>
+                        ) : (
+                          <span className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-300 dark:text-slate-600 cursor-not-allowed" title="No agreement document available">
+                            <FileText className="w-4 h-4" />
+                          </span>
+                        )}
                         </div>
                       </td>
                     </tr>
@@ -1112,7 +1139,8 @@ export default function IssuancesPage() {
                           <div className="flex items-center gap-2">
                             <span className={`w-2 h-2 rounded-full shrink-0 ${bi.returnedAt ? 'bg-emerald-400' : 'bg-[#f8931f]'}`} />
                             <div>
-                              <p className={`text-xs font-semibold ${bi.returnedAt ? 'text-slate-400 line-through' : 'text-slate-700 dark:text-slate-300'}`}>
+                              <p className={`text-xs font-semibold ${bi.returnedAt ? 'text-slate-400' : 'text-slate-700 dark:text-slate-300'}`}>
+                                {bi.returnedAt && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 inline mr-0.5" />}
                                 {bi.asset?.name || '—'}
                               </p>
                               {bi.asset?.serialNumber && (
@@ -1149,7 +1177,7 @@ export default function IssuancesPage() {
                                 <button
                                   onClick={() => openTransferModal(bi)}
                                   className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all"
-                                  title="Transfer Asset"
+                                  title="Transfer asset to another personnel"
                                 >
                                   <ArrowRightLeft className="w-3.5 h-3.5" />
                                 </button>
@@ -1161,7 +1189,7 @@ export default function IssuancesPage() {
                                 <button
                                   onClick={() => openReturnModal([bi])}
                                   className="p-1.5 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all"
-                                  title={`Return ${bi.asset?.name || 'asset'}`}
+                                  title={`Return ${bi.asset?.name || 'this asset'}`}
                                 >
                                   <RotateCcw className="w-3.5 h-3.5" />
                                 </button>
@@ -1172,7 +1200,7 @@ export default function IssuancesPage() {
                                 <button
                                   onClick={() => openSignModal(bi)}
                                   className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all"
-                                  title="Digital Sign-off"
+                                  title="Digital sign-off"
                                 >
                                   <PenLine className="w-3.5 h-3.5" />
                                 </button>

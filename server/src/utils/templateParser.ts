@@ -150,6 +150,7 @@ export function getPlaceholderReference(): { key: string; description: string; g
     { key: '{{assetParagraph}}', description: 'Single-asset paragraph block', group: 'Smart Blocks' },
     { key: '{{assetTable}}', description: 'Multi-asset table block', group: 'Smart Blocks' },
     { key: '{{assetSection}}', description: 'Auto paragraph for 1 asset, table for many', group: 'Smart Blocks' },
+    { key: '{{assetList}}', description: 'Multi-asset table (alias for {{assetTable}})', group: 'Smart Blocks' },
     { key: '{{#ifSingleAsset}}\n...\n{{/ifSingleAsset}}', description: 'Only render contents for 1 asset', group: 'Conditional Blocks' },
     { key: '{{#ifMultipleAssets}}\n...\n{{/ifMultipleAssets}}', description: 'Only render contents for multiple assets', group: 'Conditional Blocks' },
   ];

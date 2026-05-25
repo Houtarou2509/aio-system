@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch, ApiError } from '../lib/api';
-import { FileBarChart, Search, Download, Loader2, ChevronLeft, ChevronRight, X, Filter } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { FileBarChart, Search, Download, Loader2, ChevronLeft, ChevronRight, X, Filter, FileText, FileSignature } from 'lucide-react';
+import AgreementDocumentDetailModal from '../components/issuances/AgreementDocumentDetailModal';
 
 /* ─── Types ─── */
 
@@ -61,6 +61,7 @@ export default function AccountabilityReportPage() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [overdueDays, setOverdueDays] = useState('');
+  const [agreementNoSearch, setAgreementNoSearch] = useState('');
 
   // Data
   const [rows, setRows] = useState<AccountabilityRow[]>([]);
@@ -75,6 +76,10 @@ export default function AccountabilityReportPage() {
   const [personnelOptions, setPersonnelOptions] = useState<PersonnelOption[]>([]);
   const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
   const [showPersonnelDropdown, setShowPersonnelDropdown] = useState(false);
+
+  // Modal
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalDocumentNumber, setModalDocumentNumber] = useState<string | null>(null);
 
   // Fetch dropdown options on mount
   useEffect(() => {
@@ -110,6 +115,7 @@ export default function AccountabilityReportPage() {
           from: fromDate || undefined,
           to: toDate || undefined,
           overdueAfterDays: overdueDays ? parseInt(overdueDays, 10) : undefined,
+          documentNumber: agreementNoSearch || undefined,
           format: 'json',
           page: p,
           limit,
@@ -125,7 +131,7 @@ export default function AccountabilityReportPage() {
         setLoading(false);
       }
     },
-    [selectedPersonnelId, selectedProject, statusFilter, fromDate, toDate, overdueDays, limit]
+    [selectedPersonnelId, selectedProject, statusFilter, fromDate, toDate, overdueDays, agreementNoSearch, limit]
   );
 
   // Auto-fetch when filters change
@@ -144,6 +150,7 @@ export default function AccountabilityReportPage() {
         from: fromDate || undefined,
         to: toDate || undefined,
         overdueAfterDays: overdueDays ? parseInt(overdueDays, 10) : undefined,
+        documentNumber: agreementNoSearch || undefined,
         format: 'csv',
       });
       const token = localStorage.getItem('accessToken');
@@ -176,36 +183,66 @@ export default function AccountabilityReportPage() {
     setFromDate('');
     setToDate('');
     setOverdueDays('');
+    setAgreementNoSearch('');
   };
 
-  const hasActiveFilters = selectedPersonnelId || selectedProject || statusFilter !== 'all' || fromDate || toDate || overdueDays;
+  const hasActiveFilters = selectedPersonnelId || selectedProject || statusFilter !== 'all' || fromDate || toDate || overdueDays || agreementNoSearch;
 
   const totalPages = Math.ceil(total / limit);
 
+  // Open modal for document details
+  const openDocumentModal = (docNumber: string) => {
+    setModalDocumentNumber(docNumber);
+    setModalOpen(true);
+  };
+
+  const closeDocumentModal = () => {
+    setModalOpen(false);
+    setModalDocumentNumber(null);
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-[#012061]/10">
-            <FileBarChart className="w-5 h-5 text-[#012061]" />
+    <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
+
+      {/* ═══ STICKY NAVY HEADER ═════════════════════════════ */}
+      <header className="sticky top-14 md:top-0 z-30 shrink-0 bg-[#012061] px-4 md:px-6 py-4 min-h-[56px]">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/20">
+              <FileBarChart className="h-5 w-5 text-[#f8931f]" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-white tracking-tight leading-tight">Accountability Report</h1>
+              <p className="text-[11px] text-white/50 hidden sm:block truncate">
+                View issued, returned, and accountable assets across personnel. {total} record{total !== 1 ? 's' : ''} found
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">Accountability Report</h1>
-            <p className="text-sm text-slate-500">
-              {total} record{total !== 1 ? 's' : ''} found
-            </p>
-          </div>
+          <button
+            onClick={handleExportCsv}
+            disabled={exporting}
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            {exporting ? 'Exporting...' : 'Export CSV'}
+          </button>
         </div>
-        <Button
-          onClick={handleExportCsv}
-          disabled={exporting}
-          className="flex items-center gap-2 bg-[#012061] hover:bg-[#012061]/90 text-white"
-        >
-          {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-          {exporting ? 'Exporting...' : 'Export CSV'}
-        </Button>
-      </div>
+        {/* Mobile export button */}
+        <div className="sm:hidden mt-3">
+          <button
+            onClick={handleExportCsv}
+            disabled={exporting}
+            className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            {exporting ? 'Exporting...' : 'Export CSV'}
+          </button>
+        </div>
+      </header>
+
+      {/* ═══ CONTENT AREA ════════════════════════════════════ */}
+      <div className="flex-1 flex flex-col overflow-auto bg-slate-50 dark:bg-slate-900">
+      <div className="px-4 md:px-6 py-4 space-y-4">
 
       {/* Filters */}
       <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-4">
@@ -215,13 +252,36 @@ export default function AccountabilityReportPage() {
           {hasActiveFilters && (
             <button
               onClick={clearFilters}
-              className="ml-auto text-xs text-red-600 hover:text-red-800 flex items-center gap-1"
+              className="ml-auto inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-red-600 hover:border-red-200 transition-colors"
             >
-              <X className="w-3 h-3" /> Clear all
+              <X className="w-3 h-3" /> Clear filters
             </button>
           )}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-3">
+          {/* Agreement No. search */}
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Agreement No.</label>
+            <div className="relative">
+              <FileText className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#012061]/30 focus:border-[#012061] font-mono"
+                placeholder="e.g. AGR-20260522-..."
+                value={agreementNoSearch}
+                onChange={(e) => setAgreementNoSearch(e.target.value)}
+              />
+              {agreementNoSearch && (
+                <button
+                  onClick={() => setAgreementNoSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Personnel search/select */}
           <div className="relative">
             <label className="block text-xs font-medium text-slate-500 mb-1">Personnel</label>
@@ -346,9 +406,9 @@ export default function AccountabilityReportPage() {
 
       {/* Results table */}
       <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[calc(100vh-320px)] overflow-y-auto">
           <table className="w-full text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="bg-[#012061]">
                 {[
                   'Personnel', 'Designation', 'Project', 'Institution', 'Asset Name',
@@ -357,7 +417,7 @@ export default function AccountabilityReportPage() {
                 ].map((h) => (
                   <th
                     key={h}
-                    className="px-3 py-2.5 text-left text-white/70 uppercase tracking-widest text-[10px] font-semibold whitespace-nowrap"
+                    className="px-3 py-2.5 text-left text-white/70 uppercase tracking-widest text-[10px] font-semibold whitespace-nowrap bg-[#012061]"
                   >
                     {h}
                   </th>
@@ -433,7 +493,22 @@ export default function AccountabilityReportPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-slate-600 font-mono text-xs whitespace-nowrap">{row.documentNumber || '—'}</td>
+                    {/* Agreement No. — clickable */}
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {row.documentNumber ? (
+                        <button
+                          type="button"
+                          onClick={() => openDocumentModal(row.documentNumber!)}
+                          className="inline-flex items-center gap-1 font-mono text-xs text-[#012061] hover:text-[#f8931f] hover:underline underline-offset-2 transition-colors cursor-pointer text-left"
+                          title="View agreement document details"
+                        >
+                          <FileSignature className="w-3.5 h-3.5 shrink-0 opacity-60" />
+                          {row.documentNumber}
+                        </button>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -469,6 +544,15 @@ export default function AccountabilityReportPage() {
           </div>
         )}
       </div>
+      </div>
+      </div>
+
+      {/* Agreement Document Detail Modal */}
+      <AgreementDocumentDetailModal
+        open={modalOpen}
+        documentNumber={modalDocumentNumber}
+        onClose={closeDocumentModal}
+      />
     </div>
   );
 }
