@@ -57,7 +57,7 @@ const importUpload = multer({
 // All routes require auth
 router.use(authenticate);
 
-import { filterAssetForGuest, filterAssetsForGuest } from '../utils/guestFilter';
+import { filterAssetForGuest, filterAssetsForGuest, filterStatsForGuest } from '../utils/guestFilter';
 
 // GET /api/assets — list with filters + pagination
 router.get('/', async (req: Request, res: Response) => {
@@ -72,10 +72,11 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // GET /api/assets/stats
-router.get('/stats', async (_req: Request, res: Response) => {
+router.get('/stats', async (req: Request, res: Response) => {
   try {
     const stats = await assetService.getAssetStats();
-    return success(res, stats, 200);
+    const data = req.user!.role === 'GUEST' ? filterStatsForGuest(stats) : stats;
+    return success(res, data, 200);
   } catch (err: any) {
     return error(res, err.message, 500);
   }

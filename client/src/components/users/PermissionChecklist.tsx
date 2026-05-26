@@ -81,7 +81,6 @@ const ROLE_PRESETS: Record<string, string[]> = {
   ],
   GUEST: [
     'assets:view',
-    'reports:view',
   ],
 };
 
@@ -180,9 +179,8 @@ export function PermissionChecklist({ selected, onChange }: Props) {
       </div>
 
       {/* ── Role presets ── */}
-      {/* GUEST preset hidden — no permissions defined */}
       <div className="flex flex-wrap gap-1.5">
-        {(['ADMIN', 'STAFF_ADMIN', 'STAFF'] as const).map((role) => (
+        {(['ADMIN', 'STAFF_ADMIN', 'STAFF', 'GUEST'] as const).map((role) => (
           <button
             key={role}
             type="button"

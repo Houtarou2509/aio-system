@@ -21,7 +21,7 @@ function getUA(req: Request): string {
 }
 
 /* ─── Get active issuance for asset (QR return) ─── */
-router.get('/active/asset/:assetId', authenticate, async (req: Request, res: Response) => {
+router.get('/active/asset/:assetId', authenticate, hasPermission('issuances:view'), async (req: Request, res: Response) => {
   try {
     const assignment = await issuanceService.getActiveIssuanceForAsset(String(req.params.assetId));
     if (!assignment) {
@@ -34,7 +34,7 @@ router.get('/active/asset/:assetId', authenticate, async (req: Request, res: Res
 });
 
 /* ─── List issuances ─── */
-router.get('/', authenticate, async (req: Request, res: Response) => {
+router.get('/', authenticate, hasPermission('issuances:view'), async (req: Request, res: Response) => {
   try {
     const result = await issuanceService.listIssuances({
       page: Number(req.query.page) || 1,
@@ -173,7 +173,7 @@ router.post('/assets/release', authenticate, hasPermission('issuances:create'), 
 });
 
 /* ─── Available assets (for wizard) ─── */
-router.get('/assets/available', authenticate, async (req: Request, res: Response) => {
+router.get('/assets/available', authenticate, hasPermission('issuances:view'), async (req: Request, res: Response) => {
   try {
     const result = await issuanceService.getAvailableAssets(req.query.search as string | undefined);
     success(res, result);
@@ -183,7 +183,7 @@ router.get('/assets/available', authenticate, async (req: Request, res: Response
 });
 
 /* ─── Active personnel (for wizard) ─── */
-router.get('/personnel/active', authenticate, async (req: Request, res: Response) => {
+router.get('/personnel/active', authenticate, hasPermission('issuances:view'), async (req: Request, res: Response) => {
   try {
     const result = await issuanceService.getActivePersonnel(req.query.search as string | undefined);
     success(res, result);

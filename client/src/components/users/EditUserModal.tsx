@@ -2,14 +2,12 @@ import { useState, useRef, FormEvent, useEffect } from 'react';
 import { X, UserCog, Eye, EyeOff } from 'lucide-react';
 import { PermissionChecklist, getDefaultPermissions } from './PermissionChecklist';
 
-// GUEST role hidden until guest link flow is implemented
 const ALL_ROLES = [
   { value: 'ADMIN', label: 'Admin' },
   { value: 'STAFF_ADMIN', label: 'Staff-Admin' },
   { value: 'STAFF', label: 'Staff' },
   { value: 'GUEST', label: 'Guest' },
 ];
-const NON_GUEST_ROLES = ALL_ROLES.filter(r => r.value !== 'GUEST');
 
 interface User {
   id: string;
@@ -39,7 +37,7 @@ interface Props {
 }
 
 export function EditUserModal({ user, isSelf, onSubmit, onClose, serverErrors }: Props) {
-  const availableRoles = user.role === 'GUEST' ? ALL_ROLES : NON_GUEST_ROLES;
+  const availableRoles = ALL_ROLES;
   const [form, setForm] = useState({
     fullName: user.fullName || '',
     username: user.username,

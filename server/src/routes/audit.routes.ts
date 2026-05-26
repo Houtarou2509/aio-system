@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import * as auditService from '../services/audit.service';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, hasPermission } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { success, error } from '../utils/response';
 import { auditQuerySchema, auditCleanupSchema, auditExportQuerySchema } from './audit.schema';
@@ -11,7 +11,7 @@ const router = Router();
 router.use(authenticate);
 
 // GET /api/audit — query audit logs with filters
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', hasPermission('audit:view'), async (req: Request, res: Response) => {
   try {
     const query = auditQuerySchema.parse(req.query);
     const result = await auditService.queryAuditLogs(query);
@@ -58,7 +58,7 @@ router.delete('/cleanup', authorize(['ADMIN']), validate(auditCleanupSchema), as
 });
 
 // GET /api/audit/:entityId — all audit events for one entity
-router.get('/:entityId', async (req: Request, res: Response) => {
+router.get('/:entityId', hasPermission('audit:view'), async (req: Request, res: Response) => {
   try {
     const timeline = await auditService.getEntityAuditTimeline(String(req.params.entityId));
     return success(res, timeline, 200);

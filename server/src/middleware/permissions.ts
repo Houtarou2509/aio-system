@@ -58,5 +58,7 @@ export const DEFAULT_PERMISSIONS: Record<string, string[]> = {
     'audit:view',
     'notifications:view',
   ],
-  GUEST: [] as string[],
+  GUEST: [
+    'assets:view',
+  ],
 };

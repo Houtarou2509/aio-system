@@ -45,13 +45,13 @@ function App() {
           <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route index element={<DashboardPage />} />
             <Route path="assets" element={<AssetsPage />} />
-            <Route path="reports" element={<ReportsPage />} />
-            <Route path="suppliers" element={<SuppliersPage />} />
-            <Route path="purchase-requests" element={<PurchaseRequestsPage />} />
+            <Route path="reports" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN','STAFF'] as any}><ReportsPage /></ProtectedRoute>} />
+            <Route path="suppliers" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><SuppliersPage /></ProtectedRoute>} />
+            <Route path="purchase-requests" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><PurchaseRequestsPage /></ProtectedRoute>} />
             <Route path="labels" element={<Navigate to="/assets" replace />} />
             <Route path="users" element={<ProtectedRoute requiredRole="ADMIN"><UserManagementPage /></ProtectedRoute>} />
-            <Route path="audit" element={<AuditPage />} />
-            <Route path="lookup" element={<ProtectedRoute requiredRole={["ADMIN","STAFF_ADMIN"] as any}><InventoryLookupPage /></ProtectedRoute>} />
+            <Route path="audit" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN','STAFF'] as any}><AuditPage /></ProtectedRoute>} />
+            <Route path="lookup" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><InventoryLookupPage /></ProtectedRoute>} />
             <Route path="accountability-lookup" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><AccountabilityLookupPage /></ProtectedRoute>} />
             <Route path="accountability/templates" element={<ProtectedRoute requiredRole="ADMIN"><AccountabilityTemplatesPage /></ProtectedRoute>} />
             {/* Redirect old template paths */}
@@ -59,9 +59,9 @@ function App() {
             <Route path="settings/templates" element={<Navigate to="/accountability/templates" replace />} />
             <Route path="profiles" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><ProfilesPage /></ProtectedRoute>} />
             <Route path="issuances" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><IssuancesPage /></ProtectedRoute>} />
-            <Route path="settings" element={<SettingsPage />} />
-            <Route path="notifications" element={<NotificationsPage />} />
-            <Route path="maintenance-calendar" element={<MaintenanceCalendarPage />} />
+            <Route path="settings" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN','STAFF'] as any}><SettingsPage /></ProtectedRoute>} />
+            <Route path="notifications" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN','STAFF'] as any}><NotificationsPage /></ProtectedRoute>} />
+            <Route path="maintenance-calendar" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN','STAFF'] as any}><MaintenanceCalendarPage /></ProtectedRoute>} />
             <Route path="backups" element={<ProtectedRoute requiredRole="ADMIN"><BackupManagementPage /></ProtectedRoute>} />
             <Route path="accountability/report" element={<ProtectedRoute requiredRole="ADMIN"><AccountabilityReportPage /></ProtectedRoute>} />
           </Route>

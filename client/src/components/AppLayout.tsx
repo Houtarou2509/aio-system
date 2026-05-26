@@ -12,8 +12,8 @@ import ShortcutsHelpModal from '../components/ShortcutsHelpModal';
 const inventoryNav = [
   { to: '/', label: 'Dashboard', IconComponent: LayoutDashboard, end: true },
   { to: '/assets', label: 'Assets', IconComponent: Package },
-  { to: '/maintenance-calendar', label: 'Maintenance', IconComponent: Wrench },
-  { to: '/reports', label: 'Reports', IconComponent: BarChart3 },
+  { to: '/maintenance-calendar', label: 'Maintenance', IconComponent: Wrench, roles: ['ADMIN', 'STAFF_ADMIN', 'STAFF'] },
+  { to: '/reports', label: 'Reports', IconComponent: BarChart3, roles: ['ADMIN', 'STAFF_ADMIN', 'STAFF'] },
   { to: '/lookup', label: 'Inventory Lookup', IconComponent: BookOpen, roles: ['ADMIN', 'STAFF_ADMIN'] },
 ];
 
@@ -26,7 +26,7 @@ const issuanceNav = [
 ];
 
 const systemNav: Array<{ to: string; label: string; IconComponent: any; roles?: string[] }> = [
-  { to: '/settings', label: 'Admin Hub', IconComponent: Settings2 },
+  { to: '/settings', label: 'Admin Hub', IconComponent: Settings2, roles: ['ADMIN', 'STAFF_ADMIN', 'STAFF'] },
 ];
 
 export default function AppLayout() {

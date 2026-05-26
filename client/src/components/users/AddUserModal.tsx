@@ -2,11 +2,11 @@ import { useState, FormEvent, useEffect } from 'react';
 import { X, UserPlus, Eye, EyeOff, Info } from 'lucide-react';
 import { PermissionChecklist, getDefaultPermissions } from './PermissionChecklist';
 
-// GUEST role hidden until guest link flow is implemented
 const ROLES = [
   { value: 'ADMIN', label: 'Admin' },
   { value: 'STAFF_ADMIN', label: 'Staff-Admin' },
   { value: 'STAFF', label: 'Staff' },
+  { value: 'GUEST', label: 'Guest' },
 ];
 
 interface Props {

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import * as supplierService from '../services/supplier.service';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, hasPermission } from '../middleware/auth';
 import { success, error } from '../utils/response';
 import { createSupplierSchema, updateSupplierSchema } from './supplier.schema';
 
@@ -15,7 +15,7 @@ const router = Router();
 router.use(authenticate);
 
 // GET /api/suppliers — list all
-router.get('/', async (_req: Request, res: Response) => {
+router.get('/', hasPermission('suppliers:view'), async (_req: Request, res: Response) => {
   try {
     const suppliers = await supplierService.listSuppliers();
     return success(res, suppliers, 200);
@@ -43,7 +43,7 @@ router.post('/', authorize(['ADMIN', 'STAFF_ADMIN']), async (req: Request, res: 
 });
 
 // GET /api/suppliers/:id — get single
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', hasPermission('suppliers:view'), async (req: Request, res: Response) => {
   try {
     const supplier = await supplierService.getSupplier(String(req.params.id));
     return success(res, supplier, 200);

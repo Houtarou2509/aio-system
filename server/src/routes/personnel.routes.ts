@@ -53,7 +53,7 @@ function getClientIp(req: Request): string {
 }
 
 /* ─── List ─── */
-router.get('/', authenticate, async (req: Request, res: Response) => {
+router.get('/', authenticate, hasPermission('issuances:view'), async (req: Request, res: Response) => {
   try {
     const result = await personnelService.listPersonnel({
       page: Number(req.query.page) || 1,
@@ -97,7 +97,7 @@ router.get('/:id/accountability', authenticate, hasPermission('issuances:view'),
 });
 
 /* ─── Get one ─── */
-router.get('/:id', authenticate, async (req: Request, res: Response) => {
+router.get('/:id', authenticate, hasPermission('issuances:view'), async (req: Request, res: Response) => {
   try {
     const result = await personnelService.getPersonnel(String(req.params.id));
     success(res, result);
