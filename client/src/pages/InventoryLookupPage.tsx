@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import {
   Package, Factory, MapPin, Search, Plus, Pencil,
-  PowerOff, Power, AlertTriangle, X,
+  PowerOff, Power, AlertTriangle, X, Truck,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose,
@@ -371,7 +372,26 @@ export default function InventoryLookupPage() {
           </div>
         </section>
 
-        {/* ═══ FILTER BAR ════════════════════════════════════ */}
+        {/* ═══ SUPPLIERS CARD ═════════════════════════════ */}
+        <section className="px-4 md:px-6 pt-3 shrink-0">
+          <div className="flex items-start gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
+              <Truck className="h-4 w-4 text-[#f8931f]" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Suppliers</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Suppliers are managed separately because they include vendor and contact details.</p>
+              <Link
+                to="/suppliers"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#f8931f] hover:text-[#e0841a] mt-1.5 transition-colors"
+              >
+                Manage Suppliers
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* ═══ FILTER BAR ══════════════════════════════════ */}
         <section className="px-4 md:px-6 pt-3 shrink-0">
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-3">
             {/* Search */}

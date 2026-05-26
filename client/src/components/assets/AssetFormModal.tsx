@@ -5,6 +5,7 @@ import {
   SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { useLookupOptions } from '@/hooks/useLookupOptions';
+import { SupplierFormModal } from '../suppliers/SupplierFormModal';
 import { Sparkles, X, Upload, Pencil, Plus, Camera, CameraOff, Check, RotateCcw, AlertTriangle } from 'lucide-react';
 
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
@@ -86,6 +87,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   // Supplier list
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [suppliersLoading, setSuppliersLoading] = useState(false);
+  const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
 
   // Dynamic lookup lists via hook
   const { options: typeOptions, isLoading: typeLoading } = useLookupOptions('asset-types');
@@ -377,6 +379,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const labelClass = "text-xs font-medium text-slate-700 dark:text-slate-300 mb-1 block";
 
   return (
+    <>
     <div
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -667,15 +670,17 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                 {suppliers.length === 0 && !suppliersLoading ? (
                   <div className="space-y-1.5">
                     <p className="text-xs text-slate-400 dark:text-slate-500 italic">No suppliers yet.</p>
-                    <a
-                      href="/aio-system/suppliers"
+                    <button
+                      type="button"
+                      onClick={() => setShowAddSupplierModal(true)}
                       className="inline-flex items-center gap-1 text-xs font-semibold text-[#f8931f] hover:text-[#e0841a] transition-colors"
                     >
-                      <Plus className="h-3 w-3" /> Add suppliers
-                    </a>
+                      <Plus className="h-3 w-3" /> Add supplier
+                    </button>
                   </div>
                 ) : (
-                  <Select
+                  <div className="space-y-1.5">
+                    <Select
                     value={form.supplierId ?? ''}
                     onValueChange={(val) => setForm(prev => ({ ...prev, supplierId: val === '' ? null : val }))}
                     disabled={suppliersLoading}
@@ -690,6 +695,14 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                       ))}
                     </SelectContent>
                   </Select>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddSupplierModal(true)}
+                    className="inline-flex items-center gap-1 text-[10px] text-slate-400 hover:text-[#f8931f] transition-colors"
+                  >
+                    <Plus className="h-3 w-3" /> Add supplier
+                  </button>
+                  </div>
                 )}
               </div>
 
@@ -809,6 +822,41 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
         </form>
       </div>
     </div>
+
+    {/* ── Nested Supplier Modal ── */}
+    {showAddSupplierModal && (
+      <SupplierFormModal
+        onClose={() => setShowAddSupplierModal(false)}
+        onSubmit={async (data) => {
+          const token = localStorage.getItem('accessToken');
+          const res = await fetch('/api/suppliers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(data),
+          });
+          const result = await res.json();
+          if (!result.success) throw new Error(result.error?.message || 'Failed to create supplier');
+        }}
+        onSaved={() => {
+          setShowAddSupplierModal(false);
+          // Refresh supplier list and auto-select the newly created supplier
+          const token = localStorage.getItem('accessToken');
+          fetch('/api/suppliers', { headers: { Authorization: `Bearer ${token}` } })
+            .then(r => r.json())
+            .then(d => {
+              if (d.success && d.data?.length) {
+                setSuppliers(d.data);
+                // Auto-select the last supplier (newly created)
+                const newestId = d.data[d.data.length - 1].id;
+                if (newestId) {
+                  setForm(prev => ({ ...prev, supplierId: newestId }));
+                }
+              }
+            });
+        }}
+      />
+    )}
+    </>
   );
 }
 
