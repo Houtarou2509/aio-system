@@ -5,9 +5,10 @@ import {
   SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { useLookupOptions } from '@/hooks/useLookupOptions';
-import { Sparkles, X, Upload, Pencil, Plus, Camera, CameraOff, Check, RotateCcw } from 'lucide-react';
+import { Sparkles, X, Upload, Pencil, Plus, Camera, CameraOff, Check, RotateCcw, AlertTriangle } from 'lucide-react';
 
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
+const CREATE_STATUSES = ['AVAILABLE', 'MAINTENANCE', 'RETIRED', 'LOST'];
 
 /** Resolve asset image URL — prepend base path if relative */
 function getImageUrl(url: string | null | undefined): string {
@@ -660,22 +661,34 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 9. Supplier */}
               <div>
-                <label className={labelClass}>Supplier</label>
-                <Select
-                  value={form.supplierId ?? ''}
-                  onValueChange={(val) => setForm(prev => ({ ...prev, supplierId: val === '' ? null : val }))}
-                  disabled={suppliersLoading}
-                >
-                  <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
-                    <SelectValue placeholder={suppliersLoading ? 'Loading...' : 'None'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">None</SelectItem>
-                    {suppliers.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <label className={labelClass}>Supplier <span className="normal-case tracking-normal font-normal text-slate-400">(optional)</span></label>
+                {suppliers.length === 0 && !suppliersLoading ? (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-slate-400 dark:text-slate-500 italic">No suppliers yet.</p>
+                    <a
+                      href="/aio-system/suppliers"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-[#f8931f] hover:text-[#e0841a] transition-colors"
+                    >
+                      <Plus className="h-3 w-3" /> Add suppliers
+                    </a>
+                  </div>
+                ) : (
+                  <Select
+                    value={form.supplierId ?? ''}
+                    onValueChange={(val) => setForm(prev => ({ ...prev, supplierId: val === '' ? null : val }))}
+                    disabled={suppliersLoading}
+                  >
+                    <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
+                      <SelectValue placeholder={suppliersLoading ? 'Loading...' : 'None'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">None</SelectItem>
+                      {suppliers.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {/* 10. Location */}
@@ -700,8 +713,13 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               <div>
                 <label className={labelClass}>Status *</label>
                 <select value={form.status} onChange={e => set('status', e.target.value)} required className={inputClass}>
-                  {ASSET_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                  {(isEdit ? ASSET_STATUSES : CREATE_STATUSES).map(s => <option key={s} value={s} className="whitespace-nowrap">{s.replace(/_/g, ' ')}</option>)}
                 </select>
+                {isEdit && form.status !== 'ASSIGNED' && asset?.status === 'ASSIGNED' && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Changing from Assigned should be done via the Issuances return flow.
+                  </p>
+                )}
               </div>
 
               {/* ── Section: Notes & Warranty ── */}

@@ -4,7 +4,7 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearSca
 import { Doughnut, Bar } from 'react-chartjs-2';
 import {
   Package, Users, Wrench, CheckCircle,
-  Plus, ScanLine, ClipboardList, Settings,
+  ScanLine, ClipboardList, Settings,
   PieChart, BarChart3, ShieldAlert, Activity,
   Clock, CalendarDays, Layers,
   SlidersHorizontal, RefreshCw, AlertTriangle, ArrowRight,
@@ -751,11 +751,7 @@ export default function DashboardPage() {
               <ScanLine className="h-3.5 w-3.5 text-[#f8931f]" />
               <span className="hidden sm:inline">Scan</span>
             </button>
-            <PermissionGate permissions={['assets:create']}>
-              <button onClick={() => navigate('/assets?action=create')} title="Add new asset" className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold bg-[#f8931f] text-white hover:bg-[#e0841a] transition-all duration-200 shadow-lg shadow-[#f8931f]/25 hover:shadow-xl hover:shadow-[#f8931f]/30 active:scale-95">
-                <Plus className="h-3.5 w-3.5" /> Add
-              </button>
-            </PermissionGate>
+
             {/* Secondary actions — hidden on small screens */}
             <button onClick={() => navigate('/audit')} title="View audit log" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200 hidden md:inline-flex">
               <ClipboardList className="h-3.5 w-3.5 text-[#f8931f]" />

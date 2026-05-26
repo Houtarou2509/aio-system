@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
-import { BookOpen, Settings2, LayoutDashboard, Package, Wrench, Users, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, ScanLine, FileBarChart } from 'lucide-react';
+import { NavLink, Outlet, Link } from 'react-router-dom';
+import { BookOpen, Settings2, LayoutDashboard, Package, Wrench, Users, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, ScanLine, FileBarChart, KeyRound } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/notifications/NotificationBell';
@@ -107,6 +107,13 @@ export default function AppLayout() {
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
           </div>
+          <Link
+            to="/change-password"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-slate-400 hover:text-[#f8931f] hover:bg-white/10 transition-colors"
+          >
+            <KeyRound className="h-3.5 w-3.5" />
+            <span>Change Password</span>
+          </Link>
           <button
             onClick={logout}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-[#7B1113] hover:text-white transition-colors"
@@ -173,6 +180,14 @@ export default function AppLayout() {
                 <p className="text-sm font-semibold text-white leading-tight">{user?.fullName}</p>
                 <p className="text-[10px] tracking-widest font-medium text-[#f8931f] uppercase">{user?.role?.replace('_', '-')}</p>
               </div>
+              <Link
+                to="/change-password"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-slate-400 hover:text-[#f8931f] hover:bg-white/10 transition-colors mb-1"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                <span>Change Password</span>
+              </Link>
               <button
                 onClick={() => { setMobileOpen(false); logout(); }}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-[#7B1113] hover:text-white transition-colors"

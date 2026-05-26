@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Eye, EyeOff, Lock, CheckCircle2, XCircle } from 'lucide-react';
 
 export default function ChangePasswordPage() {
-  const { user, accessToken, clearMustChangePassword } = useAuth();
+  const { user, accessToken, refreshAuth, mustChangePassword } = useAuth();
   const navigate = useNavigate();
 
   const [newPassword, setNewPassword] = useState('');
@@ -64,9 +64,9 @@ export default function ChangePasswordPage() {
         throw new Error(data.error?.message || 'Failed to update password');
       }
 
-      // Clear the mustChangePassword flag in AuthContext
-      clearMustChangePassword();
-      navigate('/');
+      // Sync backend state (backend clears mustChangePassword on self-password-change)
+      await refreshAuth();
+      navigate('/', { replace: true });
     } catch (err: any) {
       setError(err.message || 'An error occurred. Please try again.');
     } finally {
@@ -89,10 +89,12 @@ export default function ChangePasswordPage() {
               <Lock className="h-7 w-7 text-[#012061]" />
             </div>
             <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 text-center">
-              Change Your Password
+              {mustChangePassword ? 'Change Your Password' : 'Change Password'}
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 text-center mt-2">
-              Your administrator created a temporary password for your account. Please set your own password to continue.
+              {mustChangePassword
+                ? 'Your administrator created a temporary password for your account. Please set your own password to continue.'
+                : 'Update your account password. Choose a strong password that you haven\'t used before.'}
             </p>
           </div>
 

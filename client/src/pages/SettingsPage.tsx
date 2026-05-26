@@ -166,14 +166,24 @@ export default function SettingsPage() {
         <AccordionSection
           icon={Shield}
           title="Security"
-          subtitle="Two-factor authentication & account protection"
+          subtitle="Password, two-factor authentication & account protection"
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <StatLine label="2FA Status" value="Available" color="#0891b2" />
-              <p className="text-[11px] text-slate-400 mt-1">Add an extra layer of security to your account.</p>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <StatLine label="Password" value="Change anytime" color="#012061" />
+                <p className="text-[11px] text-slate-400 mt-1">Update your account password.</p>
+              </div>
+              <QuickLink to="/change-password" icon={Lock} label="Change Password" />
             </div>
-            <QuickLink to="/setup-2fa" icon={Lock} label="Setup 2FA" />
+            <div className="border-t border-slate-200 dark:border-slate-700 pt-3" />
+            <div className="flex items-center justify-between">
+              <div>
+                <StatLine label="2FA Status" value="Available" color="#0891b2" />
+                <p className="text-[11px] text-slate-400 mt-1">Add an extra layer of security to your account.</p>
+              </div>
+              <QuickLink to="/setup-2fa" icon={Shield} label="Setup 2FA" />
+            </div>
           </div>
         </AccordionSection>
 
@@ -222,8 +232,8 @@ export default function SettingsPage() {
         <PermissionGate permissions={['suppliers:view']}>
         <AccordionSection
           icon={Truck}
-          title="Procurement"
-          subtitle="Suppliers and purchase request management"
+          title="Suppliers & Procurement"
+          subtitle="Manage suppliers and purchase requests — controlled by Suppliers permissions"
         >
           <div className="flex items-center gap-3 flex-wrap">
             <QuickLink to="/suppliers" icon={Truck} label="Suppliers" />

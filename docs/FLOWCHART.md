@@ -1,7 +1,7 @@
 # AIO-System — Full System Map & AI Agent Reference
 
 > **PURPOSE:** Feed this file into any AI coding agent to give it complete understanding of the application — every file, every endpoint, every page, every database model, and how they connect.
-> Last updated: 2026-05-05
+> Last updated: 2026-05-26
 
 ---
 
@@ -16,10 +16,16 @@
 - **Accountability:** Issue assets to personnel → generate signed agreement PDFs → QR-code return scanning → full history
 - **Inventory Management:** Dropdown lookups for asset types, manufacturers, locations, assigned-to entities
 - **Personnel Management:** Track staff (employee/contractor), their designations, institutions, projects, and active items
+- **Supplier Tracking:** Supplier records linked to assets; supplier CRUD with contact info
+- **Purchase Requests:** Request new assets → approval flow → auto-convert to asset on approval
+- **Disposal Tracking:** Assets marked for disposal with method (donated/sold/scrapped/returned to vendor)
+- **Depreciation:** Straight-line depreciation with salvage value floor, useful life per asset type
+- **Reports:** Executive summary cards, inventory valuation charts, maintenance cost analysis, age distribution, accountability status — all from existing loaded data
 - **Audit Trail:** Every CUD operation is logged with who did it, old/new values, IP address, browser/OS/device info, and severity
 - **Label Generation:** PDF barcode labels (Code128/QR/DataMatrix) for asset tagging
 - **Automation:** Cron jobs for daily backups (02:00 SGT), depreciation, and notifications (09:00 SGT)
 - **Guest Sharing:** Time-limited, access-count-limited, read-only public asset links via tokens
+- **Agreement Verification:** Public `/agreements/verify/:documentNumber` page to verify agreement authenticity without login
 
 ---
 
@@ -33,19 +39,19 @@
 | **Database** | PostgreSQL 16 | Via Prisma ORM 6.19.x |
 | **Auth** | JWT (access + refresh token rotation) + bcryptjs + TOTP 2FA (speakeasy) | Access: 15min, Refresh: 7 days |
 | **Frontend** | React 18 + Vite 6 + TypeScript 5 | shadcn/ui + Radix UI + Tailwind CSS 3 |
-| **Charts** | Chart.js 4 + react-chartjs-2 | Dashboard donut/bar charts |
+| **Charts** | Chart.js 4 + react-chartjs-2 | Dashboard donut/bar charts + Reports page visualizations |
 | **PDF Generation** | PDFKit | Labels (bwip-js barcodes) + Accountability agreements |
-| **Image Processing** | Sharp | Resize on upload (800px max) |
-| **File Upload** | Multer 2.x | 5MB limit, images only |
+| **Image Processing** | Sharp | Resize on upload (800px max) + profile photos (256x256) |
+| **File Upload** | Multer 2.x | 5MB limit (images), separate limits for profile photos |
 | **CSV Import** | csv-parse | Bulk asset import with template download |
 | **Cron Jobs** | node-cron | Backup 02:00 SGT, depreciation daily, notifications 09:00 SGT |
 | **Backup** | archiver (zip) + AWS S3 SDK | pg_dump → zip → AES-256-GCM encrypt → S3 upload |
-| **AI** | OpenAI-compatible API | Asset name → type/manufacturer auto-suggestion |
+| **AI** | OpenAI-compatible API | Asset name → type/manufacturer/usefulLife/warranty auto-suggestion |
 | **Email** | Google Gmail API | Notification/warranty emails |
 | **QR Codes** | html5-qrcode (scan) + bwip-js (generate) | Asset labels + return scanning |
 | **Rate Limiting** | express-rate-limit | Login: 5/15min per IP, guest tokens |
 | **Security** | helmet 8.x, cors, morgan | CSP/STS/X-Frame relaxed for dev |
-| **Process Manager** | PM2 | ecosystem.config.js |
+| **Process Manager** | PM2 | ecosystem.config.js (port 3001 dev / 3000 prod) |
 | **Styling** | Tailwind CSS 3 + tw-animate-css + Geist Variable font | Custom navy/orange brand palette |
 | **Testing** | Vitest 4.x (unit/integration/security) + Playwright 1.x (E2E) | — |
 | **Dev Hot Reload** | ts-node-dev (server) + Vite HMR (client) | concurrently orchestrates both |
@@ -65,13 +71,15 @@
 
 ### Design Patterns (applied to ALL pages)
 Every entity page follows the same component hierarchy:
-1. **Sticky Navy Header** — icon + title (left), action buttons (right), orange primary button, bordered secondary buttons
+1. **Sticky Navy Header** — icon + title (left), action buttons (right), orange primary button, bordered secondary buttons. Button labels use `white-space: nowrap` to prevent wrapping.
 2. **KPI Tiles Row** — 3-column grid of stat cards (icon in orange-tinted circle, orange number, uppercase label)
 3. **Horizontal Filter Bar** — white card with search input + dropdown filters in compact `h-8` selects
 4. **Bulk Action Toolbar** — appears when items selected, navy-tinted bar with action buttons
 5. **White Card Table** — `rounded-lg border` container with navy `bg-[#012061]` header row, white `bg-white` data rows, hover highlight
-6. **Empty State** — centered icon in orange-tinted rounded square + CTA button
-7. **Pagination** — Prev/Next in white footer bar with border-top
+6. **Batch Row Expansion** — Batch issuances use ChevronRight/ChevronDown icons; expanded rows show per-item sub-rows with individual action buttons
+7. **Empty State** — centered icon in orange-tinted rounded square + title + description + CTA button
+8. **Pagination** — Prev/Next in white footer bar with border-top
+9. **Copy Feedback** — Copy buttons use short "Copied" label + separate inline toast message below the button row (green check icon, auto-dismiss 2-3s). Button width stays stable after click.
 
 ### Typography
 - **Font:** Geist Variable (Sans) via `@fontsource-variable/geist`
@@ -108,7 +116,10 @@ aio-system/
 │   │   └── migrations/                   # Prisma migration history
 │   ├── scripts/
 │   │   └── seed-dashboard.ts             # Dashboard demo data seeder (10 assets + assignments + maintenance)
-│   ├── uploads/                          # User-uploaded asset images (served at /uploads and /aio-system/uploads)
+│   ├── uploads/                          # User-uploaded files
+│   │   ├── logos/                        # Agreement template header logos
+│   │   ├── profiles/                    # Personnel profile photos (256x256)
+│   │   └── signed-agreements/            # Uploaded signed PDFs
 │   ├── backups/                          # Local backup .enc files before S3 upload
 │   ├── public/                           # Built frontend (Vite output) + static assets
 │   │   ├── index.html                    # SPA entry
@@ -126,16 +137,18 @@ aio-system/
 │       ├── jobs/
 │       │   └── cron.ts                   # Scheduled jobs (backup @02:00, notifications @09:00 SGT)
 │       ├── middleware/
-│       │   ├── auth.ts                   # JWT verification, role authorization (authenticate, requireRole, authorize)
+│       │   ├── auth.ts                   # JWT verification, role authorization (authenticate, requireRole, authorize), ADMIN bypass for hasPermission
+│       │   ├── permissions.ts            # ALL_PERMISSIONS map + DEFAULT_PERMISSIONS per role (includes issuances:return for ADMIN)
 │       │   ├── audit.ts                  # Auto-audit middleware (logs changes on write ops)
 │       │   ├── validate.ts               # Zod schema validation middleware
 │       │   ├── errorHandler.ts           # Global Express error handler
 │       │   └── index.ts                  # Re-exports all middleware
 │       ├── routes/                       # ★ ALL API ENDPOINTS (one file per resource)
+│       │   ├── index.ts                  # Route registration barrel
 │       │   ├── auth.routes.ts            # POST /api/auth/login, /refresh, /logout, /2fa/*, GET /me
 │       │   ├── auth.schema.ts            # Zod schemas for auth payloads
-│       │   ├── asset.routes.ts           # CRUD /api/assets, import, bulk ops, image upload, history
-│       │   ├── asset.schema.ts           # Zod schemas for asset payloads
+│       │   ├── asset.routes.ts           # CRUD /api/assets, import, bulk ops, image upload, history, P2002 duplicate-field catch
+│       │   ├── asset.schema.ts           # Zod schemas for asset payloads (purchasePrice/Date required, depreciation/supplier fields)
 │       │   ├── audit.routes.ts           # GET /api/audit (list, export CSV, cleanup), revert
 │       │   ├── audit.schema.ts           # Zod schemas for audit queries
 │       │   ├── maintenance.routes.ts     # CRUD /api/assets/:id/maintenance
@@ -144,7 +157,7 @@ aio-system/
 │       │   ├── label.schema.ts           # Zod schemas for label payloads
 │       │   ├── dashboard.routes.ts       # GET /api/dashboard (stats, warranties, locations, age)
 │       │   ├── guest.routes.ts           # Public /api/guest/a/:token, token CRUD
-│       │   ├── ai.routes.ts              # POST /api/ai/suggest (OpenAI)
+│       │   ├── ai.routes.ts              # POST /api/ai/suggest (returns type, manufacturer, usefulLifeYears, warrantyYears, confidence)
 │       │   ├── ai.schema.ts              # Zod schema for AI payload
 │       │   ├── backup.routes.ts          # POST /api/backups/now, GET list
 │       │   ├── backup.schema.ts          # Zod schema for backup requests
@@ -152,19 +165,28 @@ aio-system/
 │       │   ├── user.routes.ts            # CRUD /api/users (Admin only)
 │       │   ├── user.schema.ts            # Zod schemas for user payloads
 │       │   ├── lookup.routes.ts          # CRUD /api/lookups/:category
-│       │   ├── personnel.routes.ts       # CRUD /api/personnel
+│       │   ├── personnel.routes.ts       # CRUD /api/personnel + photo upload/delete
 │       │   ├── personnel.schema.ts       # Zod schemas for personnel payloads
 │       │   ├── issuance.routes.ts        # CRUD /api/issuances (issue/return, available assets, active personnel, bulk)
 │       │   ├── issuance.schema.ts        # Zod schemas for issuance payloads
-│       │   ├── agreement.routes.ts       # CRUD /api/agreement/templates, logo upload, PDF generation
+│       │   ├── agreement.routes.ts       # CRUD /api/agreement/templates, logo upload, PDF generation, document snapshots, verification
 │       │   ├── agreement.schema.ts       # Zod schemas for agreement payloads
 │       │   ├── institution.routes.ts     # GET /api/institutions (list)
 │       │   ├── project.routes.ts         # GET /api/projects (list)
+│       │   ├── supplier.routes.ts        # CRUD /api/suppliers (new)
+│       │   ├── supplier.schema.ts       # Zod schemas for supplier payloads (new)
+│       │   ├── purchase-request.routes.ts # CRUD /api/purchase-requests (new)
+│       │   ├── disposal.schema.ts        # Zod schemas for asset disposal
+│       │   ├── settings.routes.ts        # GET/PUT /api/settings
+│       │   ├── search.routes.ts         # GET /api/search (global search)
+│       │   ├── reports.routes.ts         # GET /api/reports (aggregated inventory/accountability data)
+│       │   ├── accountability.routes.ts  # POST /api/accountability/generate, accountability document operations
 │       │   └── accountabilityLookup.routes.ts  # CRUD /api/lookup/accountability/* (designations, institutions, projects)
 │       ├── services/                     # ★ BUSINESS LOGIC (one per resource)
 │       │   ├── auth.service.ts           # Login, JWT signing, 2FA setup, refresh tokens
-│       │   ├── asset.service.ts          # Asset CRUD, CSV import, bulk ops, image processing, assignment history
+│       │   ├── asset.service.ts          # Asset CRUD, CSV import, bulk ops, image processing, assignment history, orphaned image cleanup
 │       │   ├── audit.service.ts          # Query, export CSV, revert field changes, cleanup old logs
+│       │   ├── auditLog.service.ts      # Audit log writing helpers
 │       │   ├── maintenance.service.ts    # Maintenance log CRUD
 │       │   ├── dashboard.service.ts      # Aggregated stats, warranty checks, age distribution, location breakdown
 │       │   ├── label.service.ts          # PDF generation (PDFKit + bwip-js), template CRUD
@@ -172,16 +194,25 @@ aio-system/
 │       │   ├── depreciation.service.ts   # Straight-line depreciation with salvage floor
 │       │   ├── notification.service.ts   # Warranty/maintenance alert generation
 │       │   ├── backup.service.ts         # pg_dump + zip + encrypt (AES-256-GCM) + S3 upload
-│       │   ├── ai.service.ts             # OpenAI API integration for asset suggestions
-│       │   ├── personnel.service.ts      # Personnel CRUD + audit logging + profile history tracking
+│       │   ├── ai.service.ts             # OpenAI API integration — USEFUL_LIFE_MAP + WARRANTY_YEARS_MAP for auto-suggest
+│       │   ├── personnel.service.ts      # Personnel CRUD + audit logging + profile history tracking + photo upload/delete
 │       │   ├── issuance.service.ts       # Issue assets, return assets, QR return, resolve agreement text, bulk issuance
-│       │   └── agreement.service.ts      # Template CRUD, agreement PDF generation (PDFKit)
+│       │   ├── agreement.service.ts      # Template CRUD, agreement PDF generation (PDFKit)
+│       │   ├── agreementDocumentRenderer.service.ts # Agreement PDF rendering with template variables
+│       │   ├── accountability.service.ts # Accountability document generation & management
+│       │   ├── supplier.service.ts       # Supplier CRUD (new)
+│       │   ├── purchase-request.service.ts # Purchase request CRUD + approval + auto-convert to asset (new)
+│       │   ├── search.service.ts         # Global search across assets, personnel, assignments
+│       │   ├── reports.service.ts        # Aggregated reports data (inventory valuation, accountability status)
+│       │   ├── email.service.ts          # Email sending via Gmail API
+│       │   ├── warrantyCheck.service.ts  # Warranty expiration checks + notification generation
+│       │   └── label.service.ts          # Label PDF generation
 │       └── utils/
-│           ├── response.ts               # success(data, meta) / error(message, code) JSON helpers
+│           ├── response.ts               # success(data, meta) / error(message, code, details?) JSON helpers
 │           ├── env.ts                     # ENV validation (DATABASE_URL, JWT_SECRET, etc.)
 │           ├── guestFilter.ts             # Strips sensitive fields for GUEST role (price, serial#, warranty)
 │           ├── auditHelpers.ts            # Shared audit logging utilities
-│           └── templateParser.ts          # Agreement template placeholder reference ({{fullName}}, {{assetName}}, etc.)
+│           └── templateParser.ts          # Agreement template placeholder reference ({{fullName}}, {{assetName}}, {{assetList}} = {{assetTable}}, etc.)
 │
 ├── 📁 client/                            # ═══ FRONTEND ═══
 │   ├── package.json
@@ -200,25 +231,37 @@ aio-system/
 │       │   └── ThemeContext.tsx           # ★ Dark/light mode toggle (adds .dark class on <html>)
 │       ├── pages/                        # ★ ALL PAGE COMPONENTS (one per route)
 │       │   ├── LoginPage.tsx             # /login — split-screen, navy brand panel, orange accents
+│       │   ├── ForgotPasswordPage.tsx    # /forgot-password — password reset request
+│       │   ├── ResetPasswordPage.tsx     # /reset-password — token-based password reset
+│       │   ├── ChangePasswordPage.tsx    # /change-password — logged-in password change
 │       │   ├── Setup2FaPage.tsx          # /setup-2fa — QR scan or manual code TOTP setup
 │       │   ├── GuestAssetPage.tsx        # /guest/:token — public read-only asset view
+│       │   ├── AgreementVerificationPage.tsx # /agreements/verify/:documentNumber — public agreement verification, copy buttons with toast feedback
 │       │   ├── DashboardPage.tsx         # ★ / (home) — Command Center with bento analytics grid
 │       │   ├── AssetsPage.tsx            # /assets — table + CRUD + import + bulk ops + QR scan
-│       │   ├── AuditPage.tsx             # /audit — full audit trail with filters, export, revert
-│       │   ├── SettingsPage.tsx          # /settings — backup trigger, guest tokens, preferences
-│       │   ├── UserManagementPage.tsx    # /users (Admin) — user CRUD + activate/deactivate
+│       │   ├── ReportsPage.tsx            # /reports — executive summary cards, inventory valuation, maintenance cost, age distribution charts, clickable BentoCards, export tooltips, improved empty states
+│       │   ├── SuppliersPage.tsx         # /suppliers — supplier management CRUD (new)
+│       │   ├── PurchaseRequestsPage.tsx   # /purchase-requests — request/approve/convert flow (new)
+│       │   ├── MaintenanceCalendarPage.tsx # /maintenance-calendar — calendar view of maintenance schedules
 │       │   ├── InventoryLookupPage.tsx   # /lookup (Admin/StaffAdmin) — asset dropdown values
 │       │   ├── AccountabilityLookupPage.tsx  # /accountability-lookup — designations, institutions, projects
 │       │   ├── AccountabilityTemplatesPage.tsx # /accountability/templates — agreement template editor
-│       │   ├── ProfilesPage.tsx          # /profiles — personnel management + active items count
-│       │   └── IssuancesPage.tsx         # /issuances — issue/return wizards, QR return, bulk issuance
+│       │   ├── AccountabilityReportPage.tsx # /accountability/report — accountability status report (Admin)
+│       │   ├── ProfilesPage.tsx          # /profiles — personnel management + active items + profile photos
+│       │   ├── IssuancesPage.tsx         # /issuances — issue/return wizards, QR return, bulk issuance, expandable batch rows with per-item actions
+│       │   ├── NotificationsPage.tsx      # /notifications — notification list
+│       │   ├── UserManagementPage.tsx    # /users (Admin) — user CRUD + activate/deactivate
+│       │   ├── AuditPage.tsx             # /audit — full audit trail with filters, export, revert
+│       │   ├── BackupManagementPage.tsx  # /backups (Admin) — backup history + manual trigger
+│       │   └── SettingsPage.tsx         # /settings — backup triggers, guest tokens, preferences
 │       ├── components/
 │       │   ├── AppLayout.tsx            # Sidebar + top nav shell (wraps all authenticated routes)
 │       │   ├── ErrorBoundary.tsx        # React error boundary
+│       │   ├── ShortcutsHelpModal.tsx    # Keyboard shortcuts overlay
 │       │   ├── assets/                  # Asset table, forms, modals
 │       │   │   ├── AssetTable.tsx       # ★ Sortable asset table with navy header, checkboxes, image thumbnails
-│       │   │   ├── AssetFormModal.tsx   # Create/edit asset modal (JSON + multipart image)
-│       │   │   ├── AssetDetailModal.tsx # Full asset view with tabs (details, assignments, maintenance, depreciation)
+│       │   │   ├── AssetFormModal.tsx   # Create/edit asset modal — depreciation section, supplier dropdown, AI auto-fill, serial duplicate inline error
+│       │   │   ├── AssetDetailModal.tsx # Full asset view with tabs (details, assignments, maintenance, depreciation), "Assigned To (legacy)" label
 │       │   │   ├── AssetFilterSidebar.tsx # Filter panel
 │       │   │   ├── ImportAssetsModal.tsx # CSV bulk import modal with template download
 │       │   │   ├── QRScannerModal.tsx   # html5-qrcode camera-based scanner
@@ -228,6 +271,7 @@ aio-system/
 │       │   │   ├── AuditTimeline.tsx
 │       │   │   └── index.ts
 │       │   ├── auth/                    # Auth guards
+│       │   │   ├── PermissionGate.tsx   # ★ ADMIN role bypass (if user.role === 'ADMIN' → show children), safe JSON.parse for permissions, used everywhere for conditional rendering
 │       │   │   ├── ProtectedRoute.tsx   # Route guard (redirects to /login)
 │       │   │   ├── RoleGate.tsx         # Conditional render by role (Admin/StaffAdmin/Staff/Guest)
 │       │   │   └── index.ts
@@ -257,6 +301,8 @@ aio-system/
 │       │   │   └── index.ts
 │       │   ├── notifications/
 │       │   │   └── NotificationBell.tsx # Unread count badge in header
+│       │   ├── suppliers/              # (new)
+│       │   │   └── SupplierFormModal.tsx # Create/edit supplier modal
 │       │   ├── users/
 │       │   │   ├── AddUserModal.tsx     # Create user modal form
 │       │   │   ├── EditUserModal.tsx    # Edit user modal form
@@ -273,7 +319,7 @@ aio-system/
 │       │   ├── useSavedFilters.ts      # Persisted filter state (localStorage)
 │       │   └── useKeyboardShortcuts.ts # Global keyboard shortcuts
 │       ├── lib/                        # Frontend shared code
-│       │   ├── api.ts                  # ★ CENTRAL API CLIENT + all endpoint wrappers + AUTH_EXPIRED_EVENT
+│       │   ├── api.ts                  # ★ CENTRAL API CLIENT + all endpoint wrappers + AUTH_EXPIRED_EVENT + ApiError with errorData field
 │       │   ├── labels-api.ts           # Label-specific API calls
 │       │   ├── utils.ts                # cn() classname helper + misc
 │       │   └── warranty.ts             # Warranty status calculator
@@ -303,6 +349,9 @@ aio-system/
 └── 📁 docs/                             # ═══ DOCUMENTATION ═══
     ├── FLOWCHART.md                     # ★ THIS FILE — complete system reference for AI agents
     ├── ASSIGNEDTO_FLOW.md               # Analysis of assignedTo field
+    ├── ADD_ASSET_IMPROVEMENT_PROMPTS.md  # Phase 1-7 asset form improvements
+    ├── USERS_MODULE_IMPROVEMENT_PROMPTS.md # Phase 1-10 user module improvements
+    ├── RETURN_BUTTON_VISIBILITY_BUG_FIX.md # PermissionGate + issuances:return fix documentation
     ├── login-redesign-recommendations.md
     ├── security-checklist.md
     └── test-strategy.md
@@ -317,39 +366,89 @@ aio-system/
 **User** (table: `users`) — System login accounts
 - `id` (uuid PK), `username` (unique), `email` (unique), `passwordHash`
 - `role` (enum: ADMIN | STAFF_ADMIN | STAFF | GUEST)
-- `fullName`, `status` (active/inactive), `lastLogin`
+- `permissions` (String, JSON array stored as text — e.g. `'["assets:view","issuances:return"]'`), `fullName`, `status` (active/inactive), `lastLogin`
+- `mustChangePassword` (Boolean — forces password change on next login)
 - `twoFactorSecret`, `twoFactorEnabled`, `backupCodes`
-- Relations: assignments[], auditLogs[], labelTemplates[]
+- Relations: assignments[], returnedAssignments[], issuedAgreementDocuments[], uploadedAgreementDocuments[], auditLogs[], conditionLogsRecorded[], labelTemplates[], purchaseRequests[], approvedRequests[]
 - `createdAt`, `updatedAt`
 
 **Asset** (table: `assets`) — Inventory items
-- `id` (uuid PK), `name`, `type` (enum: DESKTOP | LAPTOP | FURNITURE | EQUIPMENT | PERIPHERAL | OTHER), `manufacturer`
+- `id` (uuid PK), `name`, `type` (string: Desktop/Laptop/Furniture/Equipment/Peripheral/Other), `manufacturer`
 - `serialNumber` (unique), `propertyNumber`, `purchasePrice` (Decimal), `purchaseDate`
-- `status` (enum: AVAILABLE | ASSIGNED | MAINTENANCE | RETIRED | LOST)
-- `location`, `imageUrl`, `assignedTo` (free-text string), `remarks`
+- `depreciationMethod` (string: straight_line, default "straight_line"), `usefulLifeYears` (Int, default 5), `salvageValue` (Decimal, default 0)
+- `status` (enum: AVAILABLE | PENDING_ASSIGNMENT | ASSIGNED | MAINTENANCE | RETIRED | LOST)
+- `location`, `imageUrl`, `assignedTo` (free-text legacy string), `remarks`
 - `warrantyExpiry`, `warrantyNotes`, `deletedAt` (soft delete)
-- Relations: assignments[], maintenanceLogs[], maintenanceSchedules[], guestTokens[], notifications[]
+- `disposalReason` (Text), `disposalDate`, `disposalMethod` (enum: DONATED | SOLD | SCRAPPED | RETURNED_TO_VENDOR | OTHER)
+- `supplierId` (FK → Supplier, optional)
+- Relations: assignments[], maintenanceLogs[], maintenanceSchedules[], conditionLogs[], guestTokens[], notifications[], purchaseRequest? (1-to-1 via convertedToAssetId), supplier?
 - `createdAt`, `updatedAt`
 
 **Personnel** (table: `personnel`) — People who can be issued assets
 - `id` (uuid PK), `fullName`, `designation`, `project`, `projectYear`
 - `email` (unique), `phone`, `hiredDate`, `employmentHistory`
 - `personnelType` (employee/contractor), `contractDurationMonths`, `contractStartDate`, `contractEndDate`
-- `signedAgreementPath` (uploaded PDF)
+- `signedAgreementPath` (uploaded PDF), `photoUrl` (profile photo path, e.g. /uploads/profiles/xxx.jpg)
 - `status` (active/inactive/resigned), `isReadyForIssuance` readiness flag
 - `institutionId` → InstitutionLookup, `projectId` → ProjectLookup, `designationId` → DesignationLookup
-- Relations: assignments[], historyLogs[] (ProfileHistory)
+- Relations: assignments[], agreementDocuments[], historyLogs[] (ProfileHistory)
 
 **Assignment** (table: `assignments`) — Issuance/return records (connects Asset ↔ Personnel)
 - `id` (uuid PK), `assetId` → Asset, `userId` → User (who performed), `personnelId` → Personnel (who received)
 - `assignedTo` (free-text fallback), `assignedAt`, `returnedAt`, `condition`, `notes`
+- `conditionAtIssue` (accountability condition snapshot when issued), `conditionAtReturn` (return inspection condition)
+- `returnCondition`, `returnNote`, `returnedById` → User (who received return), `returnRemarks`
+- `returnedReceivedById` → User (who received the returned asset)
+- `accountabilityStatus` (PENDING_SIGNATURE | ACTIVE | RETURNED | CANCELLED | VOIDED), `accountabilityClosedAt`
 - `agreementText` (resolved agreement at time of issuance), `agreementId` → AgreementTemplate
+- `bulkBatchId` (groups multiple assets issued together)
+- `recipientSignedAt`, `recipientSignatureName`, `recipientSignatureMethod`, `recipientSignatureIp`
+- `agreementDocumentId` → AgreementDocument (immutable snapshot)
+- Relations: asset, user, returnedBy, personnel, agreement, agreementDocument
+
+**AgreementDocument** (table: `agreement_documents`) — Immutable agreement document snapshots
+- `id` (uuid PK), `documentNumber` (unique — used in public verification URL)
+- `templateId`, `templateVersionId`, `templateVersion`
+- `title`, `resolvedText` (Text), `headerLogo`
+- `bulkBatchId`, `personnelId`, `personnelNameSnapshot`, `designationSnapshot`, `projectSnapshot`, `institutionSnapshot`
+- `assetSnapshot` (JSON array), `propertyOfficerName`, `authorizedRepName`
+- `status` (issued/signed/voided), `issuedAt`, `issuedById`
+- `recipientSignedAt`, `recipientSignatureName`, `recipientSignatureMethod`, `recipientSignatureIp`, `signatureHash` (SHA-256 tamper-evidence)
+- `signedPdfPath`, `signedUploadedAt`, `signedUploadedById`
+- Relations: template, templateVersionRecord, personnel, issuedBy, signedUploadedBy, assignments[]
+- `createdAt`, `updatedAt`
+
+**AgreementTemplate** (table: `agreement_templates`) — Legal agreement templates
+- `id` (uuid PK), `name`, `title`, `content` (HTML with `{{placeholders}}`)
+- `headerLogo`, `defaultLogo`, `isDefault`
+- `defaultPropertyOfficer`, `defaultAuthorizedRep`, `currentVersion`
+- Relations: assignments[], documents[], versions[]
+
+**AgreementTemplateVersion** (table: `agreement_template_versions`) — Template version history
+- `id` (uuid PK), `templateId`, `versionNumber`, `name`, `title`, `content` (Text)
+- `headerLogo`, `defaultPropertyOfficer`, `defaultAuthorizedRep`, `changeSummary`
+- Relation: template, documents[]
+- Unique constraint: (templateId, versionNumber)
+
+**Supplier** (table: `suppliers`) — Asset suppliers/vendors (new)
+- `id` (uuid PK), `name`, `contactPerson`, `email`, `phone`, `website`, `notes` (Text)
+- Relation: assets[]
+- `createdAt`, `updatedAt`
+
+**PurchaseRequest** (table: `purchase_requests`) — New asset purchase requests (new)
+- `id` (uuid PK), `assetName`, `type`, `reason`, `status` (PENDING/approved/rejected), `notes`
+- `requestedById` → User, `approvedById` → User?, `approvedAt`
+- `convertedToAssetId` → Asset? (1-to-1 unique — auto-convert on approval), `convertedAt`
+- Relations: requestedBy, approvedBy, convertedToAsset
+
+**AssetConditionLog** (table: `asset_condition_logs`) — Condition tracking at issue/return
+- `id` (uuid PK), `assetId` → Asset, `assignmentId`, `event` (issued/returned/transferred/manual)
+- `condition`, `note`, `recordedById` → User?, `recordedAt`
 
 **AuditLog** (table: `audit_logs`) — Immutable change history
-- `id` (uuid PK), `entityType`, `entityId`, `action` (CREATE/UPDATE/DELETE/ISSUE/RETURN/REVERT/etc.)
-- `field`, `oldValue`, `newValue`, `summary` (human-readable), `severity` (LOW/MEDIUM/HIGH)
-- `userAgent`, `oldImageUrl`
-- `performedById` → User, `performedAt`, `ipAddress`
+- `id` (uuid PK), `userId` → User?, `action` (CREATE/UPDATE/DELETE/ISSUE/RETURN/REVERT/etc.)
+- `entityType`, `entityId`, `metadata` (Json), `ipAddress`, `createdAt`
+- Indexes: [entityType, entityId], [userId], [createdAt]
 
 **MaintenanceLog** (table: `maintenance_logs`) — Repair/service records
 - `id` (uuid PK), `assetId` → Asset, `technicianName`, `description`
@@ -372,21 +471,12 @@ aio-system/
 
 **InstitutionLookup** (table: `institution_lookup`) — Institutions for personnel
 - `id` (int PK, autoinc), `name` (unique), `status`, `createdAt`
-- FK from Personnel
 
 **ProjectLookup** (table: `project_lookup`) — Projects for personnel
 - `id` (int PK, autoinc), `name` (unique), `status` (active/inactive/completed/archived), `createdAt`
-- FK from Personnel
 
 **DesignationLookup** (table: `designation_lookup`) — Job titles for personnel
 - `id` (int PK, autoinc), `name` (unique), `status`, `createdAt`
-- FK from Personnel
-
-**AgreementTemplate** (table: `agreement_templates`) — Legal agreement templates
-- `id` (uuid PK), `name`, `title`, `content` (HTML with `{{placeholders}}`)
-- `headerLogo`, `defaultLogo`, `isDefault`
-- `defaultPropertyOfficer`, `defaultAuthorizedRep`
-- Relations: assignments[] (via AssignmentAgreement)
 
 **ProfileHistory** (table: `profile_history`) — Personnel change log
 - `id` (int PK, autoinc), `profileId` → Personnel
@@ -406,21 +496,40 @@ aio-system/
 ### Key Relationships
 - **Asset → Assignment:** 1-to-many (asset issued/returned multiple times)
 - **Personnel → Assignment:** 1-to-many (person can have multiple active issuances)
-- **Asset → MaintenanceLog/MaintenanceSchedule/GuestToken/Notification:** 1-to-many cascade delete
+- **Asset → Supplier:** many-to-1 (optional FK, supplierId can be null)
+- **Asset → PurchaseRequest:** 1-to-1 unique (via convertedToAssetId on PurchaseRequest)
+- **Asset → MaintenanceLog/MaintenanceSchedule/GuestToken/Notification/AssetConditionLog:** 1-to-many cascade delete
 - **Personnel → InstitutionLookup/ProjectLookup/DesignationLookup:** Optional FK (can be null)
 - **Assignment → AgreementTemplate:** Optional FK (which template was used)
+- **Assignment → AgreementDocument:** Optional FK (immutable document snapshot)
 - **ProfileHistory → Personnel:** Cascade delete (history removed when personnel deleted)
 
 ### Enums
 ```
-Role:          ADMIN | STAFF_ADMIN | STAFF | GUEST
-AssetStatus:   AVAILABLE | ASSIGNED | MAINTENANCE | RETIRED | LOST
-AssetType:     DESKTOP | LAPTOP | FURNITURE | EQUIPMENT | PERIPHERAL | OTHER
-LookupCategory: ASSET_TYPE | MANUFACTURER | LOCATION | ASSIGNED_TO
-BackupStatus:  PENDING | IN_PROGRESS | COMPLETED | FAILED
+Role:            ADMIN | STAFF_ADMIN | STAFF | GUEST
+AssetStatus:     AVAILABLE | PENDING_ASSIGNMENT | ASSIGNED | MAINTENANCE | RETIRED | LOST
+DisposalMethod:  DONATED | SOLD | SCRAPPED | RETURNED_TO_VENDOR | OTHER
+LookupCategory:  ASSET_TYPE | MANUFACTURER | LOCATION | ASSIGNED_TO  // ASSIGNED_TO deprecated but cannot remove from enum (breaks DB rows)
+BackupStatus:    PENDING | IN_PROGRESS | COMPLETED | FAILED
 NotificationType: WARRANTY_EXPIRING | MAINTENANCE_OVERDUE
-AuditSeverity: LOW | MEDIUM | HIGH
 ```
+
+### Permission System
+Permissions are stored as a JSON string array in `User.permissions`. The backend `hasPermission()` in `auth.ts` checks: **if role === 'ADMIN' → bypass (allow all)**, else check if required permission is in the user's permissions array. The frontend `PermissionGate.tsx` mirrors this: **if user.role === 'ADMIN' → render children immediately**, else parse permissions and check.
+
+**ALL_PERMISSIONS** (defined in `server/src/middleware/permissions.ts`):
+- `assets:view, assets:create, assets:edit, assets:delete`
+- `issuances:view, issuances:create, issuances:edit, issuances:return`
+- `reports:view, labels:view, labels:edit`
+- `maintenance:view, maintenance:edit`
+- `audit:view, users:view, users:manage, backups:manage`
+
+**DEFAULT_PERMISSIONS by role:**
+- ADMIN → all permissions (including `issuances:return`)
+- MANAGER → assets:*, issuances:view/create/edit, reports
+- VIEWER → assets:view, issuances:view, reports:view
+
+> **Important:** Existing ADMIN users created before `issuances:return` was added may lack it in their DB `permissions` array. The ADMIN role bypass in both PermissionGate and hasPermission ensures this doesn't cause issues, but it's good practice to update DB records too.
 
 ---
 
@@ -443,7 +552,7 @@ AuditSeverity: LOW | MEDIUM | HIGH
 | GET | `/api/assets` | Any | List (filter: type/status/location/search, sort, paginate, date ranges) |
 | GET | `/api/assets/stats` | Any | Aggregated stats by status/type/location |
 | GET | `/api/assets/depreciation-report` | Any | Depreciation data |
-| POST | `/api/assets` | Admin/StaffAdmin | Create (JSON or multipart with image via Multer) |
+| POST | `/api/assets` | Admin/StaffAdmin | Create (JSON or multipart with image via Multer). Returns 409 with `{details: {field, code: 'DUPLICATE_FIELD'}}` on P2002 unique constraint violation |
 | POST | `/api/assets/import` | Admin/StaffAdmin | Bulk CSV import |
 | PATCH | `/api/assets/bulk-status` | Admin/StaffAdmin | Change status for multiple assets |
 | DELETE | `/api/assets/bulk-delete` | Admin | Soft-delete multiple (sets status=RETIRED) |
@@ -451,7 +560,7 @@ AuditSeverity: LOW | MEDIUM | HIGH
 | POST | `/api/assets/bulk-return` | Admin/StaffAdmin | Bulk return by issuance IDs |
 | POST | `/api/assets/bulk-update` | Admin/StaffAdmin | Bulk location/status update |
 | GET | `/api/assets/:id` | Any | Single asset (guest-filtered if GUEST role) |
-| PUT | `/api/assets/:id` | Admin/StaffAdmin/Staff | Update asset (JSON or multipart) |
+| PUT | `/api/assets/:id` | Admin/StaffAdmin/Staff | Update asset (JSON or multipart). Cleans up orphaned image on replacement |
 | DELETE | `/api/assets/:id` | Admin | Soft-delete (sets deletedAt) |
 | POST | `/api/assets/:id/image` | Admin/StaffAdmin/Staff | Upload + resize (Sharp, 800px max) |
 | GET | `/api/assets/:id/history` | Any | Assignment history for this asset |
@@ -484,6 +593,11 @@ AuditSeverity: LOW | MEDIUM | HIGH
 | GET | `/api/dashboard/location-stats` | Any | Asset counts grouped by location |
 | GET | `/api/dashboard/age-stats` | Any | Asset age distribution (buckets) |
 
+### Reports
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/reports` | Any | Aggregated inventory/accountability data for Reports page |
+
 ### Labels
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
@@ -502,7 +616,25 @@ AuditSeverity: LOW | MEDIUM | HIGH
 ### AI
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/api/ai/suggest` | Any | AI-suggest type + manufacturer from asset name |
+| POST | `/api/ai/suggest` | Any | AI-suggest type + manufacturer + usefulLifeYears + warrantyYears + confidence from asset name |
+
+### Suppliers (new)
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/suppliers` | Any | List suppliers |
+| POST | `/api/suppliers` | Admin/StaffAdmin | Create supplier |
+| PUT | `/api/suppliers/:id` | Admin/StaffAdmin | Update supplier |
+| DELETE | `/api/suppliers/:id` | Admin | Delete supplier |
+
+### Purchase Requests (new)
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/purchase-requests` | Any | List purchase requests |
+| POST | `/api/purchase-requests` | Any | Create purchase request |
+| PUT | `/api/purchase-requests/:id` | Admin | Update purchase request |
+| PATCH | `/api/purchase-requests/:id/approve` | Admin | Approve request + optionally convert to asset |
+| PATCH | `/api/purchase-requests/:id/reject` | Admin | Reject request |
+| DELETE | `/api/purchase-requests/:id` | Admin | Delete request |
 
 ### Backups
 | Method | Endpoint | Auth | Description |
@@ -540,6 +672,8 @@ AuditSeverity: LOW | MEDIUM | HIGH
 | GET | `/api/personnel/:id` | Any | Single record with detailed assignments |
 | POST | `/api/personnel` | Admin | Create |
 | PATCH | `/api/personnel/:id` | Admin | Update |
+| POST | `/api/personnel/:id/photo` | Admin | Upload profile photo (Sharp resize 256x256, jpg/jpeg/png/webp, max 2MB) |
+| DELETE | `/api/personnel/:id/photo` | Admin | Remove profile photo |
 | PATCH | `/api/personnel/:id/readiness` | Admin/StaffAdmin | Toggle issuance readiness (`isReadyForIssuance`) |
 | DELETE | `/api/personnel/:id` | Admin | Soft-delete (blocks if active issuances) |
 
@@ -551,7 +685,7 @@ AuditSeverity: LOW | MEDIUM | HIGH
 | POST | `/api/issuances/bulk` | `issuances:create` | Unified 1 -> N issuance flow (one or many assetIds → one personnel) |
 | POST | `/api/issuances/assets/lock` | `issuances:create` | Lock selected AVAILABLE assets as PENDING_ASSIGNMENT while wizard is in progress |
 | POST | `/api/issuances/assets/release` | `issuances:create` | Release cancelled/backed-out PENDING_ASSIGNMENT assets back to AVAILABLE |
-| POST | `/api/issuances/:id/return` | `issuances:edit` | Return asset (sets returnedAt, condition) |
+| POST | `/api/issuances/:id/return` | `issuances:return` | Return asset (sets returnedAt, condition) |
 | POST | `/api/issuances/:id/sign` | `issuances:edit` | Recipient typed digital sign-off; signs whole active batch when the assignment has bulkBatchId |
 | GET | `/api/issuances/assets/available` | Any | Available assets for wizard (status=AVAILABLE, no deletedAt) |
 | GET | `/api/issuances/personnel/active` | Any | Active personnel for wizard |
@@ -571,6 +705,23 @@ AuditSeverity: LOW | MEDIUM | HIGH
 | GET | `/api/agreements/documents` | `issuances:view` | List immutable agreement document snapshots |
 | POST | `/api/agreements/documents/backfill` | `issuances:edit` | Backfill immutable snapshots for historical assignments (supports dryRun) |
 | POST | `/api/agreements/documents/:id/signed-copy` | `issuances:edit` | Attach or replace the signed PDF copy for an agreement document; writes an audit log |
+| GET | `/api/agreements/verify/:documentNumber` | **Public** | Verify agreement document by document number (no auth required) |
+
+### Search
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/search` | Any | Global search across assets, personnel, assignments |
+
+### Settings
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/settings` | Any | System settings |
+| PUT | `/api/settings` | Admin | Update settings |
+
+### Accountability
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/api/accountability/generate` | Admin | Generate accountability documents |
 
 ### Institutions / Projects
 | Method | Endpoint | Auth | Description |
@@ -597,17 +748,28 @@ AuditSeverity: LOW | MEDIUM | HIGH
 | Path | Component | Access | Description |
 |------|-----------|--------|-------------|
 | `/login` | `LoginPage` | Public | Split-screen login (navy brand panel + form) with 2FA support |
+| `/forgot-password` | `ForgotPasswordPage` | Public | Password reset request form |
+| `/reset-password` | `ResetPasswordPage` | Public | Token-based password reset |
+| `/change-password` | `ChangePasswordPage` | Authenticated | Logged-in password change |
 | `/setup-2fa` | `Setup2FaPage` | Authenticated | TOTP 2FA setup wizard |
 | `/guest/:token` | `GuestAssetPage` | Public | Read-only asset view for shared links |
+| `/agreements/verify/:documentNumber` | `AgreementVerificationPage` | **Public** | Verify agreement authenticity — shows document details, copy buttons with toast feedback, no login required |
 | `/` | `DashboardPage` | Authenticated | Command Center: KPI tiles, bento analytics, activity timeline |
 | `/assets` | `AssetsPage` | Authenticated | Asset table + CRUD + CSV import + bulk ops + QR scanner |
+| `/reports` | `ReportsPage` | Authenticated | Executive summary cards, inventory valuation chart, maintenance cost analysis, age distribution, clickable BentoCards, export tooltips, improved empty states |
+| `/suppliers` | `SuppliersPage` | Authenticated | Supplier management CRUD |
+| `/purchase-requests` | `PurchaseRequestsPage` | Authenticated | Purchase request/approval/convert flow |
 | `/lookup` | `InventoryLookupPage` | Admin/StaffAdmin | Asset lookup values (types, mfrs, locations) |
 | `/accountability-lookup` | `AccountabilityLookupPage` | Admin/StaffAdmin | Accountability lookups (designations, institutions, projects) |
-| `/profiles` | `ProfilesPage` | Admin/StaffAdmin | Personnel management + active items |
-| `/issuances` | `IssuancesPage` | Admin/StaffAdmin | Issue/return wizards + QR return + bulk issuance |
+| `/profiles` | `ProfilesPage` | Admin/StaffAdmin | Personnel management + active items + profile photos |
+| `/issuances` | `IssuancesPage` | Admin/StaffAdmin | Issue/return wizards + QR return + bulk issuance + expandable batch rows with per-item actions |
 | `/accountability/templates` | `AccountabilityTemplatesPage` | Admin | Agreement template editor |
+| `/accountability/report` | `AccountabilityReportPage` | Admin | Accountability status report |
+| `/maintenance-calendar` | `MaintenanceCalendarPage` | Authenticated | Calendar view of maintenance schedules |
 | `/users` | `UserManagementPage` | Admin | User CRUD + activate/deactivate |
 | `/audit` | `AuditPage` | Authenticated | Audit trail with filters, CSV export, revert |
+| `/notifications` | `NotificationsPage` | Authenticated | Notification list |
+| `/backups` | `BackupManagementPage` | Admin | Backup history + manual trigger |
 | `/settings` | `SettingsPage` | Authenticated | Backup triggers, guest tokens, preferences |
 
 **Route file:** `client/src/App.tsx` — `<BrowserRouter basename="/aio-system">`
@@ -634,8 +796,25 @@ AuditSeverity: LOW | MEDIUM | HIGH
 │ • Cache user in localStorage for fast load        │
 │ • Decode JWT expiry to skip unnecessary refresh   ▼
 │ • Emit AUTH_EXPIRED_EVENT on hard 401       req.user = {id, role, username}
-│ • RoleGate / ProtectedRoute gate access
+│ • ADMIN role bypass in PermissionGate
+│ • mustChangePassword forces /change-password
 └──────────┘
+```
+
+### Permission Gate Flow (Client-Side)
+```
+┌─────────────────────────────────────────────────────────┐
+│  PermissionGate.tsx                                      │
+│                                                          │
+│  1. if (user.role === 'ADMIN') → SHOW children (bypass) │
+│  2. Parse user.permissions (array or JSON string)        │
+│  3. if (all required perms in userPerms[]) → SHOW        │
+│  4. else → fallback (null by default)                   │
+│                                                          │
+│  Backend mirrors this: auth.ts line 53                   │
+│  if (req.user.role === 'ADMIN') return next()            │
+│  else → hasPermission(requiredPerm) check                │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### Issuance Flow (Admin → Personnel)
@@ -654,23 +833,19 @@ Admin                            Server                            Database
   │──► GET active personnel ──────►│──► SELECT personnel WHERE      │
   │    (useDebounce search)        │     status=active              │
   │                                │                                │
-  │ 3. Select asset + personnel    │                                │
-  │    + condition + template      │                                │
-  │──► POST /api/issuances ───────►│──► CREATE Assignment           │
-  │    {assetId, personnelId,      │     (assetId, personnelId,     │
-  │     condition, agreementText}  │      assignedAt=now)           │
-  │                                │──► UPDATE Asset.status         │
-  │                                │     = ASSIGNED                 │
-  │                                │──► CREATE AuditLog (ISSUE)     │
-  │    ◄── 201 {assignment} ──────┤                                │
-  │                                │                                │
-  │ 4. "Bulk Issuance" wizard:     │                                │
+  │ 3. Bulk Issuance wizard:       │                                │
   │    Select MULTIPLE assets      │                                │
   │──► POST /api/issuances/bulk ──►│──► Loop: create Assignment     │
   │    {assetIds[], personnelId,   │     per asset → update status  │
   │     condition}                 │──► Resolve agreement text       │
   │                                │──► CREATE AuditLog per asset   │
   │    ◄── {assigned, errors[]} ──┤                                │
+  │                                │                                │
+  │ 4. Expandable batch rows:      │                                │
+  │    Click chevron to expand      │                                │
+  │    See individual assets        │                                │
+  │    Per-item Return/Transfer/    │                                │
+  │    Sign buttons                │                                │
   │                                │                                │
   │ 5. Return via QR scan:         │                                │
   │    Scan asset QR code          │                                │
@@ -681,6 +856,48 @@ Admin                            Server                            Database
   │                                │──► UPDATE Asset.status         │
   │                                │     = AVAILABLE                │
   │                                │──► CREATE AuditLog (RETURN)    │
+```
+
+### Agreement Verification Flow
+```
+Public User (no login required)
+  │
+  │ Navigate to /agreements/verify/:documentNumber
+  │
+  └──► AgreementVerificationPage loads
+       │
+       ├──► GET /api/agreements/verify/:documentNumber
+       │    └──► Returns document details (title, personnel, assets, status, sign-off)
+       │
+       ├──► "Copy Agreement No." button → copies documentNumber to clipboard
+       ├──► "Copy verification link" button → copies full verification URL to clipboard
+       │    └──► Success: short "Copied" label in button + green toast message below buttons (auto-dismiss 3s)
+       │
+       └──► If document has signed PDF → "View/Download PDF" link
+```
+
+### Reports Page Data Flow
+```
+ReportsPage                                    Backend
+  │                                            │
+  ├── GET /api/assets (loaded) ───────────────►│ Used for:
+  │   All assets in current filter view       │  - Inventory Valuation (sum purchasePrice by type)
+  │                                            │  - Age Distribution chart
+  │                                            │  - Total value KPI
+  │
+  ├── GET /api/issuances (loaded) ────────────►│ Used for:
+  │   Issuances in current filter view         │  - Most Utilized Type (most issued type)
+  │                                            │  - Accountability status counts
+  │
+  ├── GET /api/maintenance + schedules ───────►│ Used for:
+  │   Maintenance data                         │  - Maintenance cost by asset type
+  │                                            │  - Upcoming maintenance count
+  │
+  └── Executive Summary Cards (computed from loaded data, no extra API calls)
+      ├── Inventory Value — total purchase price
+      ├── Highest Value Type — asset type with max total value
+      ├── Most Utilized — asset type with most issuances
+      └── Maintenance Logs — total maintenance logs count
 ```
 
 ### Dashboard Data Flow
@@ -717,6 +934,9 @@ Any Write Action                         Database
   ├── Backup TRIGGER ─────────────────────►│ AuditLog
   ├── Personnel CREATE/UPDATE/DELETE ─────►│ AuditLog
   ├── User CREATE/UPDATE/STATUS_CHANGE ───►│ AuditLog
+  ├── Supplier CREATE/UPDATE/DELETE ──────►│ AuditLog
+  ├── PurchaseRequest CREATE/UPDATE/APPROVE►│ AuditLog
+  └── Agreement Document SIGN/UPLOAD ──────►│ AuditLog
   │                                        │
   │   AuditPage UI:                         │
   ├── GET /api/audit (filtered + paginated)►│ Query with filters
@@ -735,26 +955,37 @@ Any Write Action                         Database
 | Add API endpoint | `server/src/routes/*.routes.ts` + `server/src/services/*.service.ts` |
 | Add Zod validation | `server/src/routes/*.schema.ts` |
 | Change Express setup | `server/src/index.ts` |
+| Register new route | `server/src/routes/index.ts` — add import + `app.use()` |
 | Add frontend route | `client/src/App.tsx` + `client/src/pages/NewPage.tsx` |
 | Change auth (JWT, roles) | `client/src/context/AuthContext.tsx` + `server/src/middleware/auth.ts` |
-| Change API client | `client/src/lib/api.ts` |
+| Change permission gate | `client/src/components/auth/PermissionGate.tsx` (ADMIN bypass + safe JSON.parse) |
+| Change permissions map | `server/src/middleware/permissions.ts` (ALL_PERMISSIONS + DEFAULT_PERMISSIONS) |
+| Change API client | `client/src/lib/api.ts` (ApiError.errorData for field-level errors) |
 | Change page layout | Component hierarchy: Header → KPI row → Filter bar → Table → Pagination |
 | Change asset table | `client/src/components/assets/AssetTable.tsx` |
+| Change asset form | `client/src/components/assets/AssetFormModal.tsx` (depreciation, supplier, AI auto-fill) |
 | Change dashboard | `client/src/pages/DashboardPage.tsx` |
-| Change issuance wizard | `client/src/pages/IssuancesPage.tsx` (inline NewIssuanceWizard) |
+| Change reports page | `client/src/pages/ReportsPage.tsx` (BentoCards, charts, executive summary) |
+| Change issuance wizard | `client/src/pages/IssuancesPage.tsx` (inline + expandable batch rows) |
 | Change bulk issuance | `client/src/components/issuances/BulkIssuanceWizard.tsx` |
-| Change personnel mgmt | `client/src/pages/ProfilesPage.tsx` |
+| Change agreement verification | `client/src/pages/AgreementVerificationPage.tsx` (copy buttons, toast feedback) |
+| Change personnel mgmt | `client/src/pages/ProfilesPage.tsx` (profile photos, readiness badges) |
+| Change supplier mgmt | `client/src/pages/SuppliersPage.tsx` + `client/src/components/suppliers/SupplierFormModal.tsx` |
+| Change purchase requests | `client/src/pages/PurchaseRequestsPage.tsx` |
 | Change user mgmt | `client/src/pages/UserManagementPage.tsx` |
 | Change audit trail UI | `client/src/pages/AuditPage.tsx` |
 | Change dark mode | `client/src/context/ThemeContext.tsx` |
-| Change agreement PDF | `server/src/services/agreement.service.ts` |
+| Change agreement PDF | `server/src/services/agreement.service.ts` + `agreementDocumentRenderer.service.ts` |
+| Change template parser | `server/src/utils/templateParser.ts` ({{assetList}} = {{assetTable}} alias) |
 | Change label PDF | `server/src/services/label.service.ts` |
+| Change AI suggest | `server/src/services/ai.service.ts` (USEFUL_LIFE_MAP, WARRANTY_YEARS_MAP) |
 | Change cron jobs | `server/src/jobs/cron.ts` |
 | Change PM2 config | `ecosystem.config.js` |
 | Change Vite config | `client/vite.config.ts` |
 | Add shared types | `shared/types/index.ts` |
 | Seed demo data | `server/scripts/seed-dashboard.ts` |
 | Base seed | `server/prisma/seed.ts` |
+| Prod VM deploy | `sshpass -p 'admin123456789' ssh uppivm1@10.170.59.190` then `cd /var/www/html/aio-system && git fetch origin main && git reset --hard origin/main && pm2 restart ecosystem.config.js --env production` |
 
 ---
 
@@ -809,6 +1040,10 @@ pm2 start ecosystem.config.js --env production
 pm2 status
 pm2 logs aio-system
 
+# ── Deploy to VM ──
+sshpass -p 'admin123456789' ssh uppivm1@10.170.59.190 \
+  "cd /var/www/html/aio-system && git fetch origin main && git reset --hard origin/main && pm2 restart ecosystem.config.js --env production"
+
 # ── Testing ──
 npm test                  # Vitest (all suites)
 npm run test:smoke        # Fast smoke tests
@@ -819,6 +1054,10 @@ npm run test:all:with-ui  # Everything
 # ── DB Operations ──
 npm run db:migrate        # prisma migrate dev
 npm run db:seed           # prisma db seed
+
+# ── TypeScript Check ──
+cd client && npx tsc --noEmit   # Type-check client only
+cd server && npx tsc --noEmit   # Type-check server only
 ```
 
 ---
@@ -832,14 +1071,24 @@ npm run db:seed           # prisma db seed
 - **Database:** PostgreSQL, Prisma ORM. Schema at `server/prisma/schema.prisma`
 - **Auth:** JWT access token (15min) + refresh token (7 days). Stored in localStorage.
 - **Roles:** ADMIN → STAFF_ADMIN → STAFF → GUEST (hierarchical, ADMIN has all)
+- **Permissions:** JSON string array in `User.permissions`. ADMIN bypass (both frontend PermissionGate and backend hasPermission). `issuances:return` is a separate permission, not implied by `issuances:edit`.
 - **API response format:** `{success: boolean, data: any, error: {message} | null, meta: {page, limit, total, totalPages} | null}`
+- **API error with details:** On P2002 unique constraint: `{error: string, details: {field: string, code: 'DUPLICATE_FIELD'}}` → HTTP 409
+- **ApiError class:** `constructor(message, status, errorData?)` — errorData carries full API error body for field-level detection
 - **Soft delete:** Assets have `deletedAt` timestamp. Personnel set `status=inactive`. Never hard-delete.
 - **Assets enum values use Prisma Enums:** AVAILABLE, PENDING_ASSIGNMENT, ASSIGNED, MAINTENANCE, RETIRED, LOST
 - **Table pattern:** `overflow-x-auto rounded-lg border bg-white` wrapper with `bg-[#012061]` thead, `bg-white` tbody rows
+- **Button labels:** Always use `white-space: nowrap` to prevent wrapping. Copy feedback uses short "Copied" label + separate toast message.
 - **Brand colors:** Navy `#012061` (headers, accents), Orange `#f8931f` (buttons, highlights, KPIs), Red `#7B1113` (destructive)
 - **Font:** Geist Variable imported at `client/src/index.css`
 - **Dark mode:** `ThemeContext` toggles `.dark` on `<html>`, all components use `dark:` variants
-- **New Issuance Bug History:** Wizard had shared timer bug causing empty asset list. Fixed by using separate `useDebounce` hooks. If assets don't appear, check that `useDebounce` is called once per search field (not a shared `timerRef`).
+- **Batch issuance:** Displayed with expandable rows (ChevronRight/ChevronDown), sub-rows show individual assets with per-item action buttons (Return, Transfer, Sign)
+- **Icon safety:** Before removing ANY lucide import, grep ALL nav arrays (inventory, issuance, system) — missing icon = blank white page
+- **Route removal:** 5 steps — delete page → remove Route+import from App.tsx → remove nav+check icon from AppLayout.tsx → remove route file+import+registration from index.ts → search stray refs
+- **Prisma drift:** Manual SQL + `prisma resolve`, NEVER `prisma migrate reset` on DB
+- **Production VM:** 10.170.59.190, user `uppivm1`, SSH with `sshpass`. PM2 manages the Node.js process on port 3000.
+- **concern/ folder:** Must NOT be tracked in git — contains PDFs, PNGs, Zone.Identifier files. Added to .gitignore.
+- **Action without confirmation:** Never commit, push, deploy, or implement code changes without Houtarou's explicit confirmation.
 
 ### Intelligent Template Engine Notes
 
@@ -848,18 +1097,80 @@ Template bodies support standard placeholders plus smart blocks:
 - `{{assetSection}}` renders a single-asset paragraph for one asset, or a fixed-width table for multiple assets.
 - `{{assetParagraph}}` always renders the paragraph variant.
 - `{{assetTable}}` always renders the table variant.
+- `{{assetList}}` is a valid alias for `{{assetTable}}` — must stay in `getPlaceholderReference()` or client-side validation flags it as unknown.
 - `{{#ifSingleAsset}}...{{/ifSingleAsset}}` only renders for a one-asset document.
 - `{{#ifMultipleAssets}}...{{/ifMultipleAssets}}` only renders for multi-asset documents.
 
 Recipient digital sign-off is stored on assignments via `recipientSignedAt`, `recipientSignatureName`, `recipientSignatureMethod`, and `recipientSignatureIp`. Batch sign-off updates all unsigned active assignments in the same `bulkBatchId`.
 
-## 13. Current Project Roadmap (Issuance System Overhaul)
+### AI Suggest Service Notes
 
-This section tracks the multi-phase upgrade of the asset issuance flow. (Last Updated: 2026-05-20)
+`ai.service.ts` uses two lookup maps for auto-populating asset form fields:
+
+- `USEFUL_LIFE_MAP`: Maps asset type keywords to expected useful life in years (e.g. Laptop→4, Desktop→5, Printer→6, Furniture→10)
+- `WARRANTY_YEARS_MAP`: Maps asset type keywords to typical warranty period (e.g. Laptop→1, Desktop→3, Printer→1)
+- Suggest endpoint returns: `{ manufacturer, type, usefulLifeYears, warrantyYears, confidence }`
+
+### Agreement Verification Page Notes
+
+- Public page at `/agreements/verify/:documentNumber` — no login required
+- Shows document number, personnel, asset list, sign-off status
+- Copy buttons: "Copy Agreement No." and "Copy verification link"
+- Copy feedback: short "Copied" label replaces button text temporarily, green toast message appears below button row with check icon, auto-dismisses after 3 seconds
+- Button labels use `whitespace-nowrap` — no wrapping or layout shift on click
+- Card widths: `max-w-xl` for verified state, `max-w-lg` for other states
+
+### Reports Page Notes
+
+- Uses only data already loaded by the page (assets, issuances, maintenance) — no additional API calls
+- Executive Summary: 4 BentoCards (Inventory Value, Highest Value Type, Most Utilized, Maintenance Logs)
+- Clickable BentoCards navigate to relevant pages (Assets, Issuances, Maintenance)
+- Export buttons inside BentoCards use `e.stopPropagation()` to prevent navigation trigger
+- Charts: inventory valuation bar chart, maintenance cost by type, age distribution — use `min-h-*` for density
+- Empty states: custom EmptyState component with icon + bold title + description instead of empty table
+- "Last updated" timestamp at top of page
+- Mobile responsive: stacks to single column on small screens
+
+### Issuances Page Batch Row Notes
+
+- Batch issuances (same `bulkBatchId`) shown as collapsible rows
+- `expandedBatches` state: `Set<string>` tracking which batch IDs are expanded
+- ChevronRight (collapsed) / ChevronDown (expanded) icons
+- Expanded sub-rows: per-item rows with ↳ prefix, asset name + S/N + P/N, status (Active/Returned with condition)
+- Active items: green pulse dot + action buttons (Return ↻, Transfer ↗, Sign ✏️)
+- Returned items: line-through, grey text, green dot, no action buttons
+- Sub-rows use `<React.Fragment key={...}>` for valid table structure
+
+## 13. Current Project Roadmap
+
+This section tracks the multi-phase upgrade of the asset issuance flow. (Last Updated: 2026-05-26)
 
 | Phase | Title | Status | Description |
 |-------|-------|--------|-------------|
 | **1** | **Foundation & Profiles** | ✅ Done | Added isReadyForIssuance flag to Personnel model, migration, backend readiness toggle endpoint, audit logging, and Profile UI readiness badges/toggle. |
-| **2** | **Unified Issuance Wizard** | ✅ Done | Consolidated Single vs Bulk issuance into the unified 1 -> N asset wizard. Added PENDING_ASSIGNMENT enum/migration plus lock/release endpoints, wizard-side locking cleanup, batch-row return action, and verified accountability lifecycle states (`PENDING_SIGNATURE` -> `ACTIVE` -> `RETURNED`) with condition/return snapshots. Note: Phase 2 final verification passed on 2026-05-20 via Prisma validate, targeted issuance-accountability tests, and full app build. |
-| **3** | **Intelligent Template Engine** | ✅ Done | Added Visual Variable Picker with grouped insert-at-cursor variables, smart asset placeholders, conditional blocks for 1-asset paragraph vs multi-asset table rendering, backend-powered template preview/validation parity with final PDF parsing, and parser regression coverage. Note: Phase 3 final verification passed on 2026-05-20 via targeted template-parser tests and full app build. |
+| **2** | **Unified Issuance Wizard** | ✅ Done | Consolidated Single vs Bulk issuance into the unified 1 -> N asset wizard. Added PENDING_ASSIGNMENT enum/migration plus lock/release endpoints, wizard-side locking cleanup, batch-row return action, and verified accountability lifecycle states (`PENDING_SIGNATURE` -> `ACTIVE` -> `RETURNED`) with condition/return snapshots. |
+| **3** | **Intelligent Template Engine** | ✅ Done | Added Visual Variable Picker with grouped insert-at-cursor variables, smart asset placeholders, conditional blocks for 1-asset paragraph vs multi-asset table rendering, backend-powered template preview/validation parity with final PDF parsing, and parser regression coverage. |
 | **4** | **Final Document & Sign-off** | ✅ Done | Enhanced PDF traceability with document metadata/sign-off status and added recipient typed digital sign-off fields, migration, endpoint, audit log, and issuance UI flow. |
+| **5** | **Asset Form Enhancement** | ✅ Done | Added depreciation fields (depreciationMethod/usefulLifeYears/salvageValue) to AssetFormModal, supplier dropdown, AI auto-fill with USEFUL_LIFE_MAP/WARRANTY_YEARS_MAP, serial number duplicate inline error (P2002 → HTTP 409 with field details), orphaned image cleanup on PUT, removed assignedTo from form. |
+| **6** | **Supplier & Purchase System** | ✅ Done | Added Supplier CRUD (model, routes, frontend), PurchaseRequest CRUD with approval flow and auto-convert-to-asset, SupplierFormModal, SuppliersPage, PurchaseRequestsPage. |
+| **7** | **Permission Gate Fix** | ✅ Done | Added ADMIN role bypass to PermissionGate.tsx (mirrors backend auth.ts line 53), safe JSON.parse for string permissions, updated ADMIN users' DB records with missing `issuances:return` permission. |
+| **8** | **Expandable Batch Rows** | ✅ Done | IssuancesPage batch rows now expandable with ChevronDown/Right icons, per-item sub-rows with individual Return/Transfer/Sign action buttons, returned items show line-through + condition. |
+| **9** | **Personnel Profile Photos** | ✅ Done | Added photoUrl to Personnel model, profile photo upload/delete endpoints (Sharp 256x256, jpg/jpeg/png/webp, max 2MB), circular avatar preview in PersonnelFormModal with initials fallback, profile photos in ProfilesPage table rows and detail modals. |
+| **10** | **Reports & Verification UX** | ✅ Done | ReportsPage: executive summary cards, inventory valuation chart, maintenance cost analysis, age distribution, clickable BentoCards with export tooltips, improved empty states, "Last updated" timestamp. AgreementVerificationPage: stable copy buttons with short "Copied" label + green toast feedback, whitespace-nowrap, no layout shift. |
+
+---
+
+## 14. Recent Changes Log (2026-05-22 → 2026-05-26)
+
+### 2026-05-22
+- **PermissionGate ADMIN bypass:** Added `if (user.role === 'ADMIN') return <>{children}</>` to PermissionGate.tsx, mirroring backend auth.ts ADMIN bypass. Added safe JSON.parse for string permissions.
+- **issuances:return DB fix:** Updated both ADMIN users' permissions array in database to include `issuances:return`.
+- **Expandable batch rows:** IssuancesPage — replaced static Package icon with ChevronRight/ChevronDown expand/collapse. Added `expandedBatches` Set state. Expanded sub-rows show per-item assets with individual Return/Transfer/Sign buttons.
+- **Asset form improvements (7 phases):** AssetFormModal — added depreciation section, supplier dropdown, AI auto-fill with USEFUL_LIFE_MAP/WARRANTY_YEARS_MAP, serial duplicate inline error. AssetDetailModal — "Assigned To (legacy)" label. asset.routes.ts — P2002 catch → HTTP 409, orphaned image cleanup. asset.schema.ts — purchasePrice/Date required, depreciation/supplierId fields. supplier.routes.ts — new Supplier CRUD. ai.service.ts — expanded suggest with usefulLife/warranty.
+- **ApiError.errorData:** Added errorData field to ApiError class in api.ts, full API error body passed through for field-level detection.
+- **Personnel profile photos:** Added photoUrl to Personnel model, upload/delete endpoints, circular avatar preview in form, initials fallback, photos in table and detail views.
+
+### 2026-05-26
+- **Reports page overhaul:** ReportsPage.tsx rewritten with executive summary cards (Inventory Value, Highest Value Type, Most Utilized, Maintenance Logs), clickable BentoCards with navigation, export tooltips with `e.stopPropagation()`, improved empty states (EmptyState component with icon + title + description), "Last updated" timestamp, chart density with `min-h-*`, mobile responsiveness.
+- **Agreement verification copy fix:** AgreementVerificationPage.tsx — copy buttons use short "Copied" label instead of long "Verification link copied", `whitespace-nowrap` on all button labels and nav links, CopyToast component for green success message below button row (auto-dismiss 3s), card width expanded to `max-w-xl`/`max-w-lg`.
+- **Deployed to VM:** Synced to 10.170.59.190 (`git fetch origin main && git reset --hard origin/main`), PM2 restarted. Commit `e9d3f65`.

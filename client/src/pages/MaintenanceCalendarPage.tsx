@@ -167,8 +167,8 @@ export default function MaintenanceCalendarPage() {
             <Wrench className="h-6 w-6 text-[#f8931f]" />
             <h1 className="text-lg font-bold text-white tracking-tight">Maintenance Calendar</h1>
           </div>
-          <p className="hidden sm:block text-xs text-white/60 bg-white/10 rounded-lg px-3 py-2">
-            Scheduled maintenance overview
+          <p className="hidden sm:block text-xs text-white/40 tracking-wide">
+            Scheduled Maintenance Overview
           </p>
         </div>
       </header>

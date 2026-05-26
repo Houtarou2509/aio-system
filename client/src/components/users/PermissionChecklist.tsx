@@ -15,7 +15,7 @@ const CATEGORIES = [
   },
   {
     key: 'suppliers',
-    label: 'Suppliers',
+    label: 'Suppliers & Procurement',
     permissions: ['suppliers:view', 'suppliers:create', 'suppliers:edit', 'suppliers:delete'],
   },
   {
