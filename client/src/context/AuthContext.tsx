@@ -123,12 +123,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Restore user from cache if available
           const cached = localStorage.getItem('cachedUser');
           if (cached) {
+            const cachedUser = JSON.parse(cached);
             setState(prev => ({
               ...prev,
               accessToken: at,
               isAuthenticated: true,
-              user: JSON.parse(cached),
+              user: cachedUser,
               isLoading: false,
+              mustChangePassword: !!cachedUser.mustChangePassword,
             }));
             return;
           }

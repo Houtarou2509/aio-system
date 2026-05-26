@@ -76,7 +76,22 @@ export default function ChangePasswordPage() {
         throw new Error(data.error?.message || 'Failed to change password');
       }
 
-      // Sync auth state (backend clears mustChangePassword)
+      // Immediately update auth state so ProtectedRoute doesn't redirect back
+      // Do NOT rely on refreshAuth() alone — it may skip the API call if the
+      // access token is still young, keeping the stale mustChangePassword=true
+      // in the cached user. Instead, fetch /me directly and update state.
+      try {
+        const meRes = await fetch('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const meData = await meRes.json();
+        if (meData.success) {
+          localStorage.setItem('cachedUser', JSON.stringify(meData.data));
+        }
+      } catch { /* non-critical — refreshAuth will also try */ }
+
+      // refreshAuth will now see the updated cachedUser or will hit the API
+      // to get fresh mustChangePassword=false from the backend
       await refreshAuth();
       navigate('/', { replace: true });
     } catch (err: any) {

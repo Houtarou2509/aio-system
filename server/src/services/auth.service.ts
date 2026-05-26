@@ -344,12 +344,9 @@ export async function changePassword(
     data: { passwordHash, mustChangePassword: false },
   });
 
-  // Invalidate all refresh tokens for this user (force re-login on other devices)
-  for (const [key, entry] of refreshTokens.entries()) {
-    if (entry.userId === userId) {
-      refreshTokens.delete(key);
-    }
-  }
+  // Note: We do NOT invalidate refresh tokens on self-password-change.
+  // The current session should remain valid. Access token (15 min) still works,
+  // and the refresh token will get a fresh access token with updated mustChangePassword=false.
 
   return { message: 'Password changed successfully.', mustChangePassword: false };
 }
