@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, Link } from 'react-router-dom';
-import { BookOpen, Settings2, LayoutDashboard, Package, Wrench, Users, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, ScanLine, FileBarChart, Truck } from 'lucide-react';
+import { BookOpen, Settings2, LayoutDashboard, Package, Wrench, Users, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, ScanLine, FileBarChart } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/notifications/NotificationBell';
@@ -12,7 +12,6 @@ import ShortcutsHelpModal from '../components/ShortcutsHelpModal';
 const inventoryNav = [
   { to: '/', label: 'Dashboard', IconComponent: LayoutDashboard, end: true },
   { to: '/assets', label: 'Assets', IconComponent: Package },
-  { to: '/suppliers', label: 'Suppliers', IconComponent: Truck, roles: ['ADMIN', 'STAFF_ADMIN'] },
   { to: '/maintenance-calendar', label: 'Maintenance', IconComponent: Wrench },
   { to: '/reports', label: 'Reports', IconComponent: BarChart3 },
   { to: '/lookup', label: 'Inventory Lookup', IconComponent: BookOpen, roles: ['ADMIN', 'STAFF_ADMIN'] },
