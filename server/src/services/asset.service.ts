@@ -161,6 +161,20 @@ export async function updateAsset(id: string, data: Prisma.AssetUpdateInput, per
   const existing = await prisma.asset.findUnique({ where: { id, deletedAt: null } });
   if (!existing) throw new Error('Asset not found');
 
+  // ── Guard: block manual status change away from ASSIGNED when active issuance exists ──
+  const newStatusRaw = (data as any).status;
+  if (newStatusRaw && existing.status === 'ASSIGNED' && newStatusRaw !== 'ASSIGNED') {
+    const activeIssuance = await prisma.assignment.findFirst({
+      where: { assetId: id, returnedAt: null },
+    });
+    if (activeIssuance) {
+      const err: any = new Error('Asset has an active issuance. Use the Issuances return flow before changing this status.');
+      err.code = 'ACTIVE_ISSUANCE_EXISTS';
+      err.statusCode = 409;
+      throw err;
+    }
+  }
+
   const cleaned = cleanWarrantyFields(data);
   const asset = await prisma.asset.update({ where: { id }, data: cleaned });
 

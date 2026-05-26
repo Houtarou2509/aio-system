@@ -288,7 +288,12 @@ export default function AssetsPage() {
       const count = (res as any).data?.updated ?? ids.length;
       showToast(`${count} asset(s) updated to ${status}`);
       setSelectedIds(new Set()); refetch();
-    } catch { showToast('Failed to update status.'); }
+    } catch (err: any) {
+      const msg = err?.errorData?.details?.code === 'ACTIVE_ISSUANCE_EXISTS' || err?.errorData?.code === 'ACTIVE_ISSUANCE_EXISTS'
+        ? err.message
+        : 'Failed to update status.';
+      showToast(msg);
+    }
     finally { setBulkLoading(false); }
   };
 

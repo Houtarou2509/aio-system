@@ -258,7 +258,7 @@ export const assetsApi = {
     const token = localStorage.getItem('accessToken');
     const res = await fetch('/api/assets', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData });
     const data = await res.json();
-    if (!data.success) throw new ApiError(data.error?.message || 'Failed to create asset', res.status);
+    if (!data.success) throw new ApiError(data.error?.message || 'Failed to create asset', res.status, data.error);
     return data;
   },
   update: (id: string, data: Partial<Asset>) => request<{ data: Asset }>(`/assets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -266,7 +266,7 @@ export const assetsApi = {
     const token = localStorage.getItem('accessToken');
     const res = await fetch(`/api/assets/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: formData });
     const data = await res.json();
-    if (!data.success) throw new ApiError(data.error?.message || 'Failed to update asset', res.status);
+    if (!data.success) throw new ApiError(data.error?.message || 'Failed to update asset', res.status, data.error);
     return data;
   },
   delete: (id: string) => request<{ data: Asset }>(`/assets/${id}`, { method: 'DELETE' }),

@@ -116,7 +116,7 @@ router.post('/', hasPermission('assets:create'), upload.single('image'), async (
 });
 
 // POST /api/assets/import — CSV bulk import with structured validation report
-const VALID_STATUSES = ['AVAILABLE', 'PENDING_ASSIGNMENT', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
+const VALID_STATUSES = ['AVAILABLE', 'PENDING_ASSIGNMENT', 'MAINTENANCE', 'RETIRED', 'LOST'];
 
 router.post('/import', hasPermission('assets:create'), importUpload.single('file'), async (req: Request, res: Response) => {
   try {
@@ -351,6 +351,19 @@ router.patch('/bulk-status', hasPermission('assets:edit'), async (req: Request, 
     if (!parsed.success) return error(res, parsed.error.message, 400);
 
     const { ids, status } = parsed.data;
+
+    // Guard: block removing ASSIGNED status when active issuances exist
+    if (status !== 'ASSIGNED') {
+      const assetsWithAssignments = await prisma.assignment.findMany({
+        where: { assetId: { in: ids }, returnedAt: null },
+        select: { assetId: true },
+      });
+      if (assetsWithAssignments.length > 0) {
+        const blockedIds = [...new Set(assetsWithAssignments.map(a => a.assetId))];
+        return error(res, `Cannot change status: ${blockedIds.length} asset(s) have active issuances. Use the Issuances return flow first.`, 409, { code: 'ACTIVE_ISSUANCE_EXISTS', blockedIds });
+      }
+    }
+
     const result = await prisma.asset.updateMany({
       where: { id: { in: ids }, deletedAt: null },
       data: { status: status as any },
@@ -518,6 +531,19 @@ router.post('/bulk-update', hasPermission('assets:edit'), async (req: Request, r
     if (!parsed.success) return error(res, parsed.error.message, 400);
 
     const { assetIds, location, status } = parsed.data;
+
+    // Guard: block removing ASSIGNED status when active issuances exist
+    if (status && status !== 'ASSIGNED') {
+      const assetsWithAssignments = await prisma.assignment.findMany({
+        where: { assetId: { in: assetIds }, returnedAt: null },
+        select: { assetId: true },
+      });
+      if (assetsWithAssignments.length > 0) {
+        const blockedIds = [...new Set(assetsWithAssignments.map(a => a.assetId))];
+        return error(res, `Cannot change status: ${blockedIds.length} asset(s) have active issuances. Use the Issuances return flow first.`, 409, { code: 'ACTIVE_ISSUANCE_EXISTS', blockedIds });
+      }
+    }
+
     const updateData: any = {};
     if (location) updateData.location = location;
     if (status) updateData.status = status;
@@ -594,7 +620,12 @@ router.put('/:id', hasPermission('assets:edit'), upload.single('image'), async (
       const field = (err.meta?.target as string[])?.includes('serialNumber') ? 'serialNumber' : 'unknown';
       return error(res, 'A unique field value already exists.', 409, { message: 'A unique field value already exists.', field, code: 'DUPLICATE_FIELD' });
     }
-    return error(res, err.message, err.message === 'Asset not found' ? 404 : 400);
+    const statusCode = err.statusCode
+      || (err.message === 'Asset not found' ? 404
+      : 400);
+    const details: any = {};
+    if (err.code) details.code = err.code;
+    return error(res, err.message, statusCode, Object.keys(details).length > 0 ? details : undefined);
   }
 });
 

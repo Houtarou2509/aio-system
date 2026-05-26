@@ -351,8 +351,10 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     } catch (err: any) {
       console.error('[AssetFormModal] Submit failed:', err);
       // Check for duplicate serial number error
-      if (err?.errorData?.code === 'DUPLICATE_FIELD' && err?.errorData?.field === 'serialNumber') {
+      if ((err?.errorData?.details?.code === 'DUPLICATE_FIELD' || err?.errorData?.code === 'DUPLICATE_FIELD') && err?.errorData?.details?.field === 'serialNumber') {
         setSerialNumberError('This serial number already exists in the system.');
+      } else if (err?.errorData?.details?.code === 'ACTIVE_ISSUANCE_EXISTS' || err?.errorData?.code === 'ACTIVE_ISSUANCE_EXISTS') {
+        setError('This asset has an active issuance. Use the Issuances return flow before changing the status from Assigned.');
       } else {
         setError(err?.message || 'Failed to save asset. Please try again.');
       }

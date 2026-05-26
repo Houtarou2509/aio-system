@@ -12,7 +12,7 @@ export const createAssetSchema = z.object({
   purchaseDate: z.string({
     required_error: 'Purchase date is required.',
   }).min(1, 'Purchase date is required.').transform(v => new Date(v).toISOString()),
-  status: z.enum(['AVAILABLE', 'PENDING_ASSIGNMENT', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST']).default('AVAILABLE'),
+  status: z.enum(['AVAILABLE', 'PENDING_ASSIGNMENT', 'MAINTENANCE', 'RETIRED', 'LOST']).default('AVAILABLE'),
   location: z.string().optional(),
   assignedTo: z.string().optional(),
   propertyNumber: z.string().optional(),
