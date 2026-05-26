@@ -11,6 +11,7 @@ import {
   twoFaValidateSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  changePasswordSchema,
 } from './auth.schema';
 
 const router = Router();
@@ -128,6 +129,21 @@ router.post('/reset-password', validate(resetPasswordSchema), async (req: Reques
     return success(res, result, 200);
   } catch (err: any) {
     return error(res, err.message, 400);
+  }
+});
+
+// POST /api/auth/change-password — self-service password change, authenticate only (no role/permission required)
+router.post('/change-password', authenticate, validate(changePasswordSchema), async (req: Request, res: Response) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const result = await authService.changePassword(req.user!.id, newPassword, currentPassword);
+    return success(res, result, 200);
+  } catch (err: any) {
+    const status = err.message.includes('not found') ? 404
+      : err.message.includes('incorrect') ? 400
+      : err.message.includes('required') ? 400
+      : 400;
+    return error(res, err.message, status);
   }
 });
 

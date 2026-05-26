@@ -306,3 +306,50 @@ function generateBackupCodes(): string[] {
   }
   return codes;
 }
+
+/**
+ * Change password for the currently authenticated user.
+ * - If `mustChangePassword` is true, `currentPassword` is not required.
+ * - Otherwise, `currentPassword` must be provided and verified.
+ * - Sets `mustChangePassword = false` after successful change.
+ * - Invalidates all refresh tokens (forces re-login on other devices).
+ */
+export async function changePassword(
+  userId: string,
+  newPassword: string,
+  currentPassword?: string,
+): Promise<{ message: string; mustChangePassword: boolean }> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new Error('User not found');
+
+  // If user is NOT forced to change, require and verify current password
+  if (!user.mustChangePassword) {
+    if (!currentPassword) {
+      throw new Error('Current password is required.');
+    }
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) {
+      throw new Error('Current password is incorrect.');
+    }
+  }
+
+  // Validate new password strength (at least 8 chars)
+  if (newPassword.length < 8) {
+    throw new Error('New password must be at least 8 characters.');
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash, mustChangePassword: false },
+  });
+
+  // Invalidate all refresh tokens for this user (force re-login on other devices)
+  for (const [key, entry] of refreshTokens.entries()) {
+    if (entry.userId === userId) {
+      refreshTokens.delete(key);
+    }
+  }
+
+  return { message: 'Password changed successfully.', mustChangePassword: false };
+}

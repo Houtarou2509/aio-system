@@ -4,11 +4,15 @@ import { useAuth } from '../context/AuthContext';
 import { Eye, EyeOff, Lock, CheckCircle2, XCircle } from 'lucide-react';
 
 export default function ChangePasswordPage() {
-  const { user, accessToken, refreshAuth, mustChangePassword } = useAuth();
+  const { refreshAuth, mustChangePassword } = useAuth();
   const navigate = useNavigate();
 
+  const isForced = mustChangePassword;
+
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState('');
@@ -35,6 +39,10 @@ export default function ChangePasswordPage() {
     e.preventDefault();
     setError('');
 
+    if (!isForced && !currentPassword) {
+      setError('Current password is required.');
+      return;
+    }
     if (newPassword.length < 8) {
       setError('Password must be at least 8 characters.');
       return;
@@ -50,21 +58,25 @@ export default function ChangePasswordPage() {
 
     setSubmitting(true);
     try {
-      const token = accessToken || localStorage.getItem('accessToken');
-      const res = await fetch(`/api/users/${user?.id}`, {
-        method: 'PUT',
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ password: newPassword }),
+        body: JSON.stringify({
+          ...(isForced ? {} : { currentPassword }),
+          newPassword,
+          confirmPassword,
+        }),
       });
       const data = await res.json();
       if (!data.success) {
-        throw new Error(data.error?.message || 'Failed to update password');
+        throw new Error(data.error?.message || 'Failed to change password');
       }
 
-      // Sync backend state (backend clears mustChangePassword on self-password-change)
+      // Sync auth state (backend clears mustChangePassword)
       await refreshAuth();
       navigate('/', { replace: true });
     } catch (err: any) {
@@ -89,10 +101,10 @@ export default function ChangePasswordPage() {
               <Lock className="h-7 w-7 text-[#012061]" />
             </div>
             <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 text-center">
-              {mustChangePassword ? 'Change Your Password' : 'Change Password'}
+              {isForced ? 'Change Your Password' : 'Change Password'}
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400 text-center mt-2">
-              {mustChangePassword
+              {isForced
                 ? 'Your administrator created a temporary password for your account. Please set your own password to continue.'
                 : 'Update your account password. Choose a strong password that you haven\'t used before.'}
             </p>
@@ -105,6 +117,32 @@ export default function ChangePasswordPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Current Password (voluntary only) */}
+            {!isForced && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Current Password <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showCurrent ? 'text' : 'password'}
+                    value={currentPassword}
+                    onChange={e => setCurrentPassword(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 pr-10 text-sm text-slate-900 dark:text-slate-100 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] outline-none transition"
+                    placeholder="Enter current password"
+                    required={!isForced}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrent(v => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  >
+                    {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* New Password */}
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -199,7 +237,7 @@ export default function ChangePasswordPage() {
 
             <button
               type="submit"
-              disabled={submitting || metCount < 4 || !passwordsMatch}
+              disabled={submitting || metCount < 4 || !passwordsMatch || (!isForced && !currentPassword)}
               className="w-full py-2.5 px-4 rounded-lg text-white font-semibold text-sm transition-colors bg-[#f8931f] hover:bg-[#e07e0a] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? 'Changing Password...' : 'Change Password'}
