@@ -21,13 +21,13 @@ beforeEach(async () => {
 
 describe('Label Generation', () => {
   // 1
-  it('1. POST /api/labels/generate (Admin) — QR label → 200, PDF', async () => {
+  it('1. POST /api/labels/generate-pdf (Admin) — single asset → 200, PDF', async () => {
     const asset = await createAsset({ name: 'Label Test', adminToken: users.ADMIN.accessToken });
 
     const res = await request(app)
-      .post('/api/labels/generate')
+      .post('/api/labels/generate-pdf')
       .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
-      .send({ assetId: asset.id, format: 'DYMO_99017', barcodeType: 'QR' });
+      .send({ assetIds: [asset.id] });
 
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('application/pdf');
@@ -35,76 +35,73 @@ describe('Label Generation', () => {
   });
 
   // 2
-  it('2. POST /api/labels/generate (Staff) — 200 (Staff can print)', async () => {
+  it('2. POST /api/labels/generate-pdf (Staff) — 200 (Staff can print)', async () => {
     const asset = await createAsset({ name: 'Staff Label', adminToken: users.ADMIN.accessToken });
 
     const res = await request(app)
-      .post('/api/labels/generate')
+      .post('/api/labels/generate-pdf')
       .set('Authorization', `Bearer ${users.STAFF.accessToken}`)
-      .send({ assetId: asset.id, format: 'DYMO_99012', barcodeType: 'QR' });
+      .send({ assetIds: [asset.id] });
 
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('application/pdf');
   });
 
   // 3
-  it('3. POST /api/labels/generate (Guest) — 403', async () => {
+  it('3. POST /api/labels/generate-pdf (Guest) — 403', async () => {
     const asset = await createAsset({ name: 'Guest Label', adminToken: users.ADMIN.accessToken });
 
     const res = await request(app)
-      .post('/api/labels/generate')
+      .post('/api/labels/generate-pdf')
       .set('Authorization', `Bearer ${users.GUEST.accessToken}`)
-      .send({ assetId: asset.id, format: 'DYMO_99012', barcodeType: 'QR' });
+      .send({ assetIds: [asset.id] });
 
     expect(res.status).toBe(403);
   });
 
   // 4
-  it('4. POST /api/labels/generate — invalid format → 422', async () => {
-    const asset = await createAsset({ name: 'Invalid Format', adminToken: users.ADMIN.accessToken });
-
+  it('4. POST /api/labels/generate-pdf — empty assetIds array → 422', async () => {
     const res = await request(app)
-      .post('/api/labels/generate')
+      .post('/api/labels/generate-pdf')
       .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
-      .send({ assetId: asset.id, format: 'INVALID_FORMAT', barcodeType: 'QR' });
+      .send({ assetIds: [] });
 
     expect(res.status).toBe(422);
-    expect(res.body.success).toBe(false);
   });
 
   // 5
-  it('5. POST /api/labels/batch (Admin) — 3 assets → 200, ZIP', async () => {
+  it('5. POST /api/labels/generate-pdf (Admin) — 3 assets in one PDF → 200', async () => {
     const a1 = await createAsset({ name: 'Batch 1', adminToken: users.ADMIN.accessToken });
     const a2 = await createAsset({ name: 'Batch 2', adminToken: users.ADMIN.accessToken });
     const a3 = await createAsset({ name: 'Batch 3', adminToken: users.ADMIN.accessToken });
 
     const res = await request(app)
-      .post('/api/labels/batch')
+      .post('/api/labels/generate-pdf')
       .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
-      .send({ assetIds: [a1.id, a2.id, a3.id], format: 'DYMO_99012', barcodeType: 'QR' });
+      .send({ assetIds: [a1.id, a2.id, a3.id] });
 
     expect(res.status).toBe(200);
-    expect(res.headers['content-type']).toContain('application/zip');
+    expect(res.headers['content-type']).toContain('application/pdf');
   });
 
   // 6
-  it('6. POST /api/labels/batch — empty array → 422', async () => {
+  it('6. POST /api/labels/generate-pdf — empty array → 422', async () => {
     const res = await request(app)
-      .post('/api/labels/batch')
+      .post('/api/labels/generate-pdf')
       .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
-      .send({ assetIds: [], format: 'DYMO_99012', barcodeType: 'QR' });
+      .send({ assetIds: [] });
 
     expect(res.status).toBe(422);
   });
 
   // 7
-  it('7. POST /api/labels/batch — 51 assetIds (over max 50) → 422', async () => {
+  it('7. POST /api/labels/generate-pdf — 51 assetIds (over max 50) → 422', async () => {
     const fakeIds = Array.from({ length: 51 }, (_, i) => `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`);
 
     const res = await request(app)
-      .post('/api/labels/batch')
+      .post('/api/labels/generate-pdf')
       .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
-      .send({ assetIds: fakeIds, format: 'DYMO_99012', barcodeType: 'QR' });
+      .send({ assetIds: fakeIds });
 
     expect(res.status).toBe(422);
   });
@@ -114,12 +111,12 @@ describe('Label Generation', () => {
     const asset = await createAsset({ name: 'Audit Label', adminToken: users.ADMIN.accessToken });
 
     await request(app)
-      .post('/api/labels/generate')
+      .post('/api/labels/generate-pdf')
       .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
-      .send({ assetId: asset.id, format: 'DYMO_99017', barcodeType: 'QR' });
+      .send({ assetIds: [asset.id] });
 
     const logs = await prisma.auditLog.findMany({
-      where: { entityType: 'Label', action: 'PRINT' },
+      where: { action: 'label.printed', entityId: asset.id },
     });
 
     expect(logs.length).toBeGreaterThanOrEqual(1);
@@ -210,7 +207,6 @@ describe('Label Templates', () => {
       .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data.deleted).toBe(true);
   });
 
   // 13

@@ -98,7 +98,8 @@ function InfoRow({ label, value, highlight }: { label: string; value: React.Reac
    ASSET DETAIL MODAL
    ═════════════════════════════════════════════════════ */
 export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
-  useAuth();
+  const { user } = useAuth();
+  const isGuest = user?.role === 'GUEST';
   const [tab, setTab] = useState('overview');
   const [frequentRepair, setFrequentRepair] = useState(false);
   const [showLightbox, setShowLightbox] = useState(false);
@@ -203,7 +204,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
               <TabsList variant="line" className="w-full justify-start gap-0">
                 {[
                   { value: 'overview', label: 'Overview', icon: Info },
-                  { value: 'financials', label: 'Financials', icon: DollarSign },
+                  ...(!isGuest ? [{ value: 'financials', label: 'Financials', icon: DollarSign }] : []),
                   { value: 'condition', label: 'Condition', icon: Activity },
                   { value: 'history', label: 'History', icon: User },
                   { value: 'maintenance', label: 'Maintenance', icon: Wrench },
@@ -256,19 +257,21 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* General Info */}
                       <InfoCard icon={Info} title="General Info">
-                        <InfoRow label="Serial Number" value={asset.serialNumber || '—'} />
+                        {!isGuest && <InfoRow label="Serial Number" value={asset.serialNumber || '—'} />}
                         <InfoRow label="Property #" value={(asset as any).propertyNumber || '—'} />
                         <InfoRow label="Location" value={<span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3 text-slate-400" />{asset.location || '—'}</span>} />
                         <InfoRow label="Assigned To (legacy)" value={asset.assignedTo ? <span className="text-[#f8931f] font-semibold">{asset.assignedTo}</span> : <span className="text-slate-400 italic">Unassigned</span>} highlight={!!asset.assignedTo} />
                         <InfoRow label="Status" value={<span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusConf.className}`}>{statusConf.label}</span>} />
                       </InfoCard>
 
-                      {/* Purchase Details */}
-                      <InfoCard icon={Tag} title="Purchase Details">
-                        <InfoRow label="Purchase Price" value={asset.purchasePrice != null ? <span className="text-[#f8931f]">₱{Number(asset.purchasePrice).toLocaleString()}</span> : '—'} highlight />
-                        <InfoRow label="Purchase Date" value={asset.purchaseDate ? new Date(asset.purchaseDate).toLocaleDateString() : '—'} />
-                        <InfoRow label="Remarks" value={(asset as any).remarks || '—'} />
-                      </InfoCard>
+                      {/* Purchase Details — hidden for Guest role */}
+                      {!isGuest && (
+                        <InfoCard icon={Tag} title="Purchase Details">
+                          <InfoRow label="Purchase Price" value={asset.purchasePrice != null ? <span className="text-[#f8931f]">₱{Number(asset.purchasePrice).toLocaleString()}</span> : '—'} highlight />
+                          <InfoRow label="Purchase Date" value={asset.purchaseDate ? new Date(asset.purchaseDate).toLocaleDateString() : '—'} />
+                          <InfoRow label="Remarks" value={(asset as any).remarks || '—'} />
+                        </InfoCard>
+                      )}
 
                       {/* Warranty */}
                       <InfoCard icon={Shield} title="Warranty">
@@ -298,8 +301,8 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                       </InfoCard>
                     </div>
 
-                    {/* Guest Token Manager */}
-                    <GuestTokenManager assetId={asset.id} />
+                    {/* Guest Token Manager — admin/staff only */}
+                    {!isGuest && <GuestTokenManager assetId={asset.id} />}
                   </div>
                 )}
 

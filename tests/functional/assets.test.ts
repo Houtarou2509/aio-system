@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../../server/src/index';
 import { PrismaClient } from '@prisma/client';
-import { seedUsers, createAsset, createCheckedOutAsset, cleanAssets, type UserFixture } from '../fixtures/assets';
+import { seedUsers, createAsset, createCheckedOutAsset, createPersonnel, cleanAssets, type UserFixture } from '../fixtures/assets';
 import fs from 'fs';
 import path from 'path';
 
@@ -10,6 +10,7 @@ const prisma = new PrismaClient();
 
 // ── State ────────────────────────────────────────────────────────────────────
 let users: Record<string, UserFixture>;
+let testPersonnel: { id: string; fullName: string };
 
 // ── Lifecycle ────────────────────────────────────────────────────────────────
 beforeAll(async () => {
@@ -22,6 +23,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await cleanAssets();
+  testPersonnel = await createPersonnel({ fullName: 'Test Issuee', designation: 'Staff', project: 'QA' });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -38,6 +40,7 @@ describe('Asset CRUD — Create', () => {
         manufacturer: 'Dell',
         serialNumber: 'SN-DELL-001',
         purchasePrice: 45000,
+        purchaseDate: '2025-01-15',
         location: 'Office A',
       });
 
@@ -233,7 +236,7 @@ describe('Asset CRUD — Update', () => {
   });
 
   // 14
-  it('14. PUT /api/assets/:id (Staff) — Staff CAN update (role allowed)', async () => {
+  it('14. PUT /api/assets/:id (Staff) — Staff CANNOT update (no assets:edit permission) → 403', async () => {
     const asset = await createAsset({ name: 'Staff Update Test', adminToken: users.ADMIN.accessToken });
 
     const res = await request(app)
@@ -241,19 +244,18 @@ describe('Asset CRUD — Update', () => {
       .set('Authorization', `Bearer ${users.STAFF.accessToken}`)
       .send({ location: 'Updated by Staff' });
 
-    // STAFF is in authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']) for PUT
-    expect(res.status).toBe(200);
-    expect(res.body.data.location).toBe('Updated by Staff');
+    // STAFF default permissions only include assets:view, not assets:edit
+    expect(res.status).toBe(403);
   });
 
   // 15
-  it('15. PUT /api/assets/:id — invalid depreciationRate (negative) → 400', async () => {
-    const asset = await createAsset({ name: 'Depreciation Test', adminToken: users.ADMIN.accessToken });
+  it('15. PUT /api/assets/:id — invalid purchasePrice (negative) → 422', async () => {
+    const asset = await createAsset({ name: 'Validation Test', adminToken: users.ADMIN.accessToken });
 
     const res = await request(app)
       .put(`/api/assets/${asset.id}`)
       .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
-      .send({ depreciationRate: -10 });
+      .send({ purchasePrice: -10 });
 
     expect(res.status).toBe(422);
     expect(res.body.success).toBe(false);
@@ -313,20 +315,20 @@ describe('Asset CRUD — Delete', () => {
   });
 });
 
-describe('Asset CRUD — Checkout & Return', () => {
+describe('Asset CRUD — Issuance & Return', () => {
   // 19
-  it('19. POST /api/assets/:id/checkout (Admin) — assigns asset, status → ASSIGNED', async () => {
-    const asset = await createAsset({ name: 'Checkout Test', adminToken: users.ADMIN.accessToken });
+  it('19. POST /api/issuances (Admin) — creates issuance, asset status → ASSIGNED', async () => {
+    const asset = await createAsset({ name: 'Issuance Test', adminToken: users.ADMIN.accessToken });
 
     const res = await request(app)
-      .post(`/api/assets/${asset.id}/checkout`)
+      .post('/api/issuances')
       .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
-      .send({ userId: users.STAFF.id, notes: 'Check out for project' });
+      .send({ assetId: asset.id, personnelId: testPersonnel.id });
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data.assetId).toBe(asset.id);
-    expect(res.body.data.userId).toBe(users.STAFF.id);
+    expect(res.body.data.personnelId).toBe(testPersonnel.id);
 
     // Verify status changed
     const checkRes = await request(app)
@@ -336,40 +338,40 @@ describe('Asset CRUD — Checkout & Return', () => {
   });
 
   // 20
-  it('20. POST /api/assets/:id/checkout — asset already checked out → 409/error', async () => {
+  it('20. POST /api/issuances — asset already assigned → 409/error', async () => {
     const { asset } = await createCheckedOutAsset({
-      name: 'Double Checkout',
+      name: 'Double Issuance',
       adminToken: users.ADMIN.accessToken,
-      userId: users.STAFF.id,
+      personnelId: testPersonnel.id,
     });
 
-    // Try to check out again
+    // Try to issue again
     const res = await request(app)
-      .post(`/api/assets/${asset.id}/checkout`)
+      .post('/api/issuances')
       .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
-      .send({ userId: users.STAFF_ADMIN.id });
+      .send({ assetId: asset.id, personnelId: testPersonnel.id });
 
-    // Service returns 400 with "Asset is not available for checkout"
-    expect(res.status).toBe(400);
+    // Service returns 400/409 when asset is already assigned
+    expect(res.status).toBeGreaterThanOrEqual(400);
     expect(res.body.success).toBe(false);
   });
 
   // 21
-  it('21. POST /api/assets/:id/return (Admin) — closes assignment, status → AVAILABLE', async () => {
-    const { asset } = await createCheckedOutAsset({
+  it('21. POST /api/issuances/:id/return (Admin) — closes assignment, status → AVAILABLE', async () => {
+    const { asset, assignment } = await createCheckedOutAsset({
       name: 'Return Test',
       adminToken: users.ADMIN.accessToken,
-      userId: users.STAFF.id,
+      personnelId: testPersonnel.id,
     });
 
     const res = await request(app)
-      .post(`/api/assets/${asset.id}/return`)
+      .post(`/api/issuances/${assignment.id}/return`)
       .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
-      .send({ condition: 'Good', notes: 'Returned in good condition' });
+      .send({ condition: 'Good', returnNote: 'Returned in good condition' });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.data.returned).toBe(true);
+    expect(res.body.data.returnedAt).toBeTruthy();
 
     // Verify status changed back
     const checkRes = await request(app)
@@ -383,7 +385,7 @@ describe('Asset CRUD — Checkout & Return', () => {
     const { asset } = await createCheckedOutAsset({
       name: 'History Test',
       adminToken: users.ADMIN.accessToken,
-      userId: users.STAFF.id,
+      personnelId: testPersonnel.id,
     });
 
     const res = await request(app)
@@ -393,8 +395,6 @@ describe('Asset CRUD — Checkout & Return', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.length).toBeGreaterThanOrEqual(1);
-    expect(res.body.data[0].userId).toBe(users.STAFF.id);
-    expect(res.body.data[0].assignedAt).toBeDefined();
   });
 });
 

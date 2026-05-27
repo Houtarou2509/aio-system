@@ -49,6 +49,7 @@ export default defineConfig({
       '/api': { target: 'http://localhost:3001', changeOrigin: true },
       '/uploads': { target: 'http://localhost:3001/aio-system', changeOrigin: true },
     },
+    historyApiFallback: true,
   },
   base: '/aio-system/',
   build: {

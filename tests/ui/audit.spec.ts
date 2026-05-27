@@ -1,52 +1,71 @@
 import { test, expect } from '@playwright/test';
 
-async function loginAsAdmin(page: any) {
-  await page.goto('/login');
-  await page.fill('input[type="email"]', 'admin@aio-system.local');
-  await page.fill('input[type="password"]', 'admin123');
-  await page.click('button[type="submit"]');
-
-  const twoFaVisible = await page.locator('text=Two-Factor Authentication').isVisible({ timeout: 3000 }).catch(() => false);
-  if (twoFaVisible) {
-    const speakeasy = await import('speakeasy');
-    const secret = process.env.ADMIN_2FA_SECRET!;
-    const totp = speakeasy.totp({ secret, encoding: 'base32' });
-    await page.fill('input[maxlength="6"]', totp);
-    await page.click('button[type="submit"]');
-  }
-
-  await expect(page).toHaveURL(/\/$|\/dashboard/, { timeout: 10000 });
+async function loginAsAdmin(page) {
+  await page.goto('/aio-system/login');
+  await page.waitForLoadState('networkidle');
+  await page.getByPlaceholder('you@institution.edu').fill('admin@aio-system.local');
+  await page.getByPlaceholder('Enter password').fill('admin123');
+  await page.getByRole('button', { name: 'Sign In' }).click();
+  await expect(page).toHaveURL(/aio-system\/?$/, { timeout: 10000 });
 }
 
-test.describe('Flow 6 — Audit trail modal', () => {
-  test('1-5. View audit history for asset with changes', async ({ page }) => {
+test.describe('Flow 6 — Audit trail page', () => {
+  test('Admin can see audit entries on Audit page', async ({ page }) => {
     await loginAsAdmin(page);
 
-    // Navigate to assets
-    await page.click('text=Assets');
-    await expect(page).toHaveURL(/\/assets/);
+    // Navigate to audit page
+    await page.goto('/aio-system/audit');
+    await page.waitForLoadState('networkidle');
 
-    // Click into Dell Latitude asset
-    const assetRow = page.locator('tr, .asset-row, [data-testid="asset-row"]').filter({ hasText: 'Dell Latitude' }).first();
-    await assetRow.click();
+    // Audit page heading
+    await expect(page.getByRole('heading', { name: 'Audit Trail' })).toBeVisible({ timeout: 10000 });
 
-    // Click "audit" tab
-    await page.click('text=audit', { timeout: 5000 });
+    // Audit table exists
+    await expect(page.getByRole('table')).toBeVisible({ timeout: 5000 });
 
-    // Assert at least one audit entry is visible
-    await expect(page.locator('[class*="audit"], .space-y-2 > div').first()).toBeVisible({ timeout: 10000 });
+    // Column headers: Action, Asset Name, Summary (audit table has two "Action" columns — .first() is the data column)
+    await expect(page.getByRole('columnheader', { name: 'Action' }).first()).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Asset Name' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Summary' })).toBeVisible();
 
-    // Assert each entry shows: action badge, field, old→new, timestamp, performed by
-    // There should be UPDATE entries
-    const updateBadges = page.locator('text=UPDATE');
-    await expect(updateBadges.first()).toBeVisible({ timeout: 5000 });
+    // At least one audit entry exists (seeded data creates assets)
+    const rows = page.locator('tbody tr');
+    await expect(rows.first()).toBeVisible({ timeout: 5000 });
 
-    // Check field name visible (location or currentValue)
-    const fieldLabel = page.locator('text=location').or(page.locator('text=currentValue'));
-    await expect(fieldLabel.first()).toBeVisible({ timeout: 5000 });
+    // First row contains visible action text ("Updated" or "Created")
+    // Note: the first <td> is an empty icon/expand cell, so scope to the row
+    const firstRow = rows.first();
+    await expect(firstRow).toContainText(/Updated|Created/);
 
-    // Check performed by (admin or staffadmin)
-    const performer = page.locator('text=admin').or(page.locator('text=staffadmin'));
-    await expect(performer.first()).toBeVisible({ timeout: 5000 });
+    // First row shows entity type "INVENTORY" and severity "HIGH" or "MED" or "LOW"
+    await expect(firstRow).toContainText(/INVENTORY/);
+
+    // First row shows performer ("admin" or "staffadmin")
+    await expect(firstRow).toContainText(/admin|staffadmin/);
+
+    // Asset name column shows seeded asset name
+    await expect(firstRow).toContainText(/Dell Latitude|Herman Miller|Cisco Router/);
+  });
+
+  test('Audit entry accessible via asset detail dialog', async ({ page }) => {
+    await loginAsAdmin(page);
+
+    await page.goto('/aio-system/assets');
+    await page.waitForLoadState('networkidle');
+
+    // Click Dell Latitude row
+    const dellRow = page.locator('tr').filter({ hasText: 'Dell Latitude 5540' }).first();
+    await dellRow.click();
+
+    // Detail dialog opens
+    await expect(page.getByRole('dialog', { name: 'Asset Details' })).toBeVisible({ timeout: 5000 });
+
+    // Click Audit tab
+    await page.getByRole('tab', { name: 'Audit' }).click();
+
+    // Audit entries should appear inside the dialog
+    // Verify at least one audit entry with "Updated" or "Created"
+    const dialog = page.getByRole('dialog', { name: 'Asset Details' });
+    await expect(dialog.getByText(/Updated|Created/).first()).toBeVisible({ timeout: 5000 });
   });
 });

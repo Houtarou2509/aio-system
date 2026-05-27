@@ -46,14 +46,8 @@ function buildAssetTable(data: TemplateData): string {
   const list = assetRows(data);
   if (list.length === 0) return '(No assets)';
   const lines: string[] = [];
-  lines.push('No.  Asset Name                 Serial Number          Property Number        Condition');
   list.forEach((a, idx) => {
-    const no = String(idx + 1).padEnd(4).slice(0, 4);
-    const name = a.name.padEnd(25).slice(0, 25);
-    const sn = a.serialNumber.padEnd(21).slice(0, 21);
-    const pn = a.propertyNumber.padEnd(21).slice(0, 21);
-    const cond = a.condition.padEnd(10).slice(0, 10);
-    lines.push(`${no} ${name}  ${sn}  ${pn}  ${cond}`);
+    lines.push(`${idx + 1}. ${a.name} (SN: ${a.serialNumber}, Property No.: ${a.propertyNumber}, Condition: ${a.condition})`);
   });
   return lines.join('\n');
 }
@@ -148,7 +142,7 @@ export function getPlaceholderReference(): { key: string; description: string; g
     { key: '{{condition}}', description: 'Condition at issuance', group: 'Assets' },
     { key: '{{assetCount}}', description: 'Number of issued assets', group: 'Assets' },
     { key: '{{assetParagraph}}', description: 'Single-asset paragraph block', group: 'Smart Blocks' },
-    { key: '{{assetTable}}', description: 'Multi-asset table block', group: 'Smart Blocks' },
+    { key: '{{assetTable}}', description: 'Multi-asset numbered list (one line per asset)', group: 'Smart Blocks' },
     { key: '{{assetSection}}', description: 'Auto paragraph for 1 asset, table for many', group: 'Smart Blocks' },
     { key: '{{assetList}}', description: 'Multi-asset table (alias for {{assetTable}})', group: 'Smart Blocks' },
     { key: '{{#ifSingleAsset}}\n...\n{{/ifSingleAsset}}', description: 'Only render contents for 1 asset', group: 'Conditional Blocks' },

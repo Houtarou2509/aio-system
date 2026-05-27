@@ -9,7 +9,7 @@ export default defineConfig({
     timeout: 10_000,
   },
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://localhost:3000',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     trace: 'on-first-retry',
@@ -24,6 +24,20 @@ export default defineConfig({
           args: ['--no-sandbox', '--disable-setuid-sandbox'],
         },
       },
+    },
+  ],
+  webServer: [
+    {
+      command: 'cd server && LOGIN_RATE_LIMIT=100 npx tsx src/index.ts',
+      port: 3001,
+      reuseExistingServer: false,
+      timeout: 30_000,
+    },
+    {
+      command: 'cd client && npx vite --port 3000',
+      port: 3000,
+      reuseExistingServer: false,
+      timeout: 30_000,
     },
   ],
 });

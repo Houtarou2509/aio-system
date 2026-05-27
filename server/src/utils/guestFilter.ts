@@ -19,6 +19,7 @@
 // Fields to remove from single asset objects
 const GUEST_EXCLUDED_FIELDS = [
   'purchasePrice',
+  'purchaseDate',
   'acquisitionDate',
   'acquisitionCost',
   'serialNumber',
@@ -30,11 +31,11 @@ const GUEST_EXCLUDED_FIELDS = [
   'assignedToId',
   'conditionNotes',
   'notes',
-  'createdAt',
-  'updatedAt',
   'createdBy',
   'depreciationRate',
   'currentValue',
+  'salvageValue',
+  'usefulLifeYears',
   'replacementCost',
   'poNumber',
   'invoiceNumber',

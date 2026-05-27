@@ -2,6 +2,7 @@ import { Asset } from '../../lib/api';
 import { getWarrantyStatus, formatWarrantyDate } from '../../lib/warranty';
 import { getMaintenanceWarning } from '../../utils/maintenanceUtils';
 import { Package } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 /* ── Resolve image URL ────────────────────────────────────── */
 
@@ -50,6 +51,8 @@ export function AssetTable({
   selectedIds, onToggleSelect, onToggleSelectAll,
   allSelected, someSelected, onImageClick,
 }: Props) {
+  const { user } = useAuth();
+  const isGuest = user?.role === 'GUEST';
   const sortIcon = (field: string) =>
     sortBy === field ? (sortOrder === 'asc' ? ' ↑' : ' ↓') : '';
 
@@ -81,9 +84,11 @@ export function AssetTable({
             <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Location</th>
             <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Assigned To</th>
             <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Property #</th>
-            <th className="cursor-pointer px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase" onClick={() => onSort('purchasePrice')}>
-              Price{sortIcon('purchasePrice')}
-            </th>
+            {!isGuest && (
+              <th className="cursor-pointer px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase" onClick={() => onSort('purchasePrice')}>
+                Price{sortIcon('purchasePrice')}
+              </th>
+            )}
             <th className="cursor-pointer px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase" onClick={() => onSort('createdAt')}>
               Added{sortIcon('createdAt')}
             </th>
@@ -166,9 +171,11 @@ export function AssetTable({
                 <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 font-mono">{(a as any).propertyNumber || <span className="text-slate-300">—</span>}</td>
 
                 {/* Price */}
-                <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                  {a.purchasePrice != null ? <span className="font-medium">₱{Number(a.purchasePrice).toLocaleString()}</span> : <span className="text-slate-300">—</span>}
-                </td>
+                {!isGuest && (
+                  <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                    {a.purchasePrice != null ? <span className="font-medium">₱{Number(a.purchasePrice).toLocaleString()}</span> : <span className="text-slate-300">—</span>}
+                  </td>
+                )}
 
                 {/* Added */}
                 <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">

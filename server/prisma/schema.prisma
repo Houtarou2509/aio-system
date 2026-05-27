@@ -446,7 +446,7 @@ model MaintenanceSchedule {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  asset         Asset    @relation(fields: [assetId], references: [id])
+  asset         Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
 
   @@map("maintenance_schedules")
 }

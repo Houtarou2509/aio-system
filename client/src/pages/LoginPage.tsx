@@ -141,6 +141,13 @@ export default function LoginPage() {
   const twoFaInputRef = useRef<HTMLInputElement>(null);
   const twoFaFormRef = useRef<HTMLFormElement>(null);
 
+  // Auto-submit 2FA when 6 digits are entered (must be before any early returns — hooks must run in consistent order)
+  useEffect(() => {
+    if (requiresTwoFactor && twoFactorToken.length === 6 && twoFaFormRef.current) {
+      twoFaFormRef.current.requestSubmit();
+    }
+  }, [twoFactorToken, requiresTwoFactor]);
+
   if (isAuthenticated) return <Navigate to="/" replace />;
 
   const handleSubmit = async (e: FormEvent) => {
@@ -170,13 +177,6 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
-
-  // Auto-submit 2FA when 6 digits are entered
-  useEffect(() => {
-    if (requiresTwoFactor && twoFactorToken.length === 6 && twoFaFormRef.current) {
-      twoFaFormRef.current.requestSubmit();
-    }
-  }, [twoFactorToken, requiresTwoFactor]);
 
   /* ═════════════════════════════════════════════════════
      2FA VIEW

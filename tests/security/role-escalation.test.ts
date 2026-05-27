@@ -26,18 +26,15 @@ describe('Role escalation prevention', () => {
       .set('Authorization', `Bearer ${users.STAFF.accessToken}`);
 
     // Should succeed (setting up their own 2FA) or fail if already enabled
-    // The key point: the endpoint only operates on req.user.id, not a body param
     expect([200, 400]).toContain(res.status);
 
     // Verify the response doesn't allow specifying a different user ID
-    // The endpoint doesn't accept a userId parameter in the body
     const res2 = await request(app)
       .post('/api/auth/2fa/setup')
       .send({ userId: users.ADMIN.id }) // trying to set up for admin
       .set('Authorization', `Bearer ${users.STAFF.accessToken}`);
 
     // Still operates on the staff user, not admin
-    // So no escalation possible
     expect([200, 400]).toContain(res2.status);
   });
 
@@ -51,14 +48,14 @@ describe('Role escalation prevention', () => {
     expect(res.status).toBe(403);
   });
 
-  // 7 — Guest calling checkout → 403
-  it('7. Guest calls POST /api/assets/:id/checkout → 403', async () => {
-    const asset = await createAsset({ name: 'Guest Checkout Attempt', adminToken: users.ADMIN.accessToken });
+  // 7 — Guest calling POST /api/issuances → 403 (no issuances:create permission)
+  it('7. Guest calls POST /api/issuances → 403', async () => {
+    const asset = await createAsset({ name: 'Guest Issuance Attempt', adminToken: users.ADMIN.accessToken });
 
     const res = await request(app)
-      .post(`/api/assets/${asset.id}/checkout`)
+      .post('/api/issuances')
       .set('Authorization', `Bearer ${users.GUEST.accessToken}`)
-      .send({ userId: users.GUEST.id });
+      .send({ assetIds: [asset.id], personnelId: users.GUEST.id });
 
     expect(res.status).toBe(403);
   });

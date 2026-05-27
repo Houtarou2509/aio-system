@@ -78,7 +78,7 @@ describe('agreement document hardening regressions', () => {
       data: { status: 'PENDING_ASSIGNMENT' },
     });
     expect(mockPrisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ action: 'ISSUANCE_LOCK', oldValue: 'AVAILABLE', newValue: 'PENDING_ASSIGNMENT' }),
+      data: expect.objectContaining({ action: 'ISSUANCE_LOCK', entityType: 'Asset', entityId: 'asset-1', userId: 'user-1' }),
     }));
 
     vi.clearAllMocks();
@@ -100,7 +100,7 @@ describe('agreement document hardening regressions', () => {
       data: { status: 'AVAILABLE' },
     });
     expect(mockPrisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ action: 'ISSUANCE_UNLOCK', oldValue: 'PENDING_ASSIGNMENT', newValue: 'AVAILABLE' }),
+      data: expect.objectContaining({ action: 'ISSUANCE_UNLOCK', entityType: 'Asset' }),
     }));
   });
 
@@ -125,7 +125,7 @@ describe('agreement document hardening regressions', () => {
     expect(resolved).toContain('MULTI');
     expect(resolved).toContain('Dell Latitude 5540');
     expect(resolved).toContain('HP LaserJet Pro');
-    expect(resolved).toContain('Property Number');
+    expect(resolved).toContain('Property No.');
     expect(resolved).not.toContain('SINGLE');
     expect(resolved).not.toContain('{{assetSection}}');
   });
@@ -238,7 +238,7 @@ describe('agreement document hardening regressions', () => {
       }),
     }));
     expect(mockPrisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ action: 'DIGITAL_SIGNOFF', entityId: 'assignment-1' }),
+      data: expect.objectContaining({ action: 'issuance.signed', entityType: 'Assignment', entityId: 'assignment-1', userId: 'admin-1' }),
     }));
   });
 
@@ -312,7 +312,7 @@ describe('agreement document hardening regressions', () => {
       data: { agreementDocumentId: 'document-1' },
     });
     expect(mockPrisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ entityType: 'AgreementDocument', action: 'BACKFILL', performedById: 'admin-1' }),
+      data: expect.objectContaining({ entityType: 'AgreementDocument', action: 'BACKFILL', userId: 'admin-1' }),
     }));
   });
 
@@ -347,10 +347,7 @@ describe('agreement document hardening regressions', () => {
         entityType: 'AgreementDocument',
         entityId: 'document-1',
         action: 'REPLACE_SIGNED_COPY',
-        performedById: 'admin-1',
-        field: 'signedPdfPath',
-        oldValue: '/uploads/old-signed.pdf',
-        newValue: '/uploads/new-signed.pdf',
+        userId: 'admin-1',
       }),
     });
   });

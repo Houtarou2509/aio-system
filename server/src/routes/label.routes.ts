@@ -3,6 +3,7 @@ import * as labelService from '../services/label.service';
 import { authenticate, authorize } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { success, error } from '../utils/response';
+import { logAudit } from '../services/auditLog.service';
 import { generatePdfSchema, createTemplateSchema, updateTemplateSchema } from './label.schema';
 
 const router = Router();
@@ -17,6 +18,17 @@ router.post('/generate-pdf', authenticate, authorize(['ADMIN', 'STAFF_ADMIN', 'S
   try {
     const { assetIds } = req.body;
     const pdf = await labelService.generateLabelsPdf(assetIds, req.user!.id, getClientIp(req));
+
+    // Audit: label print event
+    await logAudit({
+      userId: req.user!.id,
+      action: 'label.printed',
+      entityType: 'Asset',
+      entityId: assetIds.length === 1 ? assetIds[0] : null,
+      ipAddress: getClientIp(req),
+      metadata: { count: assetIds.length, assetIds, summary: `Printed ${assetIds.length} label(s)` },
+    });
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="labels.pdf"');
     return res.send(pdf);

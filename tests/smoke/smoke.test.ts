@@ -63,6 +63,10 @@ afterAll(async () => {
 
 // Clean asset data between tests (not users — they're static fixtures)
 beforeEach(async () => {
+  await prisma.maintenanceSchedule.deleteMany({});
+  await prisma.assignment.deleteMany({});
+  await prisma.maintenanceLog.deleteMany({});
+  await prisma.auditLog.deleteMany({});
   await prisma.asset.deleteMany({});
 });
 

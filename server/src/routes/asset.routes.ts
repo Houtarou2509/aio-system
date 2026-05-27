@@ -93,7 +93,7 @@ router.post('/', hasPermission('assets:create'), upload.single('image'), async (
     }
     // Validate parsed body
     const parsed = createAssetSchema.safeParse(body);
-    if (!parsed.success) return error(res, parsed.error.message, 400);
+    if (!parsed.success) return error(res, parsed.error.message, 422);
     
     let asset = await assetService.createAsset(parsed.data, req.user!.id, getClientIp(req), String(req.headers['user-agent'] || ''));
     
@@ -349,7 +349,7 @@ router.post('/import', hasPermission('assets:create'), importUpload.single('file
 router.patch('/bulk-status', hasPermission('assets:edit'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkStatusSchema.safeParse(req.body);
-    if (!parsed.success) return error(res, parsed.error.message, 400);
+    if (!parsed.success) return error(res, parsed.error.message, 422);
 
     const { ids, status } = parsed.data;
 
@@ -393,7 +393,7 @@ router.patch('/bulk-status', hasPermission('assets:edit'), async (req: Request, 
 router.delete('/bulk-delete', hasPermission('assets:delete'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkDeleteSchema.safeParse(req.body);
-    if (!parsed.success) return error(res, parsed.error.message, 400);
+    if (!parsed.success) return error(res, parsed.error.message, 422);
 
     const { ids } = parsed.data;
     const now = new Date();
@@ -425,7 +425,7 @@ router.delete('/bulk-delete', hasPermission('assets:delete'), async (req: Reques
 router.post('/bulk-assign', hasPermission('assets:edit'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkAssignSchema.safeParse(req.body);
-    if (!parsed.success) return error(res, parsed.error.message, 400);
+    if (!parsed.success) return error(res, parsed.error.message, 422);
 
     const { assetIds, personnelId, notes } = parsed.data;
     const results = [];
@@ -482,7 +482,7 @@ router.post('/bulk-assign', hasPermission('assets:edit'), async (req: Request, r
 router.post('/bulk-return', hasPermission('assets:edit'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkReturnSchema.safeParse(req.body);
-    if (!parsed.success) return error(res, parsed.error.message, 400);
+    if (!parsed.success) return error(res, parsed.error.message, 422);
 
     const { issuanceIds, condition } = parsed.data;
     const results = [];
@@ -529,7 +529,7 @@ router.post('/bulk-return', hasPermission('assets:edit'), async (req: Request, r
 router.post('/bulk-update', hasPermission('assets:edit'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return error(res, parsed.error.message, 400);
+    if (!parsed.success) return error(res, parsed.error.message, 422);
 
     const { assetIds, location, status } = parsed.data;
 
@@ -595,7 +595,7 @@ router.put('/:id', hasPermission('assets:edit'), upload.single('image'), async (
       body = JSON.parse(req.body.data);
     }
     const parsed = updateAssetSchema.safeParse(body);
-    if (!parsed.success) return error(res, parsed.error.message, 400);
+    if (!parsed.success) return error(res, parsed.error.message, 422);
     
     let asset = await assetService.updateAsset(String(req.params.id), parsed.data, req.user!.id, getClientIp(req), String(req.headers['user-agent'] || ''));
     
@@ -669,7 +669,7 @@ router.post('/:id/image', hasPermission('assets:edit'), upload.single('image'), 
 router.post('/:id/dispose', hasPermission('assets:delete'), async (req: Request, res: Response) => {
   try {
     const parsed = disposeAssetSchema.safeParse(req.body);
-    if (!parsed.success) return error(res, parsed.error.message, 400);
+    if (!parsed.success) return error(res, parsed.error.message, 422);
 
     const asset = await assetService.disposeAsset(
       String(req.params.id),
