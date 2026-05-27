@@ -43,7 +43,7 @@ const FIELD_LABELS: Record<string, string> = {
 
 const HIGH_ACTIONS: string[] = ['DELETE', 'SOFT_DELETE', 'CHECKOUT', 'RETURN'];
 const HIGH_FIELDS: string[] = ['status', 'assignedTo', 'serialNumber', 'role', 'deletedAt'];
-const MEDIUM_ACTIONS: string[] = ['UPDATE', 'REVERT', 'APPROVE', 'DENY', 'REQUEST'];
+const MEDIUM_ACTIONS: string[] = ['UPDATE', 'REVERT', 'APPROVE', 'DENY', 'REQUEST', 'PRINT'];
 const MEDIUM_FIELDS: string[] = ['purchasePrice', 'location', 'propertyNumber'];
 
 /* ─── Severity classifier ──────────────────────────────── */

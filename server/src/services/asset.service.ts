@@ -18,11 +18,27 @@ export async function listAssets(query: {
   purchaseDateFrom?: string; purchaseDateTo?: string;
   warrantyExpiryFrom?: string; warrantyExpiryTo?: string;
 }) {
-  const where: Prisma.AssetWhereInput = { deletedAt: null };
+  const isRetiredView = query.status === 'RETIRED';
+
+  // When viewing disposed/retired assets, include soft-deleted records.
+  // For all other views, exclude soft-deleted (deletedAt !== null) records.
+  const where: Prisma.AssetWhereInput = isRetiredView
+    ? {
+        OR: [
+          { status: 'RETIRED' as any },
+          { deletedAt: { not: null } },
+        ],
+      }
+    : { deletedAt: null };
+
   if (query.type) {
     where.type = { contains: query.type, mode: 'insensitive' } as any;
   }
-  if (query.status) where.status = query.status as any;
+  // status filter already handled above for RETIRED; for other statuses,
+  // apply normally on top of the non-deleted base filter
+  if (query.status && !isRetiredView) {
+    where.status = query.status as any;
+  }
   if (query.location) where.location = { contains: query.location, mode: 'insensitive' };
   if (query.assignedTo) where.assignedTo = { contains: query.assignedTo };
 

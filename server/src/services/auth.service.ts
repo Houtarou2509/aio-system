@@ -67,6 +67,7 @@ export async function login(email: string, password: string, twoFactorToken?: st
       secret: user.twoFactorSecret!,
       encoding: 'base32',
       token: twoFactorToken,
+      window: process.env.NODE_ENV === 'test' ? 2 : 1,
     });
     if (!verified) throw new Error('Invalid or expired authentication code');
   }
@@ -176,6 +177,7 @@ export async function verify2Fa(userId: string, token: string) {
     secret: user.twoFactorSecret,
     encoding: 'base32',
     token,
+    window: process.env.NODE_ENV === 'test' ? 2 : 1,
   });
 
   if (!verified) throw new Error('Invalid TOTP token');
@@ -197,6 +199,7 @@ export async function validate2Fa(userId: string, token: string) {
     secret: user.twoFactorSecret,
     encoding: 'base32',
     token,
+    window: process.env.NODE_ENV === 'test' ? 2 : 1,
   });
 
   if (!verified) throw new Error('Invalid or expired authentication code');

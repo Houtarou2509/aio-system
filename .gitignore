@@ -13,3 +13,7 @@ server/prisma/dev.db
 concern/
 *:Zone.Identifier
 test-results/
+tests/ui/.admin-2fa-secret
+test-results/
+tests/ui/.admin-2fa-secret
+test-results/

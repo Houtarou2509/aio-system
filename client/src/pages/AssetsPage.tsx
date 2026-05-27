@@ -20,7 +20,15 @@ import {
 } from '../hooks/useKeyboardShortcuts';
 import { DisposeAssetModal } from '../components/assets/DisposeAssetModal';
 
-const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
+const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'] as const;
+
+const STATUS_LABELS: Record<string, string> = {
+  AVAILABLE: 'Available',
+  ASSIGNED: 'Assigned',
+  MAINTENANCE: 'Maintenance',
+  RETIRED: 'Disposed / Retired',
+  LOST: 'Lost',
+};
 const BULK_STATUS_OPTIONS = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED'];
 
 /* ── KPI data type ───────────────────────────────────────── */
@@ -406,7 +414,7 @@ export default function AssetsPage() {
             className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
           >
             <option value="">Status: All</option>
-            {ASSET_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            {ASSET_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s] ?? s}</option>)}
           </select>
 
           {/* Manufacturer filter */}
