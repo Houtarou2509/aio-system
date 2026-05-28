@@ -863,10 +863,6 @@ export default function IssuancesPage() {
                               </button>
                             </PermissionGate>
                           )}
-                          // Return button visibility:
-                          // 1. PermissionGate: user must have issuances:return
-                          // 2. Row condition: returnedAt must be null (not yet returned)
-                          // 3. ADMIN role always passes PermissionGate regardless of permission array
                           {!iss.returnedAt && (
                             <PermissionGate permissions={['issuances:return']}>
                               <button

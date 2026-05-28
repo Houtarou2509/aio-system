@@ -313,6 +313,41 @@ describe('Asset CRUD — Delete', () => {
     const names = res.body.data.map((a: any) => a.name);
     expect(names).not.toContain('Retired Asset');
   });
+
+  it('18b. GET /api/assets?status=RETIRED — shows disposed or retired assets', async () => {
+    await createAsset({ name: 'Active Asset', adminToken: users.ADMIN.accessToken });
+    const toDispose = await createAsset({ name: 'Disposed Asset', adminToken: users.ADMIN.accessToken });
+
+    const disposeRes = await request(app)
+      .post(`/api/assets/${toDispose.id}/dispose`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({
+        reason: 'Manual QA disposal test',
+        method: 'SCRAPPED',
+        date: '2026-05-27',
+      });
+
+    expect(disposeRes.status).toBe(200);
+    expect(disposeRes.body.data.status).toBe('RETIRED');
+
+    const defaultRes = await request(app)
+      .get('/api/assets')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(defaultRes.status).toBe(200);
+    expect(defaultRes.body.data.map((a: any) => a.name)).not.toContain('Disposed Asset');
+
+    const retiredRes = await request(app)
+      .get('/api/assets?status=RETIRED')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(retiredRes.status).toBe(200);
+    const disposed = retiredRes.body.data.find((a: any) => a.id === toDispose.id);
+    expect(disposed).toBeDefined();
+    expect(disposed.name).toBe('Disposed Asset');
+    expect(disposed.status).toBe('RETIRED');
+    expect(disposed.disposalReason).toBe('Manual QA disposal test');
+  });
 });
 
 describe('Asset CRUD — Issuance & Return', () => {
@@ -453,5 +488,104 @@ describe('Asset CRUD — Image Upload', () => {
 
     // Multer fileFilter rejects non-images
     expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Assigned To display — issuance sets assignedTo on Asset, return clears it
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('Asset assignedTo — issuance populates, return clears', () => {
+  it('1. After issuance, GET /api/assets includes assignedTo with personnel name', async () => {
+    const personnel = await createPersonnel({ fullName: 'Test Drdf' });
+    const asset = await createAsset({ name: 'A4tech Mouse', type: 'MOUSE', adminToken: users.ADMIN.accessToken });
+
+    // Issue asset to personnel
+    const issueRes = await request(app)
+      .post('/api/issuances')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ assetId: asset.id, personnelId: personnel.id });
+
+    expect(issueRes.status).toBe(201);
+
+    // GET /api/assets should show assignedTo
+    const listRes = await request(app)
+      .get('/api/assets')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(listRes.status).toBe(200);
+    const found = (listRes.body.data as any[]).find((a: any) => a.id === asset.id);
+    expect(found).toBeDefined();
+    expect(found.status).toBe('ASSIGNED');
+    expect(found.assignedTo).toBe('Test Drdf');
+  });
+
+  it('2. After issuance, GET /api/assets/:id includes assignedTo', async () => {
+    const personnel = await createPersonnel({ fullName: 'Test Drdf' });
+    const asset = await createAsset({ name: 'A4tech Mouse 2', type: 'MOUSE', adminToken: users.ADMIN.accessToken });
+
+    const issueRes = await request(app)
+      .post('/api/issuances')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ assetId: asset.id, personnelId: personnel.id });
+
+    expect(issueRes.status).toBe(201);
+
+    const detailRes = await request(app)
+      .get(`/api/assets/${asset.id}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(detailRes.status).toBe(200);
+    expect(detailRes.body.data.status).toBe('ASSIGNED');
+    expect(detailRes.body.data.assignedTo).toBe('Test Drdf');
+  });
+
+  it('3. After return, assignedTo is cleared and status is AVAILABLE', async () => {
+    const personnel = await createPersonnel({ fullName: 'Test Drdf' });
+    const { asset, assignment } = await createCheckedOutAsset({
+      name: 'A4tech Mouse 3',
+      adminToken: users.ADMIN.accessToken,
+      personnelId: personnel.id,
+    });
+
+    // Return the issuance
+    const returnRes = await request(app)
+      .post(`/api/issuances/${assignment.id}/return`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ returnCondition: 'Good' });
+
+    expect(returnRes.status).toBe(200);
+
+    // GET /api/assets — assignedTo should be null/empty
+    const listRes = await request(app)
+      .get('/api/assets')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(listRes.status).toBe(200);
+    const found = (listRes.body.data as any[]).find((a: any) => a.id === asset.id);
+    expect(found).toBeDefined();
+    expect(found.status).toBe('AVAILABLE');
+    expect(found.assignedTo).toBeFalsy(); // null or empty string
+  });
+
+  it('4. After bulk issuance, all assets have assignedTo populated', async () => {
+    const personnel = await createPersonnel({ fullName: 'Bulk Assignee' });
+    const asset1 = await createAsset({ name: 'Bulk Mouse 1', type: 'MOUSE', adminToken: users.ADMIN.accessToken });
+    const asset2 = await createAsset({ name: 'Bulk Mouse 2', type: 'MOUSE', adminToken: users.ADMIN.accessToken });
+
+    const bulkRes = await request(app)
+      .post('/api/issuances/bulk')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ assetIds: [asset1.id, asset2.id], personnelId: personnel.id });
+
+    expect(bulkRes.status).toBe(201);
+
+    const listRes = await request(app)
+      .get('/api/assets')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    const found1 = (listRes.body.data as any[]).find((a: any) => a.id === asset1.id);
+    const found2 = (listRes.body.data as any[]).find((a: any) => a.id === asset2.id);
+    expect(found1.assignedTo).toBe('Bulk Assignee');
+    expect(found2.assignedTo).toBe('Bulk Assignee');
   });
 });

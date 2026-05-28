@@ -216,7 +216,7 @@ export async function createIssuance(params: {
       },
     });
 
-    await tx.asset.update({ where: { id: assetId }, data: { status: 'ASSIGNED' } });
+    await tx.asset.update({ where: { id: assetId }, data: { status: 'ASSIGNED', assignedTo: personnel.fullName } });
 
     return a;
   });
@@ -391,7 +391,7 @@ export async function bulkIssueAssets(
         },
       });
 
-      await tx.asset.update({ where: { id: aid }, data: { status: 'ASSIGNED' } });
+      await tx.asset.update({ where: { id: aid }, data: { status: 'ASSIGNED', assignedTo: personnel.fullName } });
       results.push(a);
     }
     return { assignments: results, agreementDocument: document };
@@ -586,7 +586,7 @@ export async function returnIssuance(
       },
     });
 
-    await tx.asset.update({ where: { id: assignment.assetId }, data: { status: assetStatusAfterReturn } });
+    await tx.asset.update({ where: { id: assignment.assetId }, data: { status: assetStatusAfterReturn, assignedTo: null } });
 
     return a;
   });
@@ -726,7 +726,8 @@ export async function bulkReturnAssets(
         },
       });
 
-      await tx.asset.update({ where: { id: assignment.assetId }, data: { status: 'AVAILABLE' } });
+      const assetReturnStatus = resolveAssetStatusAfterReturn(storedReturnCondition ?? assignment.condition ?? 'Good');
+      await tx.asset.update({ where: { id: assignment.assetId }, data: { status: assetReturnStatus, assignedTo: null } });
       updates.push(updatedAssignment);
     }
     return updates;
@@ -933,7 +934,8 @@ export async function transferAsset(
       },
     });
 
-    // 4. Asset.status stays ASSIGNED — no gap
+    // 4. Asset.status stays ASSIGNED — update assignedTo to new personnel
+    await tx.asset.update({ where: { id: assetId }, data: { assignedTo: toPersonnel.fullName } });
 
     // 5. Auto-close old AgreementDocument if all its assignments are now closed
     if (currentAssignment.agreementDocumentId) {

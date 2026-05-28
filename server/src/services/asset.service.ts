@@ -94,12 +94,44 @@ export async function listAssets(query: {
           select: { id: true, title: true, scheduledDate: true, status: true },
           orderBy: { scheduledDate: 'asc' },
         },
+        assignments: {
+          where: { returnedAt: null },
+          select: { id: true, assignedTo: true, personnel: { select: { id: true, fullName: true } } },
+          orderBy: { assignedAt: 'desc' },
+          take: 1,
+        },
       },
     }),
     prisma.asset.count({ where }),
   ]);
 
-  return { items, total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) };
+  // Backfill/override assignedTo from active assignment personnel data.
+  // This handles:
+  // 1. Records with status ASSIGNED but blank assignedTo
+  // 2. Old records where assignedTo is a userId (UUID) instead of a name
+  // Always prefer the personnel fullName from the active assignment.
+  const enriched = items.map((a: any) => {
+    const activeAssignment = a.assignments?.[0];
+    if (activeAssignment) {
+      const personnelName = activeAssignment.personnel?.fullName;
+      if (personnelName) {
+        // Override with the authoritative personnel name
+        a.assignedTo = personnelName;
+      } else if (!a.assignedTo) {
+        // No personnel, no existing value — try assignment.assignedTo
+        a.assignedTo = activeAssignment.assignedTo || null;
+      }
+      // If assignedTo is a UUID-like value (legacy userId), also try assignment.assignedTo
+      if (a.assignedTo && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(a.assignedTo)) {
+        a.assignedTo = activeAssignment.assignedTo || null;
+      }
+    }
+    // Remove assignments from response (internal enrichment only)
+    const { assignments, ...rest } = a;
+    return rest;
+  });
+
+  return { items: enriched, total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) };
 }
 
 // Helper to clean warranty fields for DB
@@ -162,13 +194,32 @@ export async function createAsset(data: Prisma.AssetCreateInput, performedById: 
 // --- GET SINGLE ---
 export async function getAsset(id: string) {
   const asset = await prisma.asset.findUnique({
-    where: { id, deletedAt: null },
+    where: { id },
     include: {
-      assignments: { include: { user: { select: { id: true, username: true, email: true } } }, orderBy: { assignedAt: 'desc' } },
+      assignments: { include: { user: { select: { id: true, username: true, email: true } }, personnel: { select: { id: true, fullName: true } } }, orderBy: { assignedAt: 'desc' } },
       maintenanceLogs: { orderBy: { date: 'desc' } },
     },
   });
   if (!asset) throw new Error('Asset not found');
+
+  // Backfill/override assignedTo from active assignment personnel data
+  // Handles: blank assignedTo, and legacy UUID values from old userId assignments
+  if (asset.assignments?.length) {
+    const activeAssignment = asset.assignments.find((a: any) => !a.returnedAt);
+    if (activeAssignment) {
+      const personnelName = activeAssignment.personnel?.fullName;
+      if (personnelName) {
+        asset.assignedTo = personnelName;
+      } else if (!asset.assignedTo) {
+        asset.assignedTo = activeAssignment.assignedTo || null;
+      }
+      // If assignedTo looks like a UUID (legacy userId), clear it or replace
+      if (asset.assignedTo && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(asset.assignedTo)) {
+        asset.assignedTo = activeAssignment.assignedTo || null;
+      }
+    }
+  }
+
   return asset;
 }
 

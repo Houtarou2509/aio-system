@@ -206,6 +206,10 @@ export interface Asset {
   usefulLifeYears?: number;
   salvageValue?: number;
   supplierId?: string | null;
+  disposalReason?: string;
+  disposalDate?: string;
+  disposalMethod?: string;
+  deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

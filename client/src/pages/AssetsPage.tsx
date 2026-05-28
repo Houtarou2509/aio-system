@@ -31,6 +31,10 @@ const STATUS_LABELS: Record<string, string> = {
 };
 const BULK_STATUS_OPTIONS = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED'];
 
+const ASSET_STATUS_LABELS: Record<string, string> = {
+  RETIRED: 'Disposed / Retired',
+};
+
 /* ── KPI data type ───────────────────────────────────────── */
 
 interface AssetKpiData {
@@ -414,7 +418,7 @@ export default function AssetsPage() {
             className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
           >
             <option value="">Status: All</option>
-            {ASSET_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s] ?? s}</option>)}
+            {ASSET_STATUSES.map(s => <option key={s} value={s}>{ASSET_STATUS_LABELS[s] || s}</option>)}
           </select>
 
           {/* Manufacturer filter */}
