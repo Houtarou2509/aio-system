@@ -25,7 +25,23 @@ export const createAssetSchema = z.object({
   supplierId: z.string().uuid().optional().nullable(),
 });
 
-export const updateAssetSchema = createAssetSchema.partial();
+// Status values allowed in updates — includes ASSIGNED since an asset already
+// in that state must pass validation when editing non-assignment fields.
+const assetStatusSchema = z.enum([
+  'AVAILABLE',
+  'PENDING_ASSIGNMENT',
+  'ASSIGNED',
+  'MAINTENANCE',
+  'RETIRED',
+  'LOST',
+]);
+
+export const updateAssetSchema = createAssetSchema
+  .omit({ status: true })
+  .extend({
+    status: assetStatusSchema.optional(),
+  })
+  .partial();
 
 export const checkoutSchema = z.object({
   userId: z.string().min(1, 'User ID is required'),
