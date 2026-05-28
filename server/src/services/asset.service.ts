@@ -13,7 +13,7 @@ if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 // --- LIST ---
 export async function listAssets(query: {
   page: number; limit: number;
-  type?: string; status?: string; location?: string; assignedTo?: string; search?: string;
+  type?: string; status?: string; location?: string; owner?: string; assignedTo?: string; search?: string;
   sortBy: string; sortOrder: string;
   purchaseDateFrom?: string; purchaseDateTo?: string;
   warrantyExpiryFrom?: string; warrantyExpiryTo?: string;
@@ -40,6 +40,7 @@ export async function listAssets(query: {
     where.status = query.status as any;
   }
   if (query.location) where.location = { contains: query.location, mode: 'insensitive' };
+  if (query.owner) where.owner = { contains: query.owner, mode: 'insensitive' };
   if (query.assignedTo) where.assignedTo = { contains: query.assignedTo };
 
   // Date filters
@@ -68,6 +69,7 @@ export async function listAssets(query: {
       { serialNumber: { contains: query.search, mode: 'insensitive' } },
       { manufacturer: { contains: query.search, mode: 'insensitive' } },
       { location: { contains: query.search, mode: 'insensitive' } },
+      { owner: { contains: query.search, mode: 'insensitive' } },
     ];
 
     if (isDateSearch) {

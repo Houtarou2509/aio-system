@@ -191,6 +191,7 @@ export interface Asset {
   name: string;
   type: string;
   manufacturer?: string;
+  owner?: string;
   serialNumber?: string;
   purchasePrice?: number;
   purchaseDate?: string;

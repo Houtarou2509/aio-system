@@ -9,6 +9,8 @@ const DEFAULT_ASSET_TYPES = [
 
 const DEFAULT_MANUFACTURERS = ['Lenovo', 'Acer', 'HP', 'Dell'];
 
+const DEFAULT_OWNERS = ['DRDF', 'UP Diliman', 'ICT Office'];
+
 async function upsertLookup(category: LookupCategory, value: string) {
   await prisma.lookupValue.upsert({
     where: { category_value: { category, value } },
@@ -44,6 +46,18 @@ async function main() {
   `;
   for (const row of existingMfr) {
     await upsertLookup(LookupCategory.MANUFACTURER, row.manufacturer);
+  }
+
+  // OWNERS
+  for (const val of DEFAULT_OWNERS) {
+    await upsertLookup(LookupCategory.OWNER, val);
+  }
+  const existingOwner = await prisma.$queryRaw<{ owner: string }[]>`
+    SELECT DISTINCT owner FROM assets
+    WHERE owner IS NOT NULL AND owner <> ''
+  `;
+  for (const row of existingOwner) {
+    await upsertLookup(LookupCategory.OWNER, row.owner);
   }
 
   // LOCATIONS

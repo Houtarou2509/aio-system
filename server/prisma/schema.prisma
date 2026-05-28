@@ -42,6 +42,7 @@ model Asset {
   name             String
   type             String        @default("Other")
   manufacturer     String?
+  owner            String?
   serialNumber     String?       @unique
   purchasePrice    Decimal?
   purchaseDate     DateTime?
@@ -225,6 +226,7 @@ enum LookupCategory {
   ASSET_TYPE
   MANUFACTURER
   LOCATION
+  OWNER
   ASSIGNED_TO  // ASSIGNED_TO is deprecated — use Personnel + Issuances instead. Do not remove from enum (breaks existing DB rows).
 }
 

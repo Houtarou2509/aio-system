@@ -2,18 +2,18 @@ export function downloadAssetCsvTemplate() {
   const headers = [
     'name', 'type', 'status', 'manufacturer', 'serialNumber',
     'price', 'purchaseDate', 'assignedTo', 'propertyNumber',
-    'location', 'remarks', 'warrantyExpiry', 'warrantyNotes',
+    'location', 'owner', 'remarks', 'warrantyExpiry', 'warrantyNotes',
   ].join(',');
 
   const row1 = [
     'Lenovo ThinkPad E14', 'Laptop', 'AVAILABLE', 'Lenovo', 'SN-001234',
-    '95000', '2024-01-15', '', 'PROP-001', 'Room 101', '',
+    '95000', '2024-01-15', '', 'PROP-001', 'Room 101', '', '',
     '2027-01-15', '3-year warranty',
   ].join(',');
 
   const row2 = [
     'Acer All-in-One', 'Desktop', 'ASSIGNED', 'Acer', 'SN-005678',
-    '49999', '2023-06-01', 'Juan dela Cruz', 'PROP-002', 'Room 202',
+    '49999', '2023-06-01', 'Juan dela Cruz', 'PROP-002', 'Room 202', 'IT Department',
     'For accounting dept', '2025-06-01', '1-year carry-in',
   ].join(',');
 

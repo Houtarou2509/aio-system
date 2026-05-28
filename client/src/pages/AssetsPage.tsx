@@ -261,7 +261,7 @@ export default function AssetsPage() {
     setExportLoading(true);
     try {
       const selected = assets.filter(a => selectedIds.has(a.id));
-      const headers = ['Name', 'Type', 'Status', 'Location', 'Assigned To', 'Property #', 'Price', 'Purchase Date', 'Serial Number', 'Manufacturer', 'Remarks', 'Added Date'];
+      const headers = ['Name', 'Type', 'Status', 'Location', 'Owner', 'Assigned To', 'Property #', 'Price', 'Purchase Date', 'Serial Number', 'Manufacturer', 'Remarks', 'Added Date'];
       const esc = (val: string | number | null | undefined) => {
         if (val == null) return '';
         const s = String(val);
@@ -269,8 +269,8 @@ export default function AssetsPage() {
         return s;
       };
       const rows = selected.map(a => [
-        esc(a.name), esc(a.type), esc(a.status), esc(a.location), esc(a.assignedTo),
-        esc((a as any).propertyNumber), esc(a.purchasePrice != null ? Number(a.purchasePrice) : ''),
+        esc(a.name), esc(a.type), esc(a.status), esc(a.location), esc(a.owner),
+        esc(a.assignedTo), esc((a as any).propertyNumber), esc(a.purchasePrice != null ? Number(a.purchasePrice) : ''),
         esc(a.purchaseDate ? new Date(a.purchaseDate).toISOString().split('T')[0] : ''),
         esc(a.serialNumber), esc(a.manufacturer), esc((a as any).remarks),
         esc(new Date(a.createdAt).toISOString().split('T')[0]),

@@ -286,6 +286,7 @@ router.post('/import', hasPermission('assets:create'), importUpload.single('file
             assignedTo: row.assignedTo?.trim() || null,
             propertyNumber: row.propertyNumber.trim(),
             location: row.location?.trim() || null,
+            owner: row.owner?.trim() || null,
             remarks: row.remarks?.trim() || null,
             warrantyExpiry,
             warrantyNotes: row.warrantyNotes?.trim() || null,

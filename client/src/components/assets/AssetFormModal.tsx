@@ -1,12 +1,10 @@
 import { useState, FormEvent, useEffect, useRef, useCallback } from 'react';
 import { Asset } from '../../lib/api';
-import {
-  Select, SelectContent, SelectItem,
-  SelectTrigger, SelectValue
-} from '@/components/ui/select';
+
 import { useLookupOptions } from '@/hooks/useLookupOptions';
 import { SupplierFormModal } from '../suppliers/SupplierFormModal';
 import { Sparkles, X, Upload, Pencil, Plus, Camera, CameraOff, Check, RotateCcw, AlertTriangle } from 'lucide-react';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
 const CREATE_STATUSES = ['AVAILABLE', 'MAINTENANCE', 'RETIRED', 'LOST'];
@@ -51,6 +49,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     name: asset?.name || '',
     type: asset?.type ?? '',
     manufacturer: asset?.manufacturer ?? '',
+    owner: (asset as any)?.owner || '',
     serialNumber: asset?.serialNumber || '',
     purchasePrice: asset?.purchasePrice != null ? String(asset.purchasePrice) : '',
     purchaseDate: asset?.purchaseDate ? new Date(asset.purchaseDate).toISOString().split('T')[0] : '',
@@ -93,6 +92,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const { options: typeOptions, isLoading: typeLoading } = useLookupOptions('asset-types');
   const { options: manufacturerOptions, isLoading: manufacturerLoading } = useLookupOptions('manufacturers');
   const { options: locationOptions, isLoading: locationLoading } = useLookupOptions('locations');
+  const { options: ownerOptions, isLoading: ownerLoading } = useLookupOptions('owners');
 
   // Check camera availability on mount
   useEffect(() => {
@@ -318,6 +318,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       data.type = form.type || undefined;
       data.manufacturer = form.manufacturer || undefined;
       data.serialNumber = form.serialNumber || undefined;
+      data.owner = form.owner || undefined;
       data.status = form.status;
       data.location = form.location || undefined;
       data.propertyNumber = form.propertyNumber || undefined;
@@ -589,44 +590,39 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               )}
 
               {/* 3. Type */}
-              <div>
+              <div className="relative">
                 <label className={labelClass}>
                   Type *
                   {aiSuggestedFields.has('type') && <span className="ml-1 text-[#f8931f] text-[10px]">AI suggested</span>}
                 </label>
-                <Select value={form.type} onValueChange={(val) => val != null && set('type', val)} disabled={typeLoading}>
-                  <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
-                    <SelectValue placeholder={typeLoading ? 'Loading...' : 'Select type'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mergeWithFallback(typeOptions, form.type).map((opt) => (
-                      <SelectItem key={opt.id} value={opt.value}>
-                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  label=""
+                  value={form.type}
+                  onChange={val => set('type', val)}
+                  options={mergeWithFallback(typeOptions, form.type).map(o => ({ value: o.value, label: o.id === -1 ? `${o.value} (inactive)` : o.value }))}
+                  placeholder={typeLoading ? 'Loading...' : 'Select type'}
+                  allowNone={false}
+                  disabled={typeLoading}
+                  loading={typeLoading}
+                />
               </div>
 
               {/* 4. Manufacturer */}
-              <div>
+              <div className="relative">
                 <label className={labelClass}>
                   Manufacturer
                   {aiSuggestedFields.has('manufacturer') && <span className="ml-1 text-[#f8931f] text-[10px]">AI suggested</span>}
                 </label>
-                <Select value={form.manufacturer || ''} onValueChange={(val) => set('manufacturer', val ?? '')} disabled={manufacturerLoading}>
-                  <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
-                    <SelectValue placeholder={manufacturerLoading ? 'Loading...' : 'None'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">None</SelectItem>
-                    {mergeWithFallback(manufacturerOptions, form.manufacturer).map((opt) => (
-                      <SelectItem key={opt.id} value={opt.value}>
-                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  label=""
+                  value={form.manufacturer || ''}
+                  onChange={val => set('manufacturer', val)}
+                  options={mergeWithFallback(manufacturerOptions, form.manufacturer).map(o => ({ value: o.value, label: o.id === -1 ? `${o.value} (inactive)` : o.value }))}
+                  placeholder={manufacturerLoading ? 'Loading...' : 'None'}
+                  allowNone={true}
+                  disabled={manufacturerLoading}
+                  loading={manufacturerLoading}
+                />
               </div>
 
               {/* 5. Serial Number */}
@@ -636,7 +632,22 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                 {serialNumberError && <p className="mt-1 text-xs text-[#7B1113]">{serialNumberError}</p>}
               </div>
 
-              {/* 6. Property Number */}
+              {/* 6. Owner */}
+              <div className="relative">
+                <label className={labelClass}>Owner <span className="normal-case tracking-normal font-normal text-slate-400">(optional)</span></label>
+                <SearchableSelect
+                  label=""
+                  value={form.owner || ''}
+                  onChange={val => set('owner', val)}
+                  options={ownerOptions.map(o => ({ value: o.value, label: o.value }))}
+                  placeholder={ownerLoading ? 'Loading...' : 'Select owner'}
+                  allowNone={true}
+                  disabled={ownerLoading}
+                  loading={ownerLoading}
+                />
+              </div>
+
+              {/* 7. Property Number */}
               <div>
                 <label className={labelClass}>Property #</label>
                 <input value={form.propertyNumber} onChange={e => set('propertyNumber', e.target.value)} placeholder="e.g. PROP-00123" className={inputClass} />
@@ -680,56 +691,55 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    <Select
-                    value={form.supplierId ?? ''}
-                    onValueChange={(val) => setForm(prev => ({ ...prev, supplierId: val === '' ? null : val }))}
-                    disabled={suppliersLoading}
-                  >
-                    <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
-                      <SelectValue placeholder={suppliersLoading ? 'Loading...' : 'None'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {suppliers.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddSupplierModal(true)}
-                    className="inline-flex items-center gap-1 text-[10px] text-slate-400 hover:text-[#f8931f] transition-colors"
-                  >
-                    <Plus className="h-3 w-3" /> Add supplier
-                  </button>
+                    <SearchableSelect
+                      label=""
+                      value={form.supplierId ?? ''}
+                      onChange={val => setForm(prev => ({ ...prev, supplierId: val === '' ? null : val }))}
+                      options={suppliers.map(s => ({ value: s.id, label: s.name }))}
+                      placeholder={suppliersLoading ? 'Loading...' : 'None'}
+                      allowNone={true}
+                      disabled={suppliersLoading}
+                      loading={suppliersLoading}
+                      extraOptions={
+                        <button
+                          type="button"
+                          onClick={() => setShowAddSupplierModal(true)}
+                          className="inline-flex items-center gap-1 text-[10px] text-[#f8931f] hover:text-[#e0841a] transition-colors px-3 py-1.5"
+                        >
+                          <Plus className="h-3 w-3" /> Add supplier
+                        </button>
+                      }
+                    />
                   </div>
                 )}
               </div>
 
               {/* 10. Location */}
-              <div>
+              <div className="relative">
                 <label className={labelClass}>Location</label>
-                <Select value={form.location || ''} onValueChange={(val) => set('location', val ?? '')} disabled={locationLoading}>
-                  <SelectTrigger className="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-[#f8931f]">
-                    <SelectValue placeholder={locationLoading ? 'Loading...' : 'None'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">None</SelectItem>
-                    {mergeWithFallback(locationOptions, form.location).map((opt) => (
-                      <SelectItem key={opt.id} value={opt.value}>
-                        {opt.value}{opt.id === -1 && <span className="ml-2 text-xs text-slate-400">(inactive)</span>}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  label=""
+                  value={form.location || ''}
+                  onChange={val => set('location', val)}
+                  options={mergeWithFallback(locationOptions, form.location).map(o => ({ value: o.value, label: o.id === -1 ? `${o.value} (inactive)` : o.value }))}
+                  placeholder={locationLoading ? 'Loading...' : 'None'}
+                  allowNone={true}
+                  disabled={locationLoading}
+                  loading={locationLoading}
+                />
               </div>
 
               {/* 11. Status */}
-              <div>
+              <div className="relative">
                 <label className={labelClass}>Status *</label>
-                <select value={form.status} onChange={e => set('status', e.target.value)} required className={inputClass}>
-                  {(isEdit ? ASSET_STATUSES : CREATE_STATUSES).map(s => <option key={s} value={s} className="whitespace-nowrap">{s.replace(/_/g, ' ')}</option>)}
-                </select>
+                <SearchableSelect
+                  label=""
+                  value={form.status}
+                  onChange={val => set('status', val)}
+                  options={(isEdit ? ASSET_STATUSES : CREATE_STATUSES).map(s => ({ value: s, label: s.replace(/_/g, ' ') }))}
+                  placeholder="Select status"
+                  allowNone={false}
+                />
                 {isEdit && form.status !== 'ASSIGNED' && asset?.status === 'ASSIGNED' && (
                   <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" /> Changing from Assigned should be done via the Issuances return flow.
@@ -778,9 +788,14 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
                     <label className={labelClass}>Depreciation Method</label>
-                    <select value={form.depreciationMethod} onChange={e => set('depreciationMethod', e.target.value)} className={inputClass}>
-                      <option value="straight_line">Straight Line</option>
-                    </select>
+                    <SearchableSelect
+                      label=""
+                      value={form.depreciationMethod}
+                      onChange={val => set('depreciationMethod', val)}
+                      options={[{ value: 'straight_line', label: 'Straight Line' }]}
+                      placeholder="Select method"
+                      allowNone={false}
+                    />
                   </div>
                   <div>
                     <label className={labelClass}>

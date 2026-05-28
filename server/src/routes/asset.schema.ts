@@ -4,6 +4,7 @@ export const createAssetSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   type: z.string().min(1, 'Type is required'),
   manufacturer: z.string().optional(),
+  owner: z.string().optional(),
   serialNumber: z.string().optional(),
   purchasePrice: z.coerce.number({
     required_error: 'Purchase price is required.',
@@ -59,6 +60,7 @@ export const listAssetsQuerySchema = z.object({
   type: z.string().optional(),
   status: z.enum(['AVAILABLE', 'PENDING_ASSIGNMENT', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST']).optional(),
   location: z.string().optional(),
+  owner: z.string().optional(),
   assignedTo: z.string().optional(),
   search: z.string().optional(),
   sortBy: z.enum(['name', 'createdAt', 'purchasePrice', 'type', 'status', 'purchaseDate', 'propertyNumber']).default('createdAt'),

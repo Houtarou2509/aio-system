@@ -24,6 +24,7 @@ const categoryMap: Record<string, LookupCategory> = {
   'asset-types': LookupCategory.ASSET_TYPE,
   'manufacturers': LookupCategory.MANUFACTURER,
   'locations': LookupCategory.LOCATION,
+  'owners': LookupCategory.OWNER,
   'assigned-to': LookupCategory.ASSIGNED_TO,
 };
 
@@ -41,7 +42,7 @@ router.get(
   async (req: Request, res: Response) => {
     const category = resolveCategory(String(req.params.category));
     if (!category) {
-      return error(res, 'Invalid category. Use: asset-types, manufacturers, locations', 400);
+      return error(res, 'Invalid category. Use: asset-types, manufacturers, locations, owners', 400);
     }
 
     if (isDeprecated(category)) {
@@ -70,6 +71,7 @@ router.get(
       'asset-types': LookupCategory.ASSET_TYPE,
       'manufacturers': LookupCategory.MANUFACTURER,
       'locations': LookupCategory.LOCATION,
+      'owners': LookupCategory.OWNER,
       'assigned-to': LookupCategory.ASSIGNED_TO,
     };
     const category = categoryMapLocal[String(req.params.category)] ?? null;
@@ -210,7 +212,7 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const assets = await prisma.asset.findMany({
-        select: { type: true, manufacturer: true, location: true, assignedTo: true },
+        select: { type: true, manufacturer: true, location: true, owner: true, assignedTo: true },
         where: { deletedAt: null },
       });
 
@@ -221,12 +223,14 @@ router.post(
       const typeSet = new Set<string>();
       const mfrSet = new Set<string>();
       const locSet = new Set<string>();
+      const ownerSet = new Set<string>();
       // ASSIGNED_TO is deprecated — no longer migrated into lookup values
 
       for (const a of assets) {
         if (a.type) typeSet.add(a.type.charAt(0).toUpperCase() + a.type.slice(1).toLowerCase());
         if (a.manufacturer) mfrSet.add(a.manufacturer);
         if (a.location) locSet.add(a.location);
+        if (a.owner) ownerSet.add(a.owner);
       }
 
       const upsert = async (category: LookupCategory, value: string) => {
@@ -241,6 +245,7 @@ router.post(
       for (const v of typeSet) { await upsert(LookupCategory.ASSET_TYPE, v); count++; }
       for (const v of mfrSet) { await upsert(LookupCategory.MANUFACTURER, v); count++; }
       for (const v of locSet) { await upsert(LookupCategory.LOCATION, v); count++; }
+      for (const v of ownerSet) { await upsert(LookupCategory.OWNER, v); count++; }
       // ASSIGNED_TO removed from migration — deprecated
 
       await logAudit({

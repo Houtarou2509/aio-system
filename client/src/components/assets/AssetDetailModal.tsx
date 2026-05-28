@@ -259,6 +259,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                       <InfoCard icon={Info} title="General Info">
                         {!isGuest && <InfoRow label="Serial Number" value={asset.serialNumber || '—'} />}
                         <InfoRow label="Property #" value={(asset as any).propertyNumber || '—'} />
+                        <InfoRow label="Owner" value={asset.owner || '—'} />
                         <InfoRow label="Location" value={<span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3 text-slate-400" />{asset.location || '—'}</span>} />
                         <InfoRow label="Assigned To" value={asset.assignedTo ? <span className="text-[#f8931f] font-semibold">{asset.assignedTo}</span> : <span className="text-slate-400 italic">Unassigned</span>} highlight={!!asset.assignedTo} />
                         <InfoRow label="Status" value={<span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusConf.className}`}>{statusConf.label}</span>} />
