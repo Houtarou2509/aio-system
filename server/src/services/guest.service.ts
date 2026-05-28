@@ -41,11 +41,12 @@ export async function getAssetByGuestToken(token: string, ipAddress?: string) {
       name: true,
       type: true,
       manufacturer: true,
+      owner: true,
       status: true,
       location: true,
       imageUrl: true,
       createdAt: true,
-      // Hide: purchasePrice, serialNumber
+      // Hide: purchasePrice, serialNumber, propertyNumber
     },
   });
 

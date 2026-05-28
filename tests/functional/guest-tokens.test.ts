@@ -92,12 +92,13 @@ describe('Guest Tokens', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.purchasePrice).toBeUndefined();
     expect(res.body.data.serialNumber).toBeUndefined();
+    expect(res.body.data.propertyNumber).toBeUndefined();
     expect(res.body.data.currentValue).toBeUndefined();
     expect(res.body.data.depreciationRate).toBeUndefined();
     expect(res.body.data.salvageValue).toBeUndefined();
   });
 
-  // 18 — Required fields MUST appear
+  // 18 — Required fields MUST appear (including owner)
   it('18. Guest response MUST contain name, type, status, location, manufacturer', async () => {
     const asset = await createAsset({ name: 'Guest Required Fields', adminToken: users.ADMIN.accessToken });
 
@@ -116,6 +117,8 @@ describe('Guest Tokens', () => {
     expect(res.body.data.type).toBeDefined();
     expect(res.body.data.status).toBeDefined();
     expect(res.body.data.location).toBeDefined();
+    // owner may be null/undefined for assets without owner — just verify no crash
+    expect(res.body.data).toHaveProperty('owner');
   });
 
   // 19 — Access count increments

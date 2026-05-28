@@ -72,6 +72,7 @@ export default function GuestAssetPage() {
 
           {/* Details */}
           <div className="mt-4 space-y-3 text-sm">
+            <DetailRow label="Owner" value={asset.owner} />
             <DetailRow label="Location" value={asset.location} />
             <DetailRow label="Manufacturer" value={asset.manufacturer} />
           </div>
