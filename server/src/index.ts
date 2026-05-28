@@ -130,6 +130,10 @@ if (isProduction) {
   app.get('/aio-system/*', (_req, res) => {
     res.sendFile(path.resolve(__dirname, '../public/index.html'));
   });
+  // Also handle bare /guest/* paths for direct guest link access
+  app.get('/guest/*', (_req, res) => {
+    res.redirect(301, `/aio-system${_req.path}`);
+  });
 }
 
 // Global error handler (must be last)

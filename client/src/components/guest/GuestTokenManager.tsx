@@ -40,7 +40,7 @@ export function GuestTokenManager({ assetId }: Props) {
     try { await guestApi.revokeToken(id); fetchTokens(); } catch (e: any) { alert(e.message); }
   };
 
-  const guestUrl = newToken ? `${window.location.origin}/guest/${newToken.token}` : '';
+  const guestUrl = newToken ? `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, '')}/guest/${newToken.token}` : '';
 
   return (
     <div className="space-y-3">
