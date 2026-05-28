@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import {
   Package, Factory, MapPin, Search, Plus, Pencil,
-  PowerOff, Power, AlertTriangle, X, Truck,
+  PowerOff, Power, AlertTriangle, X, Truck, Briefcase,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose,
@@ -31,6 +31,7 @@ const GROUPS = [
   { key: 'asset-types', label: 'Asset Types', icon: Package, category: 'asset-types' },
   { key: 'manufacturers', label: 'Brands', icon: Factory, category: 'manufacturers' },
   { key: 'locations', label: 'Locations', icon: MapPin, category: 'locations' },
+  { key: 'owners', label: 'Owners', icon: Briefcase, category: 'owners' },
   // TODO: Add API support for these categories before enabling:
   // { key: 'models', label: 'Models', icon: Smartphone, category: 'models' },
   // { key: 'categories', label: 'Categories', icon: Tag, category: 'categories' },
