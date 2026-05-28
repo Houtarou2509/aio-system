@@ -22,7 +22,7 @@ import { DisposeAssetModal } from '../components/assets/DisposeAssetModal';
 
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'] as const;
 
-const STATUS_LABELS: Record<string, string> = {
+const ASSET_STATUS_LABELS: Record<string, string> = {
   AVAILABLE: 'Available',
   ASSIGNED: 'Assigned',
   MAINTENANCE: 'Maintenance',
@@ -30,10 +30,6 @@ const STATUS_LABELS: Record<string, string> = {
   LOST: 'Lost',
 };
 const BULK_STATUS_OPTIONS = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED'];
-
-const ASSET_STATUS_LABELS: Record<string, string> = {
-  RETIRED: 'Disposed / Retired',
-};
 
 /* ── KPI data type ───────────────────────────────────────── */
 
