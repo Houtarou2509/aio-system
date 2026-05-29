@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Html5Qrcode } from 'html5-qrcode';
+import type { Asset } from '../../lib/api';
 
 interface Props {
   open: boolean;
   onClose: () => void;
+  onAssetResolved?: (asset: Asset) => void;
 }
 
-export default function QRScannerModal({ open, onClose }: Props) {
+export default function QRScannerModal({ open, onClose, onAssetResolved }: Props) {
   const navigate = useNavigate();
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const isStoppingRef = useRef(false);
@@ -23,28 +25,22 @@ export default function QRScannerModal({ open, onClose }: Props) {
   // ─── Safe cleanup: never lets stop()/clear() throw to React error boundary ───
   const safeStopAndClearScanner = useCallback(async () => {
     if (!scannerRef.current) return;
-    if (isStoppingRef.current) return; // already stopping — bail out
+    if (isStoppingRef.current) return;
 
     isStoppingRef.current = true;
     const scanner = scannerRef.current;
 
     try {
-      // Only call stop() if the scanner has actually started
       if (hasStartedRef.current) {
         try {
           await scanner.stop();
         } catch (e: any) {
-          // Swallow "Cannot stop, scanner is not running or paused"
           if (!String(e?.message || e || '').includes('not running') && !String(e?.message || e || '').includes('not paused')) {
             console.warn('[QRScanner] stop() error:', e);
           }
         }
       }
-
-      // Always try clear(), never let it throw
-      try {
-        scanner.clear();
-      } catch {}
+      try { scanner.clear(); } catch {}
     } finally {
       scannerRef.current = null;
       hasStartedRef.current = false;
@@ -68,18 +64,32 @@ export default function QRScannerModal({ open, onClose }: Props) {
       setResolving(true);
       try {
         const token = localStorage.getItem('accessToken');
-        const res = await fetch(`/api/assets/lookup?q=${encodeURIComponent(decodedText)}`, {
+        const lookupRes = await fetch(`/api/assets/lookup?q=${encodeURIComponent(decodedText)}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
+        if (!lookupRes.ok) {
+          const body = await lookupRes.json().catch(() => ({}));
           setError(body?.error?.message || body?.message || `Asset not found for QR code: ${decodedText}`);
           setResolving(false);
           return;
         }
-        const { data } = await res.json();
+        const { data: partialAsset } = await lookupRes.json();
+
+        // Fetch full asset details for the detail modal (lookup returns a subset)
+        const detailRes = await fetch(`/api/assets/${partialAsset.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!detailRes.ok) {
+          // Fallback: use partial data from lookup
+          onClose();
+          onAssetResolved?.(partialAsset as Asset);
+          return;
+        }
+        const detailBody = await detailRes.json();
+        const fullAsset = detailBody.data as Asset;
+
         onClose();
-        navigate(`/assets?page=1&search=${encodeURIComponent(data.propertyNumber || data.name || data.id)}`);
+        onAssetResolved?.(fullAsset);
       } catch {
         setError('Failed to resolve QR code. Check your connection and try again.');
         setResolving(false);
@@ -87,8 +97,24 @@ export default function QRScannerModal({ open, onClose }: Props) {
       return;
     }
 
-    // 3. Bare UUID → search
+    // 3. Bare UUID — try lookup then fallback to search
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decodedText)) {
+      setResolving(true);
+      try {
+        const token = localStorage.getItem('accessToken');
+        const detailRes = await fetch(`/api/assets/${decodedText}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (detailRes.ok) {
+          const detailBody = await detailRes.json();
+          onClose();
+          onAssetResolved?.(detailBody.data as Asset);
+          return;
+        }
+      } catch {
+        // fall through to search navigation
+      }
+      setResolving(false);
       onClose();
       navigate(`/assets?page=1&search=${encodeURIComponent(decodedText)}`);
       return;
@@ -97,9 +123,9 @@ export default function QRScannerModal({ open, onClose }: Props) {
     // 4. Fallback: treat as search query
     onClose();
     navigate(`/assets?page=1&search=${encodeURIComponent(decodedText)}`);
-  }, [navigate, onClose]);
+  }, [navigate, onClose, onAssetResolved]);
 
-  // ─── Close handler — safe stop then close ───
+  // ─── Close handler ───
   const handleClose = useCallback(async () => {
     if (isClosing) return;
     setIsClosing(true);
@@ -122,11 +148,10 @@ export default function QRScannerModal({ open, onClose }: Props) {
     return () => { isMountedRef.current = false; };
   }, []);
 
-  // ─── Main scanner lifecycle: start when open, cleanup on close/unmount ───
+  // ─── Main scanner lifecycle ───
   useEffect(() => {
     if (!open) return;
 
-    // Reset state for a fresh open
     setError('');
     setScanning(false);
     setResolving(false);
@@ -146,17 +171,14 @@ export default function QRScannerModal({ open, onClose }: Props) {
           if (cancelled || hasHandledScanRef.current) return;
           hasHandledScanRef.current = true;
 
-          // Safely stop scanner before navigating
           await safeStopAndClearScanner();
-
           if (!isMountedRef.current) return;
           resolveAndNavigate(decodedText);
         },
-        () => {} // ignore per-frame scan failures
+        () => {}
       )
       .then(() => {
         if (cancelled) {
-          // Component unmounted before start completed — clean up immediately
           safeStopAndClearScanner();
           return;
         }

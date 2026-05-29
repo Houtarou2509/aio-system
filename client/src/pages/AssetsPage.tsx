@@ -655,7 +655,7 @@ export default function AssetsPage() {
         <AssetFormModal asset={editAsset} onSubmit={editAsset ? handleUpdate : handleCreate} onClose={() => { setShowForm(false); setEditAsset(null); }} onImageUpload={assetsApi.uploadImage} />
       )}
       <ImportAssetsModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImportComplete={handleImportComplete} />
-      <QRScannerModal open={scannerOpen} onClose={() => setScannerOpen(false)} />
+      <QRScannerModal open={scannerOpen} onClose={() => setScannerOpen(false)} onAssetResolved={(asset) => { setSelectedAsset(asset); setShowDetail(true); }} />
 
       {/* ═══ BULK OPERATION MODAL ═══════════════════════════ */}
       {bulkAction !== 'none' && (
