@@ -458,6 +458,17 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
 
   const openCamera = async () => {
     setCameraError('');
+    // Secure context check — camera requires HTTPS or localhost
+    if (!window.isSecureContext) {
+      const host = window.location.hostname;
+      const isPrivateIp = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host);
+      setCameraError(
+        isPrivateIp
+          ? 'Camera is blocked on HTTP LAN/IP addresses. Use https://' + host + ' or localhost to take a photo.'
+          : 'Camera requires HTTPS or localhost. Use a secure address to take a photo.'
+      );
+      return;
+    }
     try {
       // Prefer environment (rear) camera on mobile, fallback to any
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -1533,13 +1544,19 @@ export default function ProfilesPage() {
                   <tr key={p.id} className="bg-white dark:bg-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all group">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-200 flex items-center justify-center shrink-0 bg-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => openDetail(p)}
+                          className="w-8 h-8 rounded-full overflow-hidden border border-slate-200 flex items-center justify-center shrink-0 bg-slate-100 cursor-pointer hover:ring-2 hover:ring-[#f8931f]/40 hover:border-[#f8931f]/40 transition-all"
+                          title={`View profile for ${p.fullName}`}
+                          aria-label={`View profile for ${p.fullName}`}
+                        >
                           {p.photoUrl ? (
                             <img src={p.photoUrl} alt={p.fullName} className="w-full h-full object-cover" />
                           ) : (
                             <span className="text-[10px] font-bold text-[#012061]">{p.fullName.trim().split(/\s+/).length === 1 ? p.fullName.slice(0, 2).toUpperCase() : (p.fullName.trim().split(/\s+/)[0][0] + p.fullName.trim().split(/\s+/).slice(-1)[0][0]).toUpperCase()}</span>
                           )}
-                        </div>
+                        </button>
                         <button onClick={() => openDetail(p)} className="text-sm font-semibold hover:underline" style={{ color: '#012061' }}>{p.fullName}</button>
                       </div>
                     </td>
