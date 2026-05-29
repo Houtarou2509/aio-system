@@ -200,15 +200,20 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     if (!video) return;
     const canvas = capturedCanvasRef.current;
     if (!canvas) return;
-    const size = Math.min(video.videoWidth, video.videoHeight);
-    canvas.width = 256;
-    canvas.height = 256;
+    // Full-frame capture — preserve aspect ratio, no square crop
+    let outW = video.videoWidth;
+    let outH = video.videoHeight;
+    const MAX_DIM = 1280;
+    if (outW > MAX_DIM || outH > MAX_DIM) {
+      const scale = MAX_DIM / Math.max(outW, outH);
+      outW = Math.round(outW * scale);
+      outH = Math.round(outH * scale);
+    }
+    canvas.width = outW;
+    canvas.height = outH;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    // Center-crop to square
-    const sx = (video.videoWidth - size) / 2;
-    const sy = (video.videoHeight - size) / 2;
-    ctx.drawImage(video, sx, sy, size, size, 0, 0, 256, 256);
+    ctx.drawImage(video, 0, 0, outW, outH);
     canvas.toBlob((blob) => {
       if (!blob) return;
       const file = new File([blob], `asset-photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
