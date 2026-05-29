@@ -136,13 +136,15 @@ export default function AssetsPage() {
       .catch((e) => console.error('[AssetsPage] Failed to load KPI stats:', e));
   }, []);
 
-  // Auto-open scanner when navigated with ?action=scan
+  // Auto-open scanner when navigated with ?action=scan (mobile bottom nav)
+  // Runs on mount + when searchParams actually contain action=scan.
+  // Clears the param immediately to prevent retrigger on re-renders.
   useEffect(() => {
     if (searchParams.get('action') === 'scan') {
       setScannerOpen(true);
-      setSearchParams({}, { replace: true });
+      setSearchParams({}, { replace: true }); // clear param to prevent retrigger
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams.get('action'), setSearchParams]);
 
   // Handle warranty quick-filter URL params: ?warrantyExpiring=1 or ?warrantyExpired=1
   useEffect(() => {
