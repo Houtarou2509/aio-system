@@ -77,11 +77,13 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
   const [aiSuggestedFields, setAiSuggestedFields] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  // Camera availability state
-  const [cameraAvailable, setCameraAvailable] = useState<boolean | null>(null);
+  // Camera preview state (getUserMedia-based, matching ProfilesPage)
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const capturedCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Supplier list
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -94,25 +96,26 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const { options: locationOptions, isLoading: locationLoading } = useLookupOptions('locations');
   const { options: ownerOptions, isLoading: ownerLoading } = useLookupOptions('owners');
 
-  // Check camera availability on mount
+  // Stop camera stream helper
+  const stopCamera = useCallback(() => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      setCameraStream(null);
+    }
+  }, [cameraStream]);
+
+  // Cleanup camera on unmount or modal close
   useEffect(() => {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraAvailable(false);
-      return;
-    }
-    // Camera input support: check if the device has video input
-    // We also check if the HTML capture attribute is supported
-    try {
-      const testEl = document.createElement('input');
-      if (testEl.capture !== undefined) {
-        setCameraAvailable(true);
-      } else {
-        setCameraAvailable(false);
-      }
-    } catch {
-      setCameraAvailable(false);
-    }
-  }, []);
+    return () => { stopCamera(); };
+  }, [stopCamera]);
+
+  // Close camera preview on Escape
+  useEffect(() => {
+    if (!showCamera) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') cancelCamera(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [showCamera]);
 
   // Fetch suppliers on mount
   useEffect(() => {
@@ -154,25 +157,10 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     e.target.value = '';
   }, []);
 
-  // Handle camera capture
-  const handleCameraCapture = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    if (file) {
-      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-      if (!validTypes.includes(file.type)) {
-        setError('Camera captured an unsupported format. Please try again or use Upload instead.');
-        e.target.value = '';
-        return;
-      }
-      setError(null);
-      setImageFile(file);
-      setCameraError(null);
-    }
-    e.target.value = '';
-  }, []);
-
-  // Open camera with error handling
-  const openCamera = useCallback(() => {
+  // Open camera with getUserMedia preview (matching ProfilesPage pattern)
+  const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB
+  const openCamera = async () => {
+    setCameraError(null);
     // Secure context check — camera requires HTTPS or localhost
     if (!window.isSecureContext) {
       const secureUrl = `https://${window.location.host}${window.location.pathname}`;
@@ -182,33 +170,64 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
           ? `Camera is blocked on HTTP LAN/IP addresses. Use ${secureUrl} or localhost to take a photo.`
           : `Camera requires HTTPS or localhost. Use ${secureUrl} to take a photo.`
       );
-      setCameraAvailable(false);
       return;
     }
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError('Camera is not available on this device.');
-      return;
-    }
-    // Try to get camera permission first
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      .then(stream => {
-        // Stop the stream immediately — we just needed permission
-        stream.getTracks().forEach(t => t.stop());
-        setCameraAvailable(true);
-        setCameraError(null);
-        cameraInputRef.current?.click();
-      })
-      .catch((err: DOMException) => {
-        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          setCameraError('Camera permission denied. You can still upload an image instead.');
-        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-          setCameraError('No camera found on this device. You can still upload an image instead.');
-        } else {
-          setCameraError('Camera is not available. You can still upload an image instead.');
-        }
-        setCameraAvailable(false);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 640 } },
+        audio: false,
       });
-  }, []);
+      setCameraStream(stream);
+      setShowCamera(true);
+      setTimeout(() => {
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      }, 0);
+    } catch (err: any) {
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setCameraError('Camera permission denied. You can still upload an image instead.');
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        setCameraError('No camera found on this device. You can still upload an image instead.');
+      } else if (err.name === 'NotReadableError' || err.name === 'SourceUnavailableError') {
+        setCameraError('Camera is already in use by another application. You can still upload an image instead.');
+      } else {
+        setCameraError('Camera is not available. You can still upload an image instead.');
+      }
+    }
+  };
+
+  const capturePhoto = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = capturedCanvasRef.current;
+    if (!canvas) return;
+    const size = Math.min(video.videoWidth, video.videoHeight);
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    // Center-crop to square
+    const sx = (video.videoWidth - size) / 2;
+    const sy = (video.videoHeight - size) / 2;
+    ctx.drawImage(video, sx, sy, size, size, 0, 0, 256, 256);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], `asset-photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      if (file.size > MAX_IMAGE_SIZE) {
+        setCameraError('Captured image is too large. Try again or upload instead.');
+        return;
+      }
+      setImageFile(file);
+      setCameraError(null);
+      stopCamera();
+      setShowCamera(false);
+    }, 'image/jpeg', 0.9);
+  };
+
+  const cancelCamera = () => {
+    stopCamera();
+    setShowCamera(false);
+    setCameraError(null);
+  };
 
   const removeImage = useCallback(() => {
     setImageFile(null);
@@ -395,7 +414,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     <>
     <div
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      onMouseDown={(e) => { if (e.target === e.currentTarget) { cancelCamera(); onClose(); } }}>
       <div className="w-[95vw] max-w-5xl max-h-[90vh] flex flex-col rounded-xl bg-white dark:bg-slate-800 shadow-xl" onClick={e => e.stopPropagation()}>
 
         {/* ── Header ── */}
@@ -450,32 +469,22 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                         <Upload className="w-3.5 h-3.5" />
                         {imagePreview ? 'Change Image' : 'Upload Image'}
                       </button>
-                      {/* Camera button */}
-                      {cameraAvailable !== false && (
-                        <button
-                          type="button"
-                          onClick={openCamera}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                        >
-                          <Camera className="w-3.5 h-3.5" />
-                          Take Photo
-                        </button>
-                      )}
+                      {/* Camera button — opens live preview */}
+                      <button
+                        type="button"
+                        onClick={openCamera}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        Take Photo
+                      </button>
                     </div>
-                    {/* Hidden file inputs */}
+                    {/* Hidden file input for upload */}
                     <input
                       ref={fileInputRef}
                       type="file"
                       accept="image/jpeg,image/jpg,image/png,image/webp"
                       onChange={handleFileChange}
-                      className="hidden"
-                    />
-                    <input
-                      ref={cameraInputRef}
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/webp"
-                      capture="environment"
-                      onChange={handleCameraCapture}
                       className="hidden"
                     />
                     {isEdit && asset?.imageUrl && !imageFile && (
@@ -882,6 +891,32 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
             });
         }}
       />
+    )}
+
+    {/* Hidden canvas for camera capture */}
+    <canvas ref={capturedCanvasRef} className="hidden" />
+
+    {/* Camera capture overlay */}
+    {showCamera && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b" style={{ background: '#012061' }}>
+            <h3 className="text-sm font-bold text-white">Take Photo</h3>
+            <button type="button" onClick={cancelCamera} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="p-4">
+            <div className="relative rounded-lg overflow-hidden bg-black aspect-square">
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+            </div>
+            <div className="flex items-center justify-center gap-3 mt-4">
+              <button type="button" onClick={cancelCamera} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+              <button type="button" onClick={capturePhoto} className="px-4 py-2 text-sm font-semibold text-white bg-[#f8931f] rounded-lg hover:bg-[#e07e0a] flex items-center gap-1.5">
+                <Camera className="w-3.5 h-3.5" /> Capture
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     )}
     </>
   );
