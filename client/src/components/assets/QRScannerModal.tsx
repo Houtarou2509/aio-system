@@ -9,6 +9,33 @@ interface Props {
   onAssetResolved?: (asset: Asset) => void;
 }
 
+/**
+ * Strictly parse a guest token from a QR value.
+ * Returns the token string if the value is a guest link path/URL, or null otherwise.
+ *
+ * Rejects: PROP:..., ASSET:..., "Guest No Owner", any loose "guest" substring.
+ * Accepts: /guest/token, /aio-system/guest/token, https://host/aio-system/guest/token
+ */
+export function parseGuestToken(value: string): string | null {
+  const trimmed = value.trim();
+
+  // Fast rejection: internal QR prefixes that must NEVER be treated as guest links
+  if (trimmed.startsWith('PROP:') || trimmed.startsWith('ASSET:')) return null;
+
+  try {
+    // Try parsing as a full URL (handles https://domain/aio-system/guest/token)
+    const url = new URL(trimmed, window.location.origin);
+    const match = url.pathname.match(/(?:\/aio-system)?\/guest\/([A-Za-z0-9_-]+)$/);
+    if (match) return match[1];
+  } catch {
+    // Not a URL — try as a bare path (handles /aio-system/guest/token or /guest/token)
+    const match = trimmed.match(/^(?:\/aio-system)?\/guest\/([A-Za-z0-9_-]+)$/);
+    if (match) return match[1];
+  }
+
+  return null;
+}
+
 export default function QRScannerModal({ open, onClose, onAssetResolved }: Props) {
   const navigate = useNavigate();
   const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -22,7 +49,7 @@ export default function QRScannerModal({ open, onClose, onAssetResolved }: Props
   const [resolving, setResolving] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
 
-  // ─── Safe cleanup: never lets stop()/clear() throw to React error boundary ───
+  // ─── Safe cleanup ───
   const safeStopAndClearScanner = useCallback(async () => {
     if (!scannerRef.current) return;
     if (isStoppingRef.current) return;
@@ -49,33 +76,29 @@ export default function QRScannerModal({ open, onClose, onAssetResolved }: Props
     }
   }, []);
 
-  // ─── Decode handler — called after scanner has been safely stopped ───
+  // ─── Decode handler — routing order: internal QR first, guest last ───
   const resolveAndNavigate = useCallback(async (decodedText: string) => {
-    // 1. Guest URL: /guest/<token>
-    const guestMatch = decodedText.match(/guest\/([a-zA-Z0-9_-]+)/);
-    if (guestMatch) {
-      onClose();
-      navigate(`/guest/${guestMatch[1]}`);
-      return;
-    }
+    const value = decodedText.trim();
+    console.info('[QRScanner] decoded:', value);
 
-    // 2. PROP:<propertyNumber> or ASSET:<id> — resolve via lookup API
-    if (decodedText.startsWith('PROP:') || decodedText.startsWith('ASSET:')) {
+    // ── 1. Internal QR payloads: PROP: / ASSET: — ALWAYS route to asset detail ──
+    if (value.startsWith('PROP:') || value.startsWith('ASSET:')) {
+      console.info('[QRScanner] route: asset (internal QR)');
       setResolving(true);
       try {
         const token = localStorage.getItem('accessToken');
-        const lookupRes = await fetch(`/api/assets/lookup?q=${encodeURIComponent(decodedText)}`, {
+        const lookupRes = await fetch(`/api/assets/lookup?q=${encodeURIComponent(value)}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!lookupRes.ok) {
           const body = await lookupRes.json().catch(() => ({}));
-          setError(body?.error?.message || body?.message || `Asset not found for QR code: ${decodedText}`);
+          setError(body?.error?.message || body?.message || `Asset not found for QR code: ${value}`);
           setResolving(false);
           return;
         }
         const { data: partialAsset } = await lookupRes.json();
 
-        // Fetch full asset details for the detail modal (lookup returns a subset)
+        // Fetch full asset details for the detail modal
         const detailRes = await fetch(`/api/assets/${partialAsset.id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -86,10 +109,9 @@ export default function QRScannerModal({ open, onClose, onAssetResolved }: Props
           return;
         }
         const detailBody = await detailRes.json();
-        const fullAsset = detailBody.data as Asset;
 
         onClose();
-        onAssetResolved?.(fullAsset);
+        onAssetResolved?.(detailBody.data as Asset);
       } catch {
         setError('Failed to resolve QR code. Check your connection and try again.');
         setResolving(false);
@@ -97,12 +119,13 @@ export default function QRScannerModal({ open, onClose, onAssetResolved }: Props
       return;
     }
 
-    // 3. Bare UUID — try lookup then fallback to search
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decodedText)) {
+    // ── 2. Bare UUID — try asset detail, then fallback to search ──
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+      console.info('[QRScanner] route: asset (bare UUID)');
       setResolving(true);
       try {
         const token = localStorage.getItem('accessToken');
-        const detailRes = await fetch(`/api/assets/${decodedText}`, {
+        const detailRes = await fetch(`/api/assets/${value}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (detailRes.ok) {
@@ -112,17 +135,27 @@ export default function QRScannerModal({ open, onClose, onAssetResolved }: Props
           return;
         }
       } catch {
-        // fall through to search navigation
+        // fall through to search
       }
       setResolving(false);
       onClose();
-      navigate(`/assets?page=1&search=${encodeURIComponent(decodedText)}`);
+      navigate(`/assets?page=1&search=${encodeURIComponent(value)}`);
       return;
     }
 
-    // 4. Fallback: treat as search query
+    // ── 3. Guest link — strict URL/path parsing only ──
+    const guestToken = parseGuestToken(value);
+    if (guestToken) {
+      console.info('[QRScanner] route: guest');
+      onClose();
+      navigate(`/guest/${guestToken}`);
+      return;
+    }
+
+    // ── 4. Fallback: treat as search query ──
+    console.info('[QRScanner] route: search');
     onClose();
-    navigate(`/assets?page=1&search=${encodeURIComponent(decodedText)}`);
+    navigate(`/assets?page=1&search=${encodeURIComponent(value)}`);
   }, [navigate, onClose, onAssetResolved]);
 
   // ─── Close handler ───
