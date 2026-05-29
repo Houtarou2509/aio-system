@@ -12,8 +12,54 @@ export default function QRScannerModal({ open, onClose }: Props) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [error, setError] = useState('');
   const [scanning, setScanning] = useState(false);
+  const [resolving, setResolving] = useState(false);
 
   const [isClosing, setIsClosing] = useState(false);
+
+  const handleDecodedText = async (decodedText: string) => {
+    // 1. Guest URL: /guest/<token> — navigate directly
+    const guestMatch = decodedText.match(/guest\/([a-zA-Z0-9_-]+)/);
+    if (guestMatch) {
+      navigate(`/guest/${guestMatch[1]}`);
+      onClose();
+      return;
+    }
+
+    // 2. PROP:<propertyNumber> or ASSET:<id> — resolve via lookup API
+    if (decodedText.startsWith('PROP:') || decodedText.startsWith('ASSET:')) {
+      setResolving(true);
+      try {
+        const token = localStorage.getItem('accessToken');
+        const res = await fetch(`/api/assets/lookup?q=${encodeURIComponent(decodedText)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          setError(body?.error?.message || body?.message || `Asset not found for QR code: ${decodedText}`);
+          setResolving(false);
+          return;
+        }
+        const { data } = await res.json();
+        navigate(`/assets?page=1&search=${encodeURIComponent(data.propertyNumber || data.name || data.id)}`);
+        onClose();
+      } catch {
+        setError('Failed to resolve QR code. Check your connection and try again.');
+        setResolving(false);
+      }
+      return;
+    }
+
+    // 3. Bare UUID — try to navigate to asset directly
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decodedText)) {
+      navigate(`/assets?page=1&search=${encodeURIComponent(decodedText)}`);
+      onClose();
+      return;
+    }
+
+    // 4. Fallback: treat as search query
+    navigate(`/assets?page=1&search=${encodeURIComponent(decodedText)}`);
+    onClose();
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -32,16 +78,7 @@ export default function QRScannerModal({ open, onClose }: Props) {
           scanner.stop().then(() => {
             setScanning(false);
             scanner.clear();
-
-            // Extract token from URL — supports both full URLs and paths
-            const match = decodedText.match(/guest\/([a-zA-Z0-9_-]+)/);
-            if (match) {
-              navigate(`/guest/${match[1]}`);
-            } else {
-              // If it's a raw token (no URL), navigate directly
-              navigate(`/guest/${decodedText}`);
-            }
-            onClose();
+            handleDecodedText(decodedText);
           }).catch(() => {});
         },
         () => {} // ignore scan failures (no QR found in frame)
@@ -106,17 +143,25 @@ export default function QRScannerModal({ open, onClose }: Props) {
             className="w-full rounded-md overflow-hidden bg-gray-100 dark:bg-gray-800"
             style={{ minHeight: scanning ? '250px' : '0' }}
           />
-          {!scanning && !error && (
+          {!scanning && !error && !resolving && (
             <p className="text-center text-sm text-gray-500  dark:text-gray-400 py-8">
               Starting camera...
+            </p>
+          )}
+          {resolving && (
+            <p className="text-center text-sm text-blue-600 py-8">
+              Resolving asset...
             </p>
           )}
           {error && (
             <div className="text-center py-8">
               <p className="text-sm text-red-600 mb-3">{error}</p>
-              <p className="text-xs text-gray-500  dark:text-gray-400">
-                Make sure camera permissions are granted and you're using HTTPS or localhost.
-              </p>
+              <button
+                onClick={() => { setError(''); setScanning(false); }}
+                className="text-xs text-blue-600 hover:underline"
+              >
+                Try again
+              </button>
             </div>
           )}
         </div>

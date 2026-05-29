@@ -29,8 +29,15 @@ router.post('/generate-pdf', authenticate, authorize(['ADMIN', 'STAFF_ADMIN', 'S
       metadata: { count: assetIds.length, assetIds, summary: `Printed ${assetIds.length} label(s)` },
     });
 
+    // Professional PDF filename: AIO-System-QR-Labels-YYYY-MM-DD-N-assets.pdf
+    const now = new Date();
+    const datePart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const countPart = assetIds.length === 1 ? '1-asset' : `${assetIds.length}-assets`;
+    const filename = `AIO-System-QR-Labels-${datePart}-${countPart}.pdf`;
+
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'inline; filename="labels.pdf"');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('X-Filename', filename);
     return res.send(pdf);
   } catch (err: any) {
     console.error('PDF generation error:', err);

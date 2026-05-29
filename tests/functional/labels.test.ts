@@ -230,3 +230,87 @@ describe('Label Templates', () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe('Label PDF — Filename & Headers', () => {
+  it('PDF response includes professional X-Filename header with date and asset count', async () => {
+    const a1 = await createAsset({ name: 'Filename Test 1', propertyNumber: 'FN-001', adminToken: users.ADMIN.accessToken });
+    const a2 = await createAsset({ name: 'Filename Test 2', propertyNumber: 'FN-002', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .post('/api/labels/generate-pdf')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ assetIds: [a1.id, a2.id] });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/pdf');
+
+    const disposition = res.headers['content-disposition'];
+    expect(disposition).toContain('filename="AIO-System-QR-Labels-');
+    expect(disposition).toContain('2-assets.pdf');
+
+    const xFilename = res.headers['x-filename'];
+    expect(xFilename).toMatch(/^AIO-System-QR-Labels-\d{4}-\d{2}-\d{2}-2-assets\.pdf$/);
+  });
+
+  it('Single-asset PDF uses 1-asset filename', async () => {
+    const asset = await createAsset({ name: 'Single Filename', propertyNumber: 'FN-003', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .post('/api/labels/generate-pdf')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ assetIds: [asset.id] });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['x-filename']).toContain('1-asset.pdf');
+    expect(res.headers['content-disposition']).toContain('1-asset.pdf');
+  });
+});
+
+describe('QR Payload & Lookup', () => {
+  it('PROP: lookup resolves to asset by propertyNumber', async () => {
+    const asset = await createAsset({ name: 'QR Prop Test', propertyNumber: 'QR-PROP-001', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .get(`/api/assets/lookup?q=${encodeURIComponent('PROP:QR-PROP-001')}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.id).toBe(asset.id);
+    expect(res.body.data.propertyNumber).toBe('QR-PROP-001');
+  });
+
+  it('ASSET: lookup resolves to asset by id', async () => {
+    const asset = await createAsset({ name: 'QR Asset Test', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .get(`/api/assets/lookup?q=${encodeURIComponent(`ASSET:${asset.id}`)}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.id).toBe(asset.id);
+  });
+
+  it('PROP: lookup returns 404 for nonexistent property number', async () => {
+    const res = await request(app)
+      .get(`/api/assets/lookup?q=${encodeURIComponent('PROP:NONEXISTENT-999')}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('ASSET: lookup returns 404 for nonexistent id', async () => {
+    const res = await request(app)
+      .get(`/api/assets/lookup?q=${encodeURIComponent('ASSET:00000000-0000-0000-0000-000000000000')}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('Lookup without q parameter returns 400', async () => {
+    const res = await request(app)
+      .get('/api/assets/lookup')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(400);
+  });
+});

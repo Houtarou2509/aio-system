@@ -82,6 +82,46 @@ router.get('/stats', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/assets/lookup?q=PROP:XXX or ASSET:UUID — resolve QR scan payloads
+router.get('/lookup', authenticate, authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), async (req: Request, res: Response) => {
+  try {
+    const q = String(req.query.q ?? '').trim();
+    if (!q) return error(res, 'Query parameter "q" is required', 400);
+
+    if (q.startsWith('PROP:')) {
+      const propertyNumber = q.slice(5);
+      const asset = await prisma.asset.findFirst({
+        where: { propertyNumber, deletedAt: null },
+      });
+      if (!asset) return error(res, `Asset not found for property number: ${propertyNumber}`, 404);
+      return success(res, { id: asset.id, name: asset.name, propertyNumber: asset.propertyNumber, status: asset.status, type: asset.type }, 200);
+    }
+
+    if (q.startsWith('ASSET:')) {
+      const id = q.slice(6);
+      const asset = await prisma.asset.findFirst({
+        where: { id, deletedAt: null },
+      });
+      if (!asset) return error(res, 'Asset not found for QR code.', 404);
+      return success(res, { id: asset.id, name: asset.name, propertyNumber: asset.propertyNumber, status: asset.status, type: asset.type }, 200);
+    }
+
+    // Fallback: search by propertyNumber or id
+    const asset = await prisma.asset.findFirst({
+      where: {
+        deletedAt: null,
+        OR: [
+          { propertyNumber: q },
+          { id: q },
+        ],
+      },
+    });
+    if (!asset) return error(res, `Asset not found for QR code.`, 404);
+    return success(res, { id: asset.id, name: asset.name, propertyNumber: asset.propertyNumber, status: asset.status, type: asset.type }, 200);
+  } catch (err: any) {
+    return error(res, err.message, 500);
+  }
+});
 
 // POST /api/assets — create (supports JSON and multipart/form-data)
 router.post('/', hasPermission('assets:create'), upload.single('image'), async (req: Request, res: Response) => {

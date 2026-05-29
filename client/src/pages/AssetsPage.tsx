@@ -244,14 +244,33 @@ export default function AssetsPage() {
       });
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       const blob = await res.blob();
+
+      // Generate professional filename client-side as fallback
+      const now = new Date();
+      const datePart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const countPart = ids.length === 1 ? '1-asset' : `${ids.length}-assets`;
+      const defaultFilename = `AIO-System-QR-Labels-${datePart}-${countPart}.pdf`;
+
+      // Prefer server-provided filename from X-Filename header
+      const filename = res.headers.get('X-Filename') || defaultFilename;
+
       const url = URL.createObjectURL(blob);
       const w = window.open('', '_blank');
       if (w) {
-        w.document.write(`<iframe src="${url}" style="width:100%;height:100%;border:none"></iframe>`);
-        w.document.title = 'QR Labels';
+        w.document.write(`<!DOCTYPE html><html><head><title>${filename.replace(/\.pdf$/, '')}</title><style>
+          body{margin:0;padding:0;height:100vh;display:flex;flex-direction:column}
+          iframe{flex:1;border:none}
+          .toolbar{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:#1e293b;color:#fff;font-family:system-ui,sans-serif;font-size:13px}
+          .toolbar a{color:#38bdf8;text-decoration:none;font-weight:600}
+          .toolbar a:hover{text-decoration:underline}
+          </style></head><body>
+          <div class="toolbar"><span>QR Labels — ${ids.length} asset${ids.length > 1 ? 's' : ''}</span><a href="${url}" download="${filename}">Download PDF</a></div>
+          <iframe src="${url}" style="width:100%;height:calc(100vh - 36px);border:none"></iframe>
+          </body></html>`);
+        w.document.close();
       }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-      showToast('Label opened — use browser Print to print');
+      showToast('Label opened — use browser Print or Download button');
     } catch { showToast('Failed to generate labels. Please try again.'); }
     finally { setPrintLoading(false); }
   };
