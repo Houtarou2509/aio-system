@@ -95,6 +95,27 @@ export function SearchableSelect({
     }
   }, [isOpen]);
 
+  // Recalculate highlight when filter or menu state changes
+  useEffect(() => {
+    if (!isOpen) return;
+    const query = filter.trim().toLowerCase();
+    if (query) {
+      // When searching, highlight the first real (non-None) matching option
+      const firstRealIdx = allItems.findIndex(item =>
+        !item.isNone &&
+        (item.label || item.value).toLowerCase().includes(query)
+      );
+      setHighlightIndex(firstRealIdx >= 0 ? firstRealIdx : 0);
+    } else {
+      // No search: highlight the currently selected option, or first item
+      const selectedIdx = allItems.findIndex(item => item.value === value);
+      setHighlightIndex(selectedIdx >= 0 ? selectedIdx : 0);
+    }
+    // allItems is derived from filter+allowNone+options, reading inside effect is safe;
+    // only list stable dependencies to avoid infinite re-renders
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, isOpen, allowNone, value]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!isOpen) {
       if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
@@ -154,7 +175,7 @@ export function SearchableSelect({
           <input
             ref={inputRef}
             value={filter}
-            onChange={e => { setFilter(e.target.value); setHighlightIndex(0); }}
+            onChange={e => { setFilter(e.target.value); }}
             placeholder={`Search ${label.toLowerCase()}...`}
             className="w-full border-0 px-3 py-2 text-sm outline-none rounded-t-lg"
           />
