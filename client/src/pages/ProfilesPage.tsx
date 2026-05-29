@@ -1307,6 +1307,7 @@ export default function ProfilesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Personnel | null>(null);
   const [detail, setDetail] = useState<PersonnelDetail | null>(null);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [showBulkWizard, setShowBulkWizard] = useState(false);
@@ -1340,6 +1341,14 @@ export default function ProfilesPage() {
     window.addEventListener(AUTH_EXPIRED_EVENT, handler);
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handler);
   }, []);
+
+  // Close photo lightbox on Escape
+  useEffect(() => {
+    if (!expandedImage) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setExpandedImage(null); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [expandedImage]);
 
   const fetchPersonnel = async () => {
     setLoading(true);
@@ -1546,10 +1555,10 @@ export default function ProfilesPage() {
                       <div className="flex items-center gap-2.5">
                         <button
                           type="button"
-                          onClick={() => openDetail(p)}
+                          onClick={(e) => { e.stopPropagation(); if (p.photoUrl) setExpandedImage(p.photoUrl); }}
                           className="w-8 h-8 rounded-full overflow-hidden border border-slate-200 flex items-center justify-center shrink-0 bg-slate-100 cursor-pointer hover:ring-2 hover:ring-[#f8931f]/40 hover:border-[#f8931f]/40 transition-all"
-                          title={`View profile for ${p.fullName}`}
-                          aria-label={`View profile for ${p.fullName}`}
+                          title={`View photo for ${p.fullName}`}
+                          aria-label={`View photo for ${p.fullName}`}
                         >
                           {p.photoUrl ? (
                             <img src={p.photoUrl} alt={p.fullName} className="w-full h-full object-cover" />
@@ -1718,6 +1727,28 @@ export default function ProfilesPage() {
           signedUploadedAt={agreementPreview.signedUploadedAt}
           onClose={closeAgreementPreview}
         />
+      )}
+
+      {/* ═══ PROFILE PHOTO LIGHTBOX ═══════════════════════════════ */}
+      {expandedImage && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80"
+          onClick={() => setExpandedImage(null)}
+        >
+          <div className="relative" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setExpandedImage(null)}
+              className="absolute -top-3 -right-3 flex h-8 w-8 items-center justify-center rounded-full bg-[#012061] text-white hover:bg-[#012061]/80 transition-colors shadow-lg z-10"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <img
+              src={expandedImage}
+              alt="Profile photo"
+              className="max-h-[85vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
+            />
+          </div>
+        </div>
       )}
 
       {/* Toast Container */}
