@@ -175,12 +175,12 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const openCamera = useCallback(() => {
     // Secure context check — camera requires HTTPS or localhost
     if (!window.isSecureContext) {
-      const host = window.location.hostname;
-      const isPrivateIp = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host);
+      const secureUrl = `https://${window.location.host}${window.location.pathname}`;
+      const isPrivateIp = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(window.location.hostname);
       setCameraError(
         isPrivateIp
-          ? 'Camera is blocked on HTTP LAN/IP addresses. Use https://' + host + ' or localhost to take a photo.'
-          : 'Camera requires HTTPS or localhost. Use a secure address to take a photo.'
+          ? `Camera is blocked on HTTP LAN/IP addresses. Use ${secureUrl} or localhost to take a photo.`
+          : `Camera requires HTTPS or localhost. Use ${secureUrl} to take a photo.`
       );
       setCameraAvailable(false);
       return;
