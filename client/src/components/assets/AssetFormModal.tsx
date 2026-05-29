@@ -70,6 +70,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [serialNumberError, setSerialNumberError] = useState<string | null>(null);
+  const [propertyNumberError, setPropertyNumberError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
 
   // AI suggestion review state
@@ -256,6 +257,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     setLoading(true);
     setError(null);
     setSerialNumberError(null);
+    setPropertyNumberError(null);
 
     try {
       // Build the data object
@@ -302,6 +304,8 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       // Check for duplicate serial number error
       if ((err?.errorData?.details?.code === 'DUPLICATE_FIELD' || err?.errorData?.code === 'DUPLICATE_FIELD') && err?.errorData?.details?.field === 'serialNumber') {
         setSerialNumberError('This serial number already exists in the system.');
+      } else if ((err?.errorData?.details?.code === 'DUPLICATE_FIELD' || err?.errorData?.code === 'DUPLICATE_FIELD') && err?.errorData?.details?.field === 'propertyNumber') {
+        setPropertyNumberError('This property number already exists in the system.');
       } else if (err?.errorData?.details?.code === 'ACTIVE_ISSUANCE_EXISTS' || err?.errorData?.code === 'ACTIVE_ISSUANCE_EXISTS') {
         setError('This asset has an active issuance. Use the Issuances return flow before changing the status from Assigned.');
       } else {
@@ -586,7 +590,8 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               {/* 7. Property Number */}
               <div>
                 <label className={labelClass}>Property #</label>
-                <input value={form.propertyNumber} onChange={e => set('propertyNumber', e.target.value)} placeholder="e.g. PROP-00123" className={inputClass} />
+                <input value={form.propertyNumber} onChange={e => { set('propertyNumber', e.target.value); if (propertyNumberError) setPropertyNumberError(null); }} placeholder="e.g. PROP-00123" className={`${inputClass}${propertyNumberError ? ' !border-[#7B1113] !ring-[#7B1113]' : ''}`} />
+                {propertyNumberError && <p className="mt-1 text-xs text-[#7B1113]">{propertyNumberError}</p>}
               </div>
 
               {/* ── Section: Purchase Details ── */}

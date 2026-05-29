@@ -262,6 +262,122 @@ describe('Asset CRUD — Update', () => {
   });
 });
 
+describe('Asset CRUD — Unique Property Number', () => {
+  // Create duplicate
+  it('POST /api/assets — duplicate propertyNumber → 409', async () => {
+    await createAsset({ name: 'Asset A', propertyNumber: 'PROP-UNIQ-001', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .post('/api/assets')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({
+        name: 'Asset B',
+        type: 'LAPTOP',
+        serialNumber: `SN-DUP-${Date.now()}`,
+        propertyNumber: 'PROP-UNIQ-001',
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.details.field).toBe('propertyNumber');
+    expect(res.body.error.details.code).toBe('DUPLICATE_FIELD');
+  });
+
+  // Blank/null propertyNumber allowed
+  it('POST /api/assets — blank propertyNumber → 201 (allowed)', async () => {
+    const res = await request(app)
+      .post('/api/assets')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({
+        name: 'No PN Asset',
+        type: 'LAPTOP',
+        serialNumber: `SN-NO-PN-${Date.now()}`,
+        propertyNumber: '',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+  });
+
+  // Multiple assets with blank propertyNumber allowed
+  it('POST /api/assets — multiple assets with blank propertyNumber → all 201', async () => {
+    const res1 = await request(app)
+      .post('/api/assets')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ name: 'Blank PN 1', type: 'LAPTOP', serialNumber: `SN-BLANK1-${Date.now()}`, propertyNumber: '' });
+    const res2 = await request(app)
+      .post('/api/assets')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ name: 'Blank PN 2', type: 'LAPTOP', serialNumber: `SN-BLANK2-${Date.now()}`, propertyNumber: '' });
+
+    expect(res1.status).toBe(201);
+    expect(res2.status).toBe(201);
+  });
+
+  // Update with same propertyNumber (own) → allowed
+  it('PUT /api/assets/:id — keep own propertyNumber → 200 (allowed)', async () => {
+    const asset = await createAsset({ name: 'Keep PN', propertyNumber: 'PROP-KEEP-001', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .put(`/api/assets/${asset.id}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ propertyNumber: 'PROP-KEEP-001' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  // Update with duplicate propertyNumber → 409
+  it('PUT /api/assets/:id — update to another asset\'s propertyNumber → 409', async () => {
+    const assetA = await createAsset({ name: 'Asset A', propertyNumber: 'PROP-A-002', adminToken: users.ADMIN.accessToken });
+    await createAsset({ name: 'Asset B', propertyNumber: 'PROP-B-002', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .put(`/api/assets/${assetA.id}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ propertyNumber: 'PROP-B-002' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.details.field).toBe('propertyNumber');
+  });
+
+  // Update clearing propertyNumber → allowed
+  it('PUT /api/assets/:id — clear propertyNumber to blank → 200 (allowed)', async () => {
+    const asset = await createAsset({ name: 'Clear PN', propertyNumber: 'PROP-CLEAR-001', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .put(`/api/assets/${asset.id}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ propertyNumber: '' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.propertyNumber).toBeNull();
+  });
+
+  // Duplicate propertyNumber against soft-deleted asset → 409
+  it('POST /api/assets — duplicate propertyNumber of soft-deleted asset → 409', async () => {
+    const asset = await createAsset({ name: 'To Delete', propertyNumber: 'PROP-DEL-001', adminToken: users.ADMIN.accessToken });
+
+    // Soft-delete
+    await request(app)
+      .delete(`/api/assets/${asset.id}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    const res = await request(app)
+      .post('/api/assets')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({
+        name: 'Reuse PN',
+        type: 'LAPTOP',
+        serialNumber: `SN-REUSE-${Date.now()}`,
+        propertyNumber: 'PROP-DEL-001',
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.details.field).toBe('propertyNumber');
+  });
+});
+
 describe('Asset CRUD — Delete', () => {
   // 16
   it('16. DELETE /api/assets/:id (Admin) — soft delete, status becomes RETIRED', async () => {

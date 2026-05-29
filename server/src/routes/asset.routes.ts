@@ -109,8 +109,13 @@ router.post('/', hasPermission('assets:create'), upload.single('image'), async (
     return success(res, asset, 201);
   } catch (err: any) {
     if (err instanceof PrismaClientKnownRequestError && err.code === 'P2002') {
-      const field = (err.meta?.target as string[])?.includes('serialNumber') ? 'serialNumber' : 'unknown';
-      return error(res, 'A unique field value already exists.', 409, { message: 'A unique field value already exists.', field, code: 'DUPLICATE_FIELD' });
+      const target = (err.meta?.target as string[]) || [];
+      const field = target.includes('serialNumber') ? 'serialNumber' : target.includes('propertyNumber') ? 'propertyNumber' : 'unknown';
+      const message = field === 'propertyNumber' ? 'Property number already exists.' : 'A unique field value already exists.';
+      return error(res, message, 409, { message, field, code: 'DUPLICATE_FIELD' });
+    }
+    if (err.code === 'DUPLICATE_PROPERTY_NUMBER') {
+      return error(res, err.message, 409, { message: err.message, field: 'propertyNumber', code: 'DUPLICATE_FIELD' });
     }
     return error(res, err.message, 400);
   }
@@ -145,13 +150,13 @@ router.post('/import', hasPermission('assets:create'), importUpload.single('file
     const assetTypeMap = new Map(assetTypes.map(v => [v.value.toLowerCase(), v.value]));
     const manufacturerMap = new Map(manufacturers.map(v => [v.value.toLowerCase(), v.value]));
 
-    // Pre-fetch existing serial numbers and property numbers for batch duplicate checks
+    // Pre-fetch existing serial numbers (active only) and property numbers (all, including soft-deleted) for duplicate checks
     const existingSerials = new Set(
       (await prisma.asset.findMany({ where: { serialNumber: { not: null }, deletedAt: null }, select: { serialNumber: true } }))
         .map(a => a.serialNumber!.toLowerCase())
     );
     const existingPropertyNums = new Set(
-      (await prisma.asset.findMany({ where: { propertyNumber: { not: null }, deletedAt: null }, select: { propertyNumber: true } }))
+      (await prisma.asset.findMany({ where: { propertyNumber: { not: null } }, select: { propertyNumber: true } }))
         .map(a => a.propertyNumber!.toLowerCase())
     );
 
@@ -619,8 +624,13 @@ router.put('/:id', hasPermission('assets:edit'), upload.single('image'), async (
     return success(res, asset, 200);
   } catch (err: any) {
     if (err instanceof PrismaClientKnownRequestError && err.code === 'P2002') {
-      const field = (err.meta?.target as string[])?.includes('serialNumber') ? 'serialNumber' : 'unknown';
-      return error(res, 'A unique field value already exists.', 409, { message: 'A unique field value already exists.', field, code: 'DUPLICATE_FIELD' });
+      const target = (err.meta?.target as string[]) || [];
+      const field = target.includes('serialNumber') ? 'serialNumber' : target.includes('propertyNumber') ? 'propertyNumber' : 'unknown';
+      const message = field === 'propertyNumber' ? 'Property number already exists.' : 'A unique field value already exists.';
+      return error(res, message, 409, { message, field, code: 'DUPLICATE_FIELD' });
+    }
+    if (err.code === 'DUPLICATE_PROPERTY_NUMBER') {
+      return error(res, err.message, 409, { message: err.message, field: 'propertyNumber', code: 'DUPLICATE_FIELD' });
     }
     const statusCode = err.statusCode
       || (err.message === 'Asset not found' ? 404

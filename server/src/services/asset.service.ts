@@ -172,6 +172,20 @@ function formatAuditValue(value: any): string {
 // --- CREATE ---
 export async function createAsset(data: Prisma.AssetCreateInput, performedById: string, ipAddress?: string, userAgent?: string) {
   const cleaned = cleanWarrantyFields(data);
+
+  // ── Guard: unique propertyNumber if provided ──
+  if (cleaned.propertyNumber && cleaned.propertyNumber.trim() !== '') {
+    const existing = await prisma.asset.findFirst({
+      where: { propertyNumber: cleaned.propertyNumber.trim() },
+    });
+    if (existing) {
+      const err: any = new Error('Property number already exists.');
+      err.code = 'DUPLICATE_PROPERTY_NUMBER';
+      err.statusCode = 409;
+      throw err;
+    }
+  }
+
   const asset = await prisma.asset.create({ data: cleaned });
 
   await logAudit({
@@ -229,6 +243,23 @@ export async function getAsset(id: string) {
 export async function updateAsset(id: string, data: Prisma.AssetUpdateInput, performedById: string, ipAddress?: string, userAgent?: string) {
   const existing = await prisma.asset.findUnique({ where: { id, deletedAt: null } });
   if (!existing) throw new Error('Asset not found');
+
+  // ── Guard: unique propertyNumber if changed ──
+  const newPropNum = (data as any).propertyNumber;
+  if (newPropNum !== undefined && newPropNum !== null && String(newPropNum).trim() !== '') {
+    const trimmed = String(newPropNum).trim();
+    if (trimmed !== existing.propertyNumber) {
+      const conflict = await prisma.asset.findFirst({
+        where: { propertyNumber: trimmed },
+      });
+      if (conflict) {
+        const err: any = new Error('Property number already exists.');
+        err.code = 'DUPLICATE_PROPERTY_NUMBER';
+        err.statusCode = 409;
+        throw err;
+      }
+    }
+  }
 
   // ── Guard: block manual status change away from ASSIGNED when active issuance exists ──
   const newStatusRaw = (data as any).status;
