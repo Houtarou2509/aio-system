@@ -156,6 +156,61 @@ function cleanWarrantyFields(data: any) {
   return result;
 }
 
+// Normalize values for audit comparison — eliminates false change detection
+// caused by type mismatches (Date object vs ISO string) and format differences.
+const DATE_FIELDS = new Set([
+  'purchaseDate', 'warrantyExpiry',
+  'disposalDate', ' createdAt', 'updatedAt',
+]);
+
+function normalizeAuditValue(value: unknown, field?: string): string {
+  if (value === null || value === undefined || value === '') return '';
+  // Date objects and date-like strings → YYYY-MM-DD for comparison
+  if (value instanceof Date) {
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') return '';
+    // ISO datetime strings (e.g. "2026-01-15T00:00:00.000Z")
+    if (/^\d{4}-\d{2}-\d{2}(T|\s)/.test(trimmed)) {
+      const d = new Date(trimmed);
+      if (!isNaN(d.getTime())) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${dd}`;
+      }
+    }
+    // Locale date strings (e.g. "01/15/2026" or "2026/01/15")
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(trimmed)) {
+      const d = new Date(trimmed);
+      if (!isNaN(d.getTime())) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${dd}`;
+      }
+    }
+    // Numeric strings that could be Decimal fields — compare as numbers
+    if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+      return String(parseFloat(trimmed));
+    }
+    return trimmed;
+  }
+  if (typeof value === 'number') return String(value);
+  // Decimal/PrismaDecimal objects
+  if (typeof value === 'object' && value !== null && 'toString' in value) {
+    const s = String(value);
+    if (/^-?\d+(\.\d+)?$/.test(s)) return String(parseFloat(s));
+    return s;
+  }
+  return String(value);
+}
+
 // Format audit values — dates get readable format instead of raw Date.toString() or ISO
 function formatAuditValue(value: any): string {
   if (value === null || value === undefined) return 'empty';
@@ -278,13 +333,15 @@ export async function updateAsset(id: string, data: Prisma.AssetUpdateInput, per
   const cleaned = cleanWarrantyFields(data);
   const asset = await prisma.asset.update({ where: { id }, data: cleaned });
 
-  // Audit log each changed field
+  // Audit log each changed field (using normalized comparison to avoid false positives)
   for (const [key, newVal] of Object.entries(data)) {
     if (key === 'updatedAt') continue;
     const oldVal = (existing as any)[key];
-    const oldStr = oldVal == null ? '' : String(oldVal);
-    const newStr = newVal == null ? '' : String(newVal);
-    if (oldStr === newStr) continue;
+    // Normalize both values to eliminate type/format mismatches
+    // (e.g. Date object vs ISO string, Decimal vs string)
+    const oldNorm = normalizeAuditValue(oldVal, key);
+    const newNorm = normalizeAuditValue(newVal, key);
+    if (oldNorm === newNorm) continue;
     await logAudit({
   userId: performedById ?? null,
   action: 'UPDATE',

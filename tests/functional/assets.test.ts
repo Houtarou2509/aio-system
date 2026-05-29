@@ -378,6 +378,127 @@ describe('Asset CRUD — Unique Property Number', () => {
   });
 });
 
+describe('Asset CRUD — Audit Log Accuracy', () => {
+  it('Update only propertyNumber — creates exactly one audit entry for propertyNumber, no purchaseDate entry', async () => {
+    const asset = await createAsset({
+      name: 'Audit Test Asset',
+      propertyNumber: 'PROP-AUD-001',
+      adminToken: users.ADMIN.accessToken,
+    });
+
+    const res = await request(app)
+      .put(`/api/assets/${asset.id}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ propertyNumber: 'PROP-AUD-002' });
+
+    expect(res.status).toBe(200);
+
+    // Check audit logs
+    const auditRes = await request(app)
+      .get(`/api/audit/${asset.id}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(auditRes.status).toBe(200);
+    const updateLogs = auditRes.body.data.filter(
+      (l: any) => l.action === 'UPDATE',
+    );
+
+    // Should have exactly one UPDATE entry
+    expect(updateLogs.length).toBe(1);
+    expect(updateLogs[0].field).toBe('propertyNumber');
+    expect(updateLogs[0].oldValue).toBe('PROP-AUD-001');
+    expect(updateLogs[0].newValue).toBe('PROP-AUD-002');
+  });
+
+  it('Submit unchanged purchaseDate — no purchaseDate audit entry created', async () => {
+    const asset = await createAsset({
+      name: 'No Date Change',
+      propertyNumber: 'PROP-NO-DATE-001',
+      purchasePrice: 5000,
+      purchaseDate: '2026-01-15',
+      adminToken: users.ADMIN.accessToken,
+    });
+
+    // Update only propertyNumber, re-send the same purchaseDate
+    const res = await request(app)
+      .put(`/api/assets/${asset.id}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({
+        propertyNumber: 'PROP-NO-DATE-002',
+        purchaseDate: '2026-01-15T00:00:00.000Z', // same date, ISO format
+        purchasePrice: 5000,
+      });
+
+    expect(res.status).toBe(200);
+
+    const auditRes = await request(app)
+      .get(`/api/audit/${asset.id}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    const updateLogs = auditRes.body.data.filter(
+      (l: any) => l.action === 'UPDATE',
+    );
+    const dateLogs = updateLogs.filter((l: any) => l.field === 'purchaseDate');
+
+    // No purchaseDate audit entry should exist since the date didn't actually change
+    expect(dateLogs.length).toBe(0);
+  });
+
+  it('Update purchaseDate to a truly different date — creates purchaseDate audit entry', async () => {
+    const asset = await createAsset({
+      name: 'Date Change Test',
+      propertyNumber: 'PROP-DATE-CHG-001',
+      purchaseDate: '2026-01-15',
+      adminToken: users.ADMIN.accessToken,
+    });
+
+    const res = await request(app)
+      .put(`/api/assets/${asset.id}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ purchaseDate: '2026-06-01' });
+
+    expect(res.status).toBe(200);
+
+    const auditRes = await request(app)
+      .get(`/api/audit/${asset.id}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    const updateLogs = auditRes.body.data.filter(
+      (l: any) => l.action === 'UPDATE',
+    );
+    const dateLogs = updateLogs.filter((l: any) => l.field === 'purchaseDate');
+
+    expect(dateLogs.length).toBe(1);
+  });
+
+  it('No actual changes submitted — no audit entries created', async () => {
+    const asset = await createAsset({
+      name: 'No Change Test',
+      propertyNumber: 'PROP-NO-CHG-001',
+      adminToken: users.ADMIN.accessToken,
+    });
+
+    // Send an update with no real changes (same values)
+    const res = await request(app)
+      .put(`/api/assets/${asset.id}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ name: 'No Change Test', type: 'LAPTOP' });
+
+    expect(res.status).toBe(200);
+
+    const auditRes = await request(app)
+      .get(`/api/audit/${asset.id}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    const updateLogs = auditRes.body.data.filter(
+      (l: any) => l.action === 'UPDATE',
+    );
+
+    // No UPDATE entries should be created if nothing actually changed
+    expect(updateLogs.length).toBe(0);
+  });
+});
+
 describe('Asset CRUD — Delete', () => {
   // 16
   it('16. DELETE /api/assets/:id (Admin) — soft delete, status becomes RETIRED', async () => {

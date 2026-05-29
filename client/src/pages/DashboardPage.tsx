@@ -44,17 +44,26 @@ function truncateFeed(text: string, max = 72): string {
 }
 
 function extractRelativeTime(text: string): string {
-  const isoMatch = text.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
-  if (isoMatch) {
-    const date = new Date(isoMatch[0]);
-    if (!isNaN(date.getTime())) return relativeDate(date.toISOString());
+  // The dash (—) separates the activity description from the audit timestamp.
+  // The timestamp after — is the real event time (from auditLog.createdAt),
+  // while date values earlier in the string (e.g. purchaseDate "01/01/2026")
+  // are field values, not event timestamps.
+  const dashIdx = text.lastIndexOf(' — ');
+  if (dashIdx !== -1) {
+    const afterDash = text.slice(dashIdx + 3); // skip " — "
+    // Try parsing locale date: "May 29, 2026, 10:30 AM" or "May 29, 2026"
+    const dateFromDash = new Date(afterDash.trim());
+    if (!isNaN(dateFromDash.getTime())) {
+      return relativeDate(dateFromDash.toISOString());
+    }
+    // Try ISO format after dash
+    const isoAfterDash = afterDash.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    if (isoAfterDash) {
+      const d = new Date(isoAfterDash[0]);
+      if (!isNaN(d.getTime())) return relativeDate(d.toISOString());
+    }
   }
-  const dateMatch = text.match(/\d{2}\/\d{2}\/\d{4}/);
-  if (dateMatch) {
-    const parts = dateMatch[0].split('/');
-    const date = new Date(Number(parts[2]), Number(parts[0]) - 1, Number(parts[1]));
-    if (!isNaN(date.getTime())) return relativeDate(date.toISOString());
-  }
+  // Fallback: no timestamp found
   return '—';
 }
 
