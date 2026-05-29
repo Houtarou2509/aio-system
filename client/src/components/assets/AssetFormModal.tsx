@@ -4,6 +4,7 @@ import { Asset } from '../../lib/api';
 import { useLookupOptions } from '@/hooks/useLookupOptions';
 import { SupplierFormModal } from '../suppliers/SupplierFormModal';
 import { Sparkles, X, Upload, Pencil, Plus, Camera, CameraOff, Check, RotateCcw, AlertTriangle } from 'lucide-react';
+import { CameraCaptureModal } from '@/components/ui/CameraCaptureModal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
@@ -78,12 +79,9 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const [aiSuggestedFields, setAiSuggestedFields] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Camera preview state (getUserMedia-based, matching ProfilesPage)
+  // Camera state — uses shared CameraCaptureModal
   const [showCamera, setShowCamera] = useState(false);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const capturedCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Supplier list
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -96,26 +94,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const { options: locationOptions, isLoading: locationLoading } = useLookupOptions('locations');
   const { options: ownerOptions, isLoading: ownerLoading } = useLookupOptions('owners');
 
-  // Stop camera stream helper
-  const stopCamera = useCallback(() => {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
-      setCameraStream(null);
-    }
-  }, [cameraStream]);
-
-  // Cleanup camera on unmount or modal close
-  useEffect(() => {
-    return () => { stopCamera(); };
-  }, [stopCamera]);
-
-  // Close camera preview on Escape
-  useEffect(() => {
-    if (!showCamera) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') cancelCamera(); };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [showCamera]);
+  // Camera error is set by CameraCaptureModal via onExternalError
 
   // Fetch suppliers on mount
   useEffect(() => {
@@ -157,81 +136,12 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     e.target.value = '';
   }, []);
 
-  // Open camera with getUserMedia preview (matching ProfilesPage pattern)
-  const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB
-  const openCamera = async () => {
+  // Handle captured photo from CameraCaptureModal
+  const handleCameraCapture = (blob: Blob) => {
+    const file = new File([blob], `asset-photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    setImageFile(file);
     setCameraError(null);
-    // Secure context check — camera requires HTTPS or localhost
-    if (!window.isSecureContext) {
-      const secureUrl = `https://${window.location.host}${window.location.pathname}`;
-      const isPrivateIp = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(window.location.hostname);
-      setCameraError(
-        isPrivateIp
-          ? `Camera is blocked on HTTP LAN/IP addresses. Use ${secureUrl} or localhost to take a photo.`
-          : `Camera requires HTTPS or localhost. Use ${secureUrl} to take a photo.`
-      );
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 640 } },
-        audio: false,
-      });
-      setCameraStream(stream);
-      setShowCamera(true);
-      setTimeout(() => {
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      }, 0);
-    } catch (err: any) {
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setCameraError('Camera permission denied. You can still upload an image instead.');
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        setCameraError('No camera found on this device. You can still upload an image instead.');
-      } else if (err.name === 'NotReadableError' || err.name === 'SourceUnavailableError') {
-        setCameraError('Camera is already in use by another application. You can still upload an image instead.');
-      } else {
-        setCameraError('Camera is not available. You can still upload an image instead.');
-      }
-    }
-  };
-
-  const capturePhoto = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    const canvas = capturedCanvasRef.current;
-    if (!canvas) return;
-    // Full-frame capture — preserve aspect ratio, no square crop
-    let outW = video.videoWidth;
-    let outH = video.videoHeight;
-    const MAX_DIM = 1280;
-    if (outW > MAX_DIM || outH > MAX_DIM) {
-      const scale = MAX_DIM / Math.max(outW, outH);
-      outW = Math.round(outW * scale);
-      outH = Math.round(outH * scale);
-    }
-    canvas.width = outW;
-    canvas.height = outH;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0, outW, outH);
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const file = new File([blob], `asset-photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      if (file.size > MAX_IMAGE_SIZE) {
-        setCameraError('Captured image is too large. Try again or upload instead.');
-        return;
-      }
-      setImageFile(file);
-      setCameraError(null);
-      stopCamera();
-      setShowCamera(false);
-    }, 'image/jpeg', 0.9);
-  };
-
-  const cancelCamera = () => {
-    stopCamera();
     setShowCamera(false);
-    setCameraError(null);
   };
 
   const removeImage = useCallback(() => {
@@ -419,7 +329,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     <>
     <div
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) { cancelCamera(); onClose(); } }}>
+      onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowCamera(false); onClose(); } }}>
       <div className="w-[95vw] max-w-5xl max-h-[90vh] flex flex-col rounded-xl bg-white dark:bg-slate-800 shadow-xl" onClick={e => e.stopPropagation()}>
 
         {/* ── Header ── */}
@@ -477,7 +387,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                       {/* Camera button — opens live preview */}
                       <button
                         type="button"
-                        onClick={openCamera}
+                        onClick={() => setShowCamera(true)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                       >
                         <Camera className="w-3.5 h-3.5" />
@@ -898,31 +808,16 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       />
     )}
 
-    {/* Hidden canvas for camera capture */}
-    <canvas ref={capturedCanvasRef} className="hidden" />
-
-    {/* Camera capture overlay */}
-    {showCamera && (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
-        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b" style={{ background: '#012061' }}>
-            <h3 className="text-sm font-bold text-white">Take Photo</h3>
-            <button type="button" onClick={cancelCamera} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
-          </div>
-          <div className="p-4">
-            <div className="relative rounded-lg overflow-hidden bg-black aspect-square">
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-            </div>
-            <div className="flex items-center justify-center gap-3 mt-4">
-              <button type="button" onClick={cancelCamera} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-              <button type="button" onClick={capturePhoto} className="px-4 py-2 text-sm font-semibold text-white bg-[#f8931f] rounded-lg hover:bg-[#e07e0a] flex items-center gap-1.5">
-                <Camera className="w-3.5 h-3.5" /> Capture
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
+    {/* Camera capture modal */}
+    <CameraCaptureModal
+      open={showCamera}
+      onCapture={handleCameraCapture}
+      onClose={() => setShowCamera(false)}
+      storageKey="aio.assetCameraDeviceId"
+      defaultFacingMode="environment"
+      captureMode="full"
+      onExternalError={setCameraError}
+    />
     </>
   );
 }

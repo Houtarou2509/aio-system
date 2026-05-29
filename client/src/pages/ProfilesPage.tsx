@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, apiFetchBlob, ApiError, AUTH_EXPIRED_EVENT } from '../lib/api';
 import {
-  Users, PlusCircle, Search, Loader2, Eye, X, UserCircle, User, Camera, Briefcase, Building2, Calendar, Mail, Phone, Package, FileText, AlertTriangle, CheckCircle2, CheckCircle, Info, ChevronDown, ChevronRight, Edit3, Trash2, ClipboardCheck, FolderOpen,
+  Users, PlusCircle, Search, Loader2, Eye, X, UserCircle, User, Briefcase, Building2, Calendar, Mail, Phone, Package, FileText, AlertTriangle, CheckCircle2, CheckCircle, Info, ChevronDown, ChevronRight, Edit3, Trash2, ClipboardCheck, FolderOpen,
 } from 'lucide-react';
+import { CameraCaptureModal } from '../components/ui/CameraCaptureModal';
 import BulkIssuanceWizard from '../components/issuances/BulkIssuanceWizard';
 import PDFPreviewModal from '../components/issuances/PDFPreviewModal';
 import { PermissionGate } from '../components/auth/PermissionGate';
@@ -350,10 +351,7 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoError, setPhotoError] = useState('');
   const [showCamera, setShowCamera] = useState(false);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [cameraError, setCameraError] = useState('');
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const capturedCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
   // Load lookups on modal open
   useEffect(() => {
@@ -406,26 +404,32 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
     setPhotoError('');
   }, [editing, open]);
 
-  // ─── Camera ─── (hooks must be before early return)
-  const stopCamera = useCallback(() => {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
-      setCameraStream(null);
-    }
-  }, [cameraStream]);
-
-  // Cleanup camera on unmount or modal close
-  useEffect(() => {
-    if (!open) {
-      stopCamera();
-      setShowCamera(false);
-      setCameraError('');
-    }
-  }, [open, stopCamera]);
-
-  useEffect(() => {
-    return () => { stopCamera(); };
-  }, [stopCamera]);
+  // Handle captured photo from CameraCaptureModal
+  const handleCameraCapture = (blob: Blob) => {
+    const file = new File([blob], `camera-capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    setPhotoFile(file);
+    // Generate square preview from the blob
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const size = Math.min(img.width, img.height);
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const sx = (img.width - size) / 2;
+        const sy = (img.height - size) / 2;
+        ctx.drawImage(img, sx, sy, size, size, 0, 0, 256, 256);
+        setPhotoPreview(canvas.toDataURL('image/jpeg'));
+      }
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+    setPhotoError('');
+    setCameraError('');
+    setShowCamera(false);
+  };
 
   if (!open) return null;
 
@@ -454,82 +458,6 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
     setPhotoPreview(null);
     setPhotoFile(null);
     setPhotoError('');
-  };
-
-  const openCamera = async () => {
-    setCameraError('');
-    // Secure context check — camera requires HTTPS or localhost
-    if (!window.isSecureContext) {
-      const secureUrl = `https://${window.location.host}${window.location.pathname}`;
-      const isPrivateIp = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(window.location.hostname);
-      setCameraError(
-        isPrivateIp
-          ? `Camera is blocked on HTTP LAN/IP addresses. Use ${secureUrl} or localhost to take a photo.`
-          : `Camera requires HTTPS or localhost. Use ${secureUrl} to take a photo.`
-      );
-      return;
-    }
-    try {
-      // Prefer environment (rear) camera on mobile, fallback to any
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 640 } },
-        audio: false,
-      });
-      setCameraStream(stream);
-      setShowCamera(true);
-      // Attach stream to video element after render
-      setTimeout(() => {
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      }, 0);
-    } catch (err: any) {
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setCameraError('Camera permission denied. You can still upload a photo.');
-      } else if (err.name === 'NotFoundError') {
-        setCameraError('No camera found on this device. You can still upload a photo.');
-      } else {
-        setCameraError('Camera unavailable. You can still upload a photo.');
-      }
-    }
-  };
-
-  const capturePhoto = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    const canvas = capturedCanvasRef.current;
-    if (!canvas) return;
-    // Draw current frame to canvas
-    const size = Math.min(video.videoWidth, video.videoHeight);
-    canvas.width = 256;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    // Center-crop to square
-    const sx = (video.videoWidth - size) / 2;
-    const sy = (video.videoHeight - size) / 2;
-    ctx.drawImage(video, sx, sy, size, size, 0, 0, 256, 256);
-    // Convert to blob/file
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const file = new File([blob], `camera-capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      // Validate
-      if (file.size > MAX_SIZE) {
-        setCameraError('Captured image is too large. Try again or upload instead.');
-        return;
-      }
-      setPhotoFile(file);
-      setPhotoPreview(canvas.toDataURL('image/jpeg'));
-      setPhotoError('');
-      // Stop camera and close
-      stopCamera();
-      setShowCamera(false);
-      setCameraError('');
-    }, 'image/jpeg', 0.9);
-  };
-
-  const cancelCamera = () => {
-    stopCamera();
-    setShowCamera(false);
-    setCameraError('');
   };
 
   const getInitials = (name: string) => {
@@ -638,7 +566,7 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
                     <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoSelect} className="hidden" />
                   </label>
                   {!photoPreview && (
-                    <button type="button" onClick={openCamera} className="text-[10px] font-medium text-[#f8931f] hover:underline">Take photo</button>
+                    <button type="button" onClick={() => setShowCamera(true)} className="text-[10px] font-medium text-[#f8931f] hover:underline">Take photo</button>
                   )}
                   {photoPreview && (
                     <button type="button" onClick={handlePhotoRemove} className="text-[10px] font-medium text-red-400 hover:text-red-600">Remove</button>
@@ -732,30 +660,16 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
           </div>
         </form>
       </div>
-      {/* Hidden canvas for camera capture */}
-      <canvas ref={capturedCanvasRef} className="hidden" />
-      {/* Camera capture overlay */}
-      {showCamera && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ background: '#012061' }}>
-              <h3 className="text-sm font-bold text-white">Take Photo</h3>
-              <button type="button" onClick={cancelCamera} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="p-4">
-              <div className="relative rounded-lg overflow-hidden bg-black aspect-square">
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-              </div>
-              <div className="flex items-center justify-center gap-3 mt-4">
-                <button type="button" onClick={cancelCamera} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-                <button type="button" onClick={capturePhoto} className="px-4 py-2 text-sm font-semibold text-white bg-[#f8931f] rounded-lg hover:bg-[#e07e0a] flex items-center gap-1.5">
-                  <Camera className="w-3.5 h-3.5" /> Capture
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Camera capture modal */}
+      <CameraCaptureModal
+        open={showCamera}
+        onCapture={handleCameraCapture}
+        onClose={() => { setShowCamera(false); setCameraError(null); }}
+        storageKey="aio.profileCameraDeviceId"
+        defaultFacingMode="user"
+        captureMode="square"
+        onExternalError={setCameraError}
+      />
     </div>
   );
 }
