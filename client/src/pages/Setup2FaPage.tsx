@@ -34,7 +34,7 @@ export default function Setup2FaPage() {
   if (user?.twoFactorEnabled) {
     return (
       <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
-        <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
+        <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-4 sm:px-6 py-3 sm:py-4 min-h-[56px]">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/20">
               <ShieldCheck className="h-5 w-5 text-emerald-400" />
@@ -81,7 +81,7 @@ export default function Setup2FaPage() {
   if (success) {
     return (
       <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
-        <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
+        <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-4 sm:px-6 py-3 sm:py-4 min-h-[56px]">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/20">
               <ShieldCheck className="h-5 w-5 text-emerald-400" />
@@ -114,7 +114,7 @@ export default function Setup2FaPage() {
   return (
     <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
       {/* ═══ NAVY HEADER ═══ */}
-      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
+      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-4 sm:px-6 py-3 sm:py-4 min-h-[56px]">
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-[#f8931f]/20">
             <Shield className="h-5 w-5 text-[#f8931f]" />

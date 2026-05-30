@@ -332,9 +332,9 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   return (
     <>
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-2 sm:p-4"
       onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowCamera(false); onClose(); } }}>
-      <div className="w-[95vw] max-w-5xl max-h-[90vh] flex flex-col rounded-xl bg-white dark:bg-slate-800 shadow-xl" onClick={e => e.stopPropagation()}>
+      <div className="w-full sm:w-[95vw] max-w-5xl max-h-[90vh] flex flex-col rounded-xl bg-white dark:bg-slate-800 shadow-xl" onClick={e => e.stopPropagation()}>
 
         {/* ── Header ── */}
         <div className="bg-[#012061] px-6 py-4 flex items-center justify-between shrink-0 rounded-t-xl">
@@ -346,7 +346,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg border border-white/20 bg-white dark:bg-slate-800/10 p-1.5 text-slate-700 dark:text-white/60 hover:text-white hover:bg-white/20 transition-colors"
+            className="rounded-lg border border-white/20 bg-white dark:bg-slate-800/10 p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-700 dark:text-white/60 hover:text-white hover:bg-white/20 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -768,10 +768,10 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
           {/* ── Footer ── */}
           <div className="flex justify-end gap-2 px-5 md:px-6 py-4 border-t border-slate-100 dark:border-slate-700 shrink-0">
-            <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-[#012061] dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+            <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2.5 text-sm font-medium text-[#012061] dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
               Cancel
             </button>
-            <button type="submit" disabled={loading || !form.name} className="rounded-lg bg-[#f8931f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#e0841a] disabled:opacity-50 transition-colors inline-flex items-center gap-1.5">
+            <button type="submit" disabled={loading || !form.name} className="rounded-lg bg-[#f8931f] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#e0841a] disabled:opacity-50 transition-colors inline-flex items-center gap-1.5">
               {loading ? (isEdit ? 'Updating...' : 'Saving...') : (isEdit ? 'Update Asset' : 'Add Asset')}
             </button>
           </div>

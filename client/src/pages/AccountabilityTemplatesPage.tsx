@@ -1396,7 +1396,7 @@ export default function AccountabilityTemplatesPage() {
         {toasts.map(toast => (
           <div
             key={toast.id}
-            className={`px-4 py-3 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2 min-w-[280px] animate-[slideUp_0.3s_ease-out] ${
+            className={`px-4 py-3 rounded-lg shadow-lg text-sm font-medium flex items-center gap-2 min-w-0 sm:min-w-[280px] animate-[slideUp_0.3s_ease-out] ${
               toast.type === 'success'
                 ? 'bg-emerald-600 text-white'
                 : toast.type === 'error'

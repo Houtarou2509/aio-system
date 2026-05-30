@@ -28,7 +28,7 @@ function AccordionSection({
     <div className="border-b border-slate-100 dark:border-slate-700">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left"
+        className="w-full flex items-center gap-4 px-4 sm:px-6 py-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left"
       >
         <div className="flex items-center justify-center w-9 h-9 rounded-lg shrink-0 bg-[#012061]/10 dark:bg-slate-700/50">
           <Icon className="w-5 h-5" style={{ color: '#012061' }} />
@@ -42,7 +42,7 @@ function AccordionSection({
         />
       </button>
       {open && (
-        <div className="px-6 pb-4 pt-1 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="px-4 sm:px-6 pb-4 pt-1 bg-slate-50/50 dark:bg-slate-900/50">
           {children}
         </div>
       )}
@@ -95,7 +95,7 @@ function EmailTestInline() {
           value={email}
           onChange={e => setEmail(e.target.value)}
           placeholder="your@email.com"
-          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 w-48 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 w-full sm:w-48 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
         />
         <button
           onClick={handleTest}
@@ -149,7 +149,7 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col min-h-dvh pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
       {/* ── Header ── */}
-      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
+      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-4 sm:px-6 py-4 min-h-[56px]">
         <div className="flex items-center gap-3">
           <Settings2 className="h-6 w-6 text-[#f8931f]" />
           <div>
@@ -169,7 +169,7 @@ export default function SettingsPage() {
           subtitle="Password, two-factor authentication & account protection"
         >
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
                 <StatLine label="Password" value="Change anytime" color="#012061" />
                 <p className="text-[11px] text-slate-400 mt-1">Update your account password.</p>
@@ -177,7 +177,7 @@ export default function SettingsPage() {
               <QuickLink to="/change-password" icon={Lock} label="Change Password" />
             </div>
             <div className="border-t border-slate-200 dark:border-slate-700 pt-3" />
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
                 <StatLine label="2FA Status" value="Available" color="#0891b2" />
                 <p className="text-[11px] text-slate-400 mt-1">Add an extra layer of security to your account.</p>
@@ -209,7 +209,7 @@ export default function SettingsPage() {
           title="Users & Permissions"
           subtitle="Manage system accounts and access roles"
         >
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <p className="text-xs text-slate-500 dark:text-slate-400">Create, edit, and manage user accounts. Assign roles: Admin, Staff Admin, Staff, Guest.</p>
             <QuickLink to="/users" icon={Users} label="Manage Users" />
           </div>
@@ -222,7 +222,7 @@ export default function SettingsPage() {
           title="Audit & Compliance"
           subtitle="Activity logs, change tracking, and export history"
         >
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <p className="text-xs text-slate-500 dark:text-slate-400">Every create, update, delete, assign, and transfer is logged with timestamp and user tracking.</p>
             <QuickLink to="/audit" icon={History} label="View Audit Trail" />
           </div>
@@ -249,7 +249,7 @@ export default function SettingsPage() {
           subtitle="System alerts and email configuration"
         >
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
                 <p className="text-xs font-semibold" style={{ color: '#012061' }}>In-App Notifications</p>
                 <p className="text-[11px] text-slate-400">Warranty expirations, maintenance overdue alerts</p>

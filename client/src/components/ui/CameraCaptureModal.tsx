@@ -247,11 +247,11 @@ export function CameraCaptureModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60" onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
-      <div className={`bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full ${maxWidth} overflow-hidden`}>
+      <div className={`bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full ${maxWidth} mx-4 sm:mx-0 overflow-hidden`}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700" style={{ background: '#012061' }}>
           <h3 className="text-sm font-bold text-white">Take Photo</h3>
-          <button type="button" onClick={handleClose} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
+          <button type="button" onClick={handleClose} className="min-w-[44px] min-h-[44px] flex items-center justify-center text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-4">

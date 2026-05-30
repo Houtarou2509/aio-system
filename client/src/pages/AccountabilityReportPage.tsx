@@ -242,7 +242,7 @@ export default function AccountabilityReportPage() {
 
       {/* ═══ CONTENT AREA ════════════════════════════════════ */}
       <div className="flex-1 flex flex-col overflow-auto bg-slate-50 dark:bg-slate-900">
-      <div className="px-4 md:px-6 py-4 space-y-4">
+      <div className="px-4 sm:px-6 py-4 space-y-4">
 
       {/* Filters */}
       <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-4">
@@ -526,7 +526,7 @@ export default function AccountabilityReportPage() {
               <button
                 onClick={() => fetchReport(page - 1)}
                 disabled={page <= 1}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs rounded border border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1 px-2.5 py-2.5 text-xs rounded border border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="w-3.5 h-3.5" /> Prev
               </button>
@@ -536,7 +536,7 @@ export default function AccountabilityReportPage() {
               <button
                 onClick={() => fetchReport(page + 1)}
                 disabled={page >= totalPages}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs rounded border border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1 px-2.5 py-2.5 text-xs rounded border border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Next <ChevronRight className="w-3.5 h-3.5" />
               </button>

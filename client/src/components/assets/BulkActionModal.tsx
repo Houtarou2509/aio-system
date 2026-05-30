@@ -56,7 +56,7 @@ export default function BulkActionModal({ action, selectedCount, onClose, onAssi
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md p-6">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md mx-4 sm:mx-auto p-6">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
             {isAssign ? <Users className="w-5 h-5 text-[#f8931f]" /> : <MapPin className="w-5 h-5 text-[#f8931f]" />}

@@ -161,7 +161,7 @@ export default function MaintenanceCalendarPage() {
   return (
     <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
       {/* ═══ HEADER ═══════════════════════════════════════════ */}
-      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
+      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-4 sm:px-6 py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Wrench className="h-6 w-6 text-[#f8931f]" />
@@ -177,7 +177,7 @@ export default function MaintenanceCalendarPage() {
       <div className="flex-1 flex flex-col overflow-auto bg-light-bg dark:bg-slate-900">
 
         {/* ── KPI Tiles ── */}
-        <section className="px-6 pt-4 shrink-0">
+        <section className="px-4 sm:px-6 pt-4 shrink-0">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Pending */}
             <div className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
@@ -215,10 +215,10 @@ export default function MaintenanceCalendarPage() {
         </section>
 
         {/* ── Filter Bar ── */}
-        <section className="px-6 pt-3 pb-2 shrink-0">
+        <section className="px-4 sm:px-6 pt-3 pb-2 shrink-0">
           <div className="flex flex-row items-center gap-3 flex-wrap bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2.5">
             {/* Search */}
-            <div className="relative flex-1 min-w-[180px]">
+            <div className="relative flex-1 min-w-0 sm:min-w-[180px]">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
               <input
                 type="text"
@@ -246,7 +246,7 @@ export default function MaintenanceCalendarPage() {
         </section>
 
         {/* ── Schedule List ── */}
-        <div className="flex-1 overflow-auto px-6 pb-6">
+        <div className="flex-1 overflow-auto px-4 sm:px-6 pb-6">
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <div className="animate-spin h-8 w-8 border-2 border-[#f8931f] border-t-transparent rounded-full" />

@@ -12,7 +12,7 @@ import {
 import { useLookupOptions } from '@/hooks/useLookupOptions';
 import {
   Package, Search, ScanLine, Plus,
-  CheckCircle, Wrench, PackageOpen, X, Calendar, Trash2
+  CheckCircle, Wrench, PackageOpen, X, Calendar, Trash2, SlidersHorizontal
 } from 'lucide-react';
 import {
   setFocusSearchCallback,
@@ -84,6 +84,7 @@ export default function AssetsPage() {
 
   // Manufacturer client-side filter
   const [manufacturerFilter, setManufacturerFilter] = useState('');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -354,7 +355,7 @@ export default function AssetsPage() {
     <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
 
       {/* ═══ STICKY NAVY HEADER ═════════════════════════════ */}
-      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
+      <header className="sticky top-[56px] md:top-0 z-30 shrink-0 bg-[#012061] px-4 sm:px-6 py-3 sm:py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-4">
           {/* Left: Title */}
           <div className="flex items-center gap-3">
@@ -383,16 +384,16 @@ export default function AssetsPage() {
       <div className="flex-1 flex flex-col overflow-auto bg-light-bg dark:bg-slate-900">
 
       {/* ═══ KPI TILES ═══════════════════════════════════════ */}
-      <section className="px-4 sm:px-6 pt-4 shrink-0">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <section className="px-4 sm:px-6 pt-3 sm:pt-4 shrink-0">
+        <div className="grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3">
           {KPI_CARDS.map(({ key, label, icon: Icon, value }) => (
-            <div key={key} className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
-                <Icon className="h-5 w-5 text-[#f8931f]" />
+            <div key={key} className="flex items-center gap-2 sm:gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 sm:px-4 py-2 sm:py-3">
+              <div className="flex h-7 w-7 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-md sm:rounded-lg bg-[#f8931f]/10">
+                <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-[#f8931f]" />
               </div>
               <div className="min-w-0">
-                <p className="text-xl font-bold leading-tight text-[#f8931f]">{value}</p>
-                <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">{label}</p>
+                <p className="text-base sm:text-xl font-bold leading-tight text-[#f8931f]">{value}</p>
+                <p className="text-[9px] sm:text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">{label}</p>
               </div>
             </div>
           ))}
@@ -400,8 +401,84 @@ export default function AssetsPage() {
       </section>
 
       {/* ═══ HORIZONTAL FILTER BAR ══════════════════════════ */}
-      <section className="px-6 pt-3 pb-2 shrink-0">
-        <div className="flex flex-row items-center gap-4 flex-wrap bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2.5">
+      <section className="px-4 sm:px-6 pt-3 pb-2 shrink-0">
+        {/* Mobile: collapsible filter toggle */}
+        <div className="md:hidden flex items-center gap-2 mb-2">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search assets..."
+              value={filters.search || ''}
+              onChange={e => setFilters({ ...filters, search: e.target.value || undefined, page: 1 })}
+              className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 pl-9 pr-3 py-2 text-xs text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+            />
+          </div>
+          <button
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors shrink-0 ${
+              showMobileFilters || hasActiveFilters
+                ? 'border-[#f8931f] bg-[#f8931f]/10 text-[#f8931f]'
+                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+            }`}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Filters
+            {hasActiveFilters && <span className="ml-0.5 h-4 min-w-[16px] rounded-full bg-[#f8931f] text-[10px] font-bold text-white flex items-center justify-center px-1">{Object.values(filters).filter(v => v && v !== '' && v !== undefined).length + (manufacturerFilter ? 1 : 0)}</span>}
+          </button>
+        </div>
+
+        {/* Mobile: expanded filter panel */}
+        {showMobileFilters && (
+          <div className="md:hidden bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 mb-2 space-y-2.5">
+            <Select value={filters.type || ''} onValueChange={(val) => val != null && setFilters({ ...filters, type: val || undefined, page: 1 })}>
+              <SelectTrigger className="w-full h-9 text-xs bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700">
+                <SelectValue placeholder="Type: All" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Types</SelectItem>
+                {typeFilterOptions.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.value}>{opt.value}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <select value={filters.status || ''} onChange={e => setFilters({ ...filters, status: e.target.value || undefined, page: 1 })} className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-2 text-xs text-slate-700 dark:text-slate-300 h-9 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none">
+              <option value="">Status: All</option>
+              {ASSET_STATUSES.map(s => <option key={s} value={s}>{ASSET_STATUS_LABELS[s] || s}</option>)}
+            </select>
+            <select value={manufacturerFilter} onChange={e => setManufacturerFilter(e.target.value)} className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-2 text-xs text-slate-700 dark:text-slate-300 h-9 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none">
+              <option value="">Manufacturer: All</option>
+              {manufacturerOptions.map((opt) => (<option key={opt.id} value={opt.value}>{opt.value}</option>))}
+            </select>
+            <select value={filters.location || ''} onChange={e => setFilters({ ...filters, location: e.target.value || undefined, page: 1 })} className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-2 text-xs text-slate-700 dark:text-slate-300 h-9 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none">
+              <option value="">Location: All</option>
+              {locationOptions.map((opt) => (<option key={opt.id} value={opt.value}>{opt.value}</option>))}
+            </select>
+            <div className="flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <input type="date" placeholder="Purch From" value={filters.purchaseDateFrom || ''} onChange={e => setFilters({ ...filters, purchaseDateFrom: e.target.value || undefined, page: 1 })} className="flex-1 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2 py-2 text-[10px] text-slate-700 dark:text-slate-300 h-9 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none" />
+              <span className="text-slate-400 text-[10px]">-</span>
+              <input type="date" placeholder="Purch To" value={filters.purchaseDateTo || ''} onChange={e => setFilters({ ...filters, purchaseDateTo: e.target.value || undefined, page: 1 })} className="flex-1 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2 py-2 text-[10px] text-slate-700 dark:text-slate-300 h-9 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <input type="date" placeholder="Warranty From" value={filters.warrantyExpiryFrom || ''} onChange={e => setFilters({ ...filters, warrantyExpiryFrom: e.target.value || undefined, page: 1 })} className="flex-1 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2 py-2 text-[10px] text-slate-700 dark:text-slate-300 h-9 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none" />
+              <span className="text-slate-400 text-[10px]">-</span>
+              <input type="date" placeholder="Warranty To" value={filters.warrantyExpiryTo || ''} onChange={e => setFilters({ ...filters, warrantyExpiryTo: e.target.value || undefined, page: 1 })} className="flex-1 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2 py-2 text-[10px] text-slate-700 dark:text-slate-300 h-9 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none" />
+            </div>
+            <button onClick={() => { const now = new Date(); setFilters({ ...filters, warrantyExpiryFrom: now.toISOString().split('T')[0], warrantyExpiryTo: new Date(now.getTime() + 30*24*60*60*1000).toISOString().split('T')[0], page: 1 }); }} className={`w-full inline-flex items-center justify-center gap-1 rounded-md border px-2.5 py-2 text-[10px] font-semibold tracking-wide uppercase transition-colors h-9 ${filters.warrantyExpiryFrom && filters.warrantyExpiryTo ? 'border-[#f8931f] bg-[#f8931f]/10 text-[#f8931f] dark:text-[#f8931f]' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:border-[#f8931f] hover:text-[#f8931f]'}`}>
+              <Calendar className="h-3 w-3" /> Warranty Expiring
+            </button>
+            {hasActiveFilters && (
+              <button onClick={handleClearAllFilters} className="w-full inline-flex items-center justify-center gap-1 text-xs font-semibold text-[#012061] dark:text-slate-100 hover:underline py-1">
+                <X className="h-3 w-3" /> Clear All Filters
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Desktop: inline filter bar */}
+        <div className="hidden md:flex flex-row items-center gap-4 flex-wrap bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2.5">
           {/* Search — expands to fill available space */}
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
@@ -538,14 +615,14 @@ export default function AssetsPage() {
 
       {/* ═══ BULK ACTION TOOLBAR ════════════════════════════ */}
       {selectedIds.size > 0 && (
-        <div className="shrink-0 px-6 py-2 bg-[#012061]/5 dark:bg-slate-700/40 border-b border-[#012061]/10 flex items-center justify-between">
+        <div className="shrink-0 px-4 sm:px-6 py-2 bg-[#012061]/5 dark:bg-slate-700/40 border-b border-[#012061]/10 flex items-center justify-between">
           <span className="text-sm font-semibold text-[#012061] dark:text-slate-100">
             ☑ {selectedIds.size} asset{selectedIds.size !== 1 ? 's' : ''} selected
           </span>
-          <div className="flex items-center gap-2">
-            <div className="relative" ref={statusDropdownRef}>
+          <div className="flex items-center gap-2 overflow-x-auto flex-nowrap pb-1">
+            <div className="relative shrink-0" ref={statusDropdownRef}>
               <button onClick={() => setStatusDropdown(!statusDropdown)} disabled={bulkLoading}
-                className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50">Change Status ▾</button>
+                className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0">Change Status ▾</button>
               {statusDropdown && (
                 <div className="absolute right-0 mt-1 w-44 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg z-50 py-1">
                   {BULK_STATUS_OPTIONS.map(s => (
@@ -555,34 +632,34 @@ export default function AssetsPage() {
               )}
             </div>
             <button onClick={handlePrintQR} disabled={printLoading}
-              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50">
+              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0">
               {printLoading ? 'Generating...' : 'Print QR'}
             </button>
             <button onClick={() => setBulkAction('assign')} disabled={bulkLoading}
-              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50">
+              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0">
               Bulk Assign
             </button>
             <button onClick={() => setBulkAction('update')} disabled={bulkLoading}
-              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50">
+              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0">
               Bulk Update
             </button>
             <button onClick={handleExportCSV} disabled={exportLoading}
-              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50">
+              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0">
               {exportLoading ? 'Exporting...' : 'Export CSV'}
             </button>
             <PermissionGate permissions={['assets:delete']}>
               <button onClick={() => setConfirmDelete(true)} disabled={bulkLoading}
-                className="rounded-lg bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-50">Delete Selected</button>
+                className="rounded-lg bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-50 shrink-0">Delete Selected</button>
               <button onClick={() => {
                 const first = assets.find(a => selectedIds.has(a.id));
                 if (first) setDisposeTarget(first);
               }}
-                className="rounded-lg bg-[#7B1113] px-3 py-1 text-xs text-white hover:bg-[#6a0f11] disabled:opacity-50">
+                className="rounded-lg bg-[#7B1113] px-3 py-1 text-xs text-white hover:bg-[#6a0f11] disabled:opacity-50 shrink-0">
                 <Trash2 className="h-3 w-3 inline mr-1" />Dispose
               </button>
             </PermissionGate>
             <button onClick={deselectAll}
-              className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Deselect All</button>
+              className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 shrink-0">Deselect All</button>
           </div>
         </div>
       )}
@@ -590,7 +667,7 @@ export default function AssetsPage() {
       {/* Confirm delete modal */}
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-lg p-6 w-96">
+          <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-lg p-6 w-full max-w-sm mx-4 sm:mx-0">
             <h3 className="text-lg font-semibold mb-2 text-slate-900 dark:text-slate-100">Confirm Delete</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
               You are about to retire <strong className="text-slate-900 dark:text-slate-100">{selectedIds.size}</strong> asset{selectedIds.size !== 1 ? 's' : ''}.
@@ -608,13 +685,13 @@ export default function AssetsPage() {
 
       {/* Toast */}
       {toast && (
-        <div className="shrink-0 px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 text-sm text-[#012061] dark:text-slate-100 text-center font-medium">
+        <div className="shrink-0 px-4 sm:px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 text-sm text-[#012061] dark:text-slate-100 text-center font-medium">
           {toast}
         </div>
       )}
 
       {/* ═══ TABLE or EMPTY STATE (full width) ══════════════ */}
-      <div className="flex-1 overflow-auto px-6 py-4">
+      <div className="flex-1 overflow-auto px-4 sm:px-6 py-4">
         {loading && assets.length === 0 ? (
           <p className="text-slate-500 dark:text-slate-400 text-sm">Loading assets…</p>
         ) : !loading && displayAssets.length === 0 && !hasActiveFilters ? (
@@ -638,7 +715,7 @@ export default function AssetsPage() {
 
       {/* ═══ PAGINATION ════════════════════════════════════ */}
       {meta && meta.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 border-t border-slate-200 dark:border-slate-700 px-6 py-2 shrink-0 bg-white dark:bg-slate-800">
+        <div className="flex items-center justify-center gap-2 border-t border-slate-200 dark:border-slate-700 px-4 sm:px-6 py-2 shrink-0 bg-white dark:bg-slate-800">
           <button className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
             disabled={meta.page <= 1} onClick={() => setFilters({ ...filters, page: meta.page - 1 })}>Prev</button>
           <span className="text-sm text-slate-500 dark:text-slate-400">Page {meta.page} of {meta.totalPages}</span>

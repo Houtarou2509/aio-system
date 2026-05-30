@@ -142,12 +142,12 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
     <>
       <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
         <DialogContent
-          className="sm:max-w-6xl h-screen md:h-[700px] flex flex-col p-0 gap-0 overflow-hidden"
+          className="sm:max-w-6xl h-[100dvh] md:h-[700px] flex flex-col p-0 gap-0 overflow-hidden"
           showCloseButton={false}
         >
           {/* ─── Header Bar ─── */}
           <div className="bg-[#012061] px-6 py-4 shrink-0">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-3">
                 <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#f8931f] text-white">
                   <Package className="w-5 h-5" />
@@ -164,7 +164,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                 <PermissionGate permissions={['assets:edit']}>
                   <button
                     onClick={() => onEdit(asset)}
-                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-colors inline-flex items-center gap-1"
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-colors inline-flex items-center gap-1 shrink-0 min-w-[44px] min-h-[44px]"
                     style={{ backgroundColor: '#f8931f' }}
                   >
                     <Pencil className="w-3 h-3" />
@@ -175,7 +175,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                   <PermissionGate permissions={['assets:delete']}>
                   <button
                     onClick={() => { onDispose(asset); }}
-                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-colors inline-flex items-center gap-1"
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-colors inline-flex items-center gap-1 shrink-0 min-w-[44px] min-h-[44px]"
                     style={{ backgroundColor: '#7B1113' }}
                     title="Dispose this asset"
                   >
@@ -186,7 +186,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                   )}
                 <button
                   onClick={onClose}
-                  className="rounded-lg border border-white/20 bg-white dark:bg-slate-800/10 p-1.5 text-slate-700 dark:text-white/60 hover:text-white hover:bg-white/20 transition-colors"
+                  className="rounded-lg border border-white/20 bg-white dark:bg-slate-800/10 p-1.5 text-slate-700 dark:text-white/60 hover:text-white hover:bg-white/20 transition-colors shrink-0 min-w-[44px] min-h-[44px]"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -201,7 +201,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
             className="flex-1 flex flex-col min-h-0"
           >
             <div className="px-6 pt-3 shrink-0 border-b border-slate-100 dark:border-slate-700">
-              <TabsList variant="line" className="w-full justify-start gap-0">
+              <TabsList variant="line" className="w-full justify-start gap-0 overflow-x-auto flex-nowrap">
                 {[
                   { value: 'overview', label: 'Overview', icon: Info },
                   ...(!isGuest ? [{ value: 'financials', label: 'Financials', icon: DollarSign }] : []),
@@ -213,7 +213,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                   <TabsTrigger
                     key={t.value}
                     value={t.value}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium capitalize data-active:text-[#f8931f] data-active:after:bg-[#f8931f] hover:text-[#f8931f]"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium capitalize whitespace-nowrap data-active:text-[#f8931f] data-active:after:bg-[#f8931f] hover:text-[#f8931f]"
                   >
                     <t.icon className="w-3.5 h-3.5" />
                     {t.label}

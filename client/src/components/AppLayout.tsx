@@ -124,13 +124,13 @@ export default function AppLayout() {
       </aside>
 
       {/* ── Mobile Header ── */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between bg-[#012061] px-4 py-4 min-h-[56px]">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between bg-[#012061] px-4 py-3 min-h-[56px]" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
         <h1 className="text-lg font-bold tracking-tight text-[#f8931f]">AIO System</h1>
         <div className="flex items-center gap-2">
           <div className="relative z-50">
             <NotificationBell />
           </div>
-          <button onClick={() => setMobileOpen(!mobileOpen)} className="text-white/70 hover:text-white">
+          <button onClick={() => setMobileOpen(!mobileOpen)} className="text-white/70 hover:text-white p-2 -mr-2 min-w-[44px] min-h-[44px] flex items-center justify-center">
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>

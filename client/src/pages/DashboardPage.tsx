@@ -274,7 +274,7 @@ function BentoCard({ children, className = '' }: { children: React.ReactNode; cl
 function BentoCardTitle({ icon: Icon, children, accent = '#f8931f', linkTo, linkLabel }: { icon: React.ElementType; children: React.ReactNode; accent?: string; linkTo?: string; linkLabel?: string }) {
   const navigate = useNavigate();
   return (
-    <div className="px-5 pt-4 pb-3 flex items-center justify-between">
+    <div className="px-4 sm:px-5 pt-4 pb-3 flex items-center justify-between">
       <div className="flex items-center gap-2.5">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: `${accent}15` }}>
           <Icon className="h-4 w-4" style={{ color: accent }} />
@@ -330,8 +330,8 @@ function KpiBar() {
     return (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 px-4 py-4 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-xl border border-slate-100 dark:border-slate-700 border-l-4 border-l-slate-200 dark:border-l-slate-600 animate-pulse">
-            <div className="h-10 w-10 rounded-lg bg-slate-100 dark:bg-slate-700" />
+          <div key={i} className="flex items-center gap-3 px-3 py-2 sm:px-4 sm:py-4 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-xl border border-slate-100 dark:border-slate-700 border-l-4 border-l-slate-200 dark:border-l-slate-600 animate-pulse">
+            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-slate-100 dark:bg-slate-700" />
             <div className="space-y-2">
               <div className="h-6 w-14 rounded bg-slate-100 dark:bg-slate-700" />
               <div className="h-2.5 w-16 rounded bg-slate-100 dark:bg-slate-700" />
@@ -348,18 +348,18 @@ function KpiBar() {
         <div
           key={key}
           onClick={() => navigate(KPI_ROUTES[key] || '/assets')}
-          className="group flex items-center gap-3 px-4 py-4 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-xl border border-slate-100 dark:border-slate-700 transition-all duration-200 hover:bg-white dark:hover:bg-slate-700/80 hover:shadow-lg hover:border-slate-200 dark:hover:border-slate-600 hover:ring-1 hover:ring-slate-200/60 dark:hover:ring-slate-600/40 cursor-pointer"
+          className="group flex items-center gap-3 px-3 py-2 sm:px-4 sm:py-4 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-xl border border-slate-100 dark:border-slate-700 transition-all duration-200 hover:bg-white dark:hover:bg-slate-700/80 hover:shadow-lg hover:border-slate-200 dark:hover:border-slate-600 hover:ring-1 hover:ring-slate-200/60 dark:hover:ring-slate-600/40 cursor-pointer"
           style={{ borderLeftWidth: '4px', borderLeftColor: color }}
           title={`Go to ${label.toLowerCase()}`}
         >
           <div
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors duration-200"
+            className="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg transition-colors duration-200"
             style={{ backgroundColor: `${color}12` }}
           >
-            <Icon className="h-5 w-5" style={{ color }} />
+            <Icon className="h-4 w-4 sm:h-5 sm:w-5" style={{ color }} />
           </div>
           <div className="min-w-0">
-            <p className="text-2xl font-bold tabular-nums leading-tight text-slate-900 dark:text-slate-100">{data[key]}</p>
+            <p className="text-lg sm:text-2xl font-bold tabular-nums leading-tight text-slate-900 dark:text-slate-100">{data[key]}</p>
             <p className="text-[10px] tracking-widest text-slate-400 dark:text-slate-500 uppercase font-medium">{label}</p>
           </div>
         </div>
@@ -503,7 +503,7 @@ export default function DashboardPage() {
         return (
           <BentoCard>
             <BentoCardTitle icon={PieChart} accent="#014da3" linkTo="/assets" linkLabel="View assets">Status Distribution</BentoCardTitle>
-            <div className="px-5 pb-4 h-48 flex items-center justify-center">
+            <div className="px-4 sm:px-5 pb-4 h-48 flex items-center justify-center">
               {statusData && Object.keys(data!.byStatus).length > 0 ? (
                 <Doughnut
                   data={statusData}
@@ -520,7 +520,7 @@ export default function DashboardPage() {
         return (
           <BentoCard>
             <BentoCardTitle icon={BarChart3} accent="#014da3" linkTo="/assets" linkLabel="View assets">Assets by Type</BentoCardTitle>
-            <div className="px-5 pb-4 h-48 flex items-center justify-center">
+            <div className="px-4 sm:px-5 pb-4 h-48 flex items-center justify-center">
               {typeData && Object.keys(data!.byType).length > 0 ? (
                 <Bar
                   data={typeData}
@@ -544,7 +544,7 @@ export default function DashboardPage() {
         return (
           <BentoCard className="flex flex-col">
             <BentoCardTitle icon={ShieldAlert} accent="#7B1113" linkTo="/maintenance" linkLabel="View maintenance">Warranty & Maintenance</BentoCardTitle>
-            <div className="flex-1 px-5 pb-4 overflow-y-auto space-y-1 min-h-0 h-48" style={{ scrollbarWidth: 'thin' }}>
+            <div className="flex-1 px-4 sm:px-5 pb-4 overflow-y-auto space-y-1 min-h-0 h-48" style={{ scrollbarWidth: 'thin' }}>
               <div className="flex items-center gap-1.5 pt-0.5 pb-1">
                 <Wrench className="h-3 w-3 shrink-0 text-[#f8931f]" />
                 <span className="text-[10px] tracking-widest text-slate-400 dark:text-slate-500 uppercase font-medium">Maintenance</span>
@@ -600,7 +600,7 @@ export default function DashboardPage() {
         return (
           <BentoCard>
             <BentoCardTitle icon={Layers} accent="#014da3" linkTo="/assets" linkLabel="View assets">Assets by Location</BentoCardTitle>
-            <div className="px-5 pb-4 h-44 flex items-center justify-center">
+            <div className="px-4 sm:px-5 pb-4 h-44 flex items-center justify-center">
               {locationStats.length === 0 ? (
                 <div className="flex flex-col items-center gap-2">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700">
@@ -638,7 +638,7 @@ export default function DashboardPage() {
         return (
           <BentoCard>
             <BentoCardTitle icon={PieChart} accent="#014da3" linkTo="/assets" linkLabel="View assets">Assets by Age</BentoCardTitle>
-            <div className="px-5 pb-4 h-44 flex items-center justify-center">
+            <div className="px-4 sm:px-5 pb-4 h-44 flex items-center justify-center">
               {ageStats.length === 0 ? (
                 <div className="flex flex-col items-center gap-2">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700">
@@ -667,7 +667,7 @@ export default function DashboardPage() {
         return (
           <BentoCard className="flex flex-col">
             <BentoCardTitle icon={Activity} accent="#014da3" linkTo="/audit" linkLabel="View audit log">Activity Timeline</BentoCardTitle>
-            <div className="flex-1 px-5 pb-4 overflow-y-auto" style={{ scrollbarWidth: 'thin', maxHeight: 400 }}>
+            <div className="flex-1 px-4 sm:px-5 pb-4 overflow-y-auto max-h-64 sm:max-h-[400px]" style={{ scrollbarWidth: 'thin' }}>
               {data!.activityFeed.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-center">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 mb-3">
@@ -752,11 +752,11 @@ export default function DashboardPage() {
 
           {/* Right: quick actions — primary always visible, secondary collapse on small screens */}
           <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
-            <button onClick={() => navigate('/assets')} title="Go to Assets page" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200">
+            <button onClick={() => navigate('/assets')} title="Go to Assets page" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2.5 sm:py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200">
               <Package className="h-3.5 w-3.5 text-[#f8931f]" />
               <span className="hidden sm:inline">Assets</span>
             </button>
-            <button onClick={() => navigate('/assets?action=scan')} title="Scan barcode or QR code" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200">
+            <button onClick={() => navigate('/assets?action=scan')} title="Scan barcode or QR code" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2.5 sm:py-2 text-xs font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200">
               <ScanLine className="h-3.5 w-3.5 text-[#f8931f]" />
               <span className="hidden sm:inline">Scan</span>
             </button>
@@ -769,7 +769,7 @@ export default function DashboardPage() {
             {/* Live / Paused indicator */}
             <button
               onClick={() => setLiveEnabled(v => !v)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 transition-all duration-300 ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 sm:py-1 transition-all duration-300 ${
                 liveEnabled
                   ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
@@ -808,7 +808,7 @@ export default function DashboardPage() {
       {warrantyStats && warrantyStats.warrantiesExpiringSoon > 0 && (
         <section className="px-4 sm:px-6 pt-3 pb-1">
           <div className="rounded-xl border-2 border-[#f8931f]/40 bg-gradient-to-r from-[#f8931f]/8 via-[#f8931f]/4 to-transparent dark:from-[#f8931f]/10 dark:via-[#f8931f]/5 dark:to-transparent overflow-hidden">
-            <div className="px-5 pt-4 pb-3 flex items-center gap-3">
+            <div className="px-4 sm:px-5 pt-4 pb-3 flex items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/15">
                 <AlertTriangle className="h-5 w-5 text-[#f8931f]" />
               </div>
@@ -819,7 +819,7 @@ export default function DashboardPage() {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">These assets will fall out of warranty soon</p>
               </div>
             </div>
-            <div className="px-5 pb-3 space-y-1.5">
+            <div className="px-4 sm:px-5 pb-3 space-y-1.5">
               {warrantyStats.warrantiesExpiringSoonList.slice(0, 5).map(a => (
                 <div key={a.id} className="flex flex-col sm:flex-row sm:items-center justify-between rounded-lg bg-white/60 dark:bg-slate-800/60 px-3 py-2 border border-[#f8931f]/10 dark:border-[#f8931f]/20 gap-1 sm:gap-0">
                   <div className="flex items-center gap-2 min-w-0">
@@ -841,7 +841,7 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
-            <div className="px-5 pb-4 pt-1">
+            <div className="px-4 sm:px-5 pb-4 pt-1">
               <button
                 onClick={() => navigate('/assets?warrantyExpiring=1')}
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#f8931f] hover:text-[#e0841a] transition-colors"
@@ -856,7 +856,7 @@ export default function DashboardPage() {
       {warrantyStats && warrantyStats.warrantiesExpired > 0 && (
         <section className="px-4 sm:px-6 pt-3 pb-1">
           <div className="rounded-xl border-2 border-[#7B1113]/40 bg-gradient-to-r from-[#7B1113]/8 via-[#7B1113]/4 to-transparent dark:from-[#7B1113]/10 dark:via-[#7B1113]/5 dark:to-transparent overflow-hidden">
-            <div className="px-5 pt-4 pb-3 flex items-center gap-3">
+            <div className="px-4 sm:px-5 pt-4 pb-3 flex items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#7B1113]/15">
                 <ShieldAlert className="h-5 w-5 text-[#7B1113]" />
               </div>
@@ -867,7 +867,7 @@ export default function DashboardPage() {
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">These assets are past warranty — repairs may not be covered</p>
               </div>
             </div>
-            <div className="px-5 pb-3">
+            <div className="px-4 sm:px-5 pb-3">
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {warrantyStats.warrantiesExpired} active asset{warrantyStats.warrantiesExpired !== 1 ? 's' : ''} with expired warranties.{' '}
                 <button onClick={() => navigate('/assets?warrantyExpired=1')} className="inline-flex items-center gap-1 text-[#7B1113] font-semibold hover:underline">

@@ -94,7 +94,7 @@ export function DisposeAssetModal({ asset, onClose, onDisposed }: Props) {
       <>
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} />
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md mx-4 sm:mx-auto overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-[#7B1113]">
               <div className="flex items-center gap-2.5">
                 <Ban className="h-4 w-4 text-white" />
@@ -139,7 +139,7 @@ export function DisposeAssetModal({ asset, onClose, onDisposed }: Props) {
       <>
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} />
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md mx-4 sm:mx-auto overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-[#7B1113]">
               <div className="flex items-center gap-2.5">
                 <FileWarning className="h-4 w-4 text-white" />
@@ -184,7 +184,7 @@ export function DisposeAssetModal({ asset, onClose, onDisposed }: Props) {
       <>
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={resetGuard} />
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md mx-4 sm:mx-auto overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-[#f8931f]">
               <div className="flex items-center gap-2.5">
                 <AlertTriangle className="h-4 w-4 text-white" />

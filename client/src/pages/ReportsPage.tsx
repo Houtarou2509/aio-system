@@ -58,7 +58,7 @@ function BentoCard({ children, className = '', as: Component = 'div', ...props }
 
 function BentoCardTitle({ icon: Icon, children, accent = '#014da3', onExport, exportLabel }: { icon: React.ElementType; children: React.ReactNode; accent?: string; onExport?: () => void; exportLabel?: string }) {
   return (
-    <div className="px-5 pt-4 pb-3 flex items-center justify-between">
+    <div className="px-4 sm:px-5 pt-4 pb-3 flex items-center justify-between flex-wrap gap-2">
       <div className="flex items-center gap-2.5">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: `${accent}15` }}>
           <Icon className="h-4 w-4" style={{ color: accent }} />
@@ -268,7 +268,7 @@ export default function ReportsPage() {
     <div className="min-h-dvh bg-[#f1f3f5] dark:bg-slate-900">
       {/* ═══ NAVY HEADER ══════════════════════════════════ */}
       <header className="sticky top-0 z-30 bg-[#012061] shadow-[0_1px_0_#f8931f,0_4px_16px_rgba(1,32,97,0.3)]">
-        <div className="flex items-center justify-between px-6 py-3">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/15">
               <BarChart3 className="h-5 w-5 text-[#f8931f]" />
@@ -394,7 +394,7 @@ export default function ReportsPage() {
               {/* ── Inventory Valuation ───────────────────── */}
               <BentoCard as="button" className={cardHoverLink} onClick={() => navigate('/aio-system/assets')}>
                 <BentoCardTitle icon={DollarSign} accent="#014da3" onExport={exportValuation} exportLabel="Export inventory valuation">Inventory Valuation</BentoCardTitle>
-                <div className="px-5 pb-5">
+                <div className="px-4 sm:px-5 pb-5">
                   {valuation ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Stats */}
@@ -443,7 +443,7 @@ export default function ReportsPage() {
               {/* ── Asset Utilization ──────────────────────── */}
               <BentoCard as="button" className={cardHoverLink} onClick={() => navigate('/aio-system/issuances')}>
                 <BentoCardTitle icon={TrendingUp} accent="#014da3" onExport={exportUtilization} exportLabel="Export top utilized assets">Top Utilized Assets</BentoCardTitle>
-                <div className="px-5 pb-5">
+                <div className="px-4 sm:px-5 pb-5">
                   {utilization && utilization.topUtilized.length > 0 ? (
                     <div className="min-h-[280px]">
                       <Bar
@@ -495,7 +495,7 @@ export default function ReportsPage() {
               {/* ── Maintenance Cost Analysis ─────────────── */}
               <BentoCard as="button" className={cardHoverLink} onClick={() => navigate('/aio-system/maintenance-calendar')}>
                 <BentoCardTitle icon={Wrench} accent="#014da3" onExport={exportMaintenance} exportLabel="Export maintenance cost analysis">Maintenance Cost Analysis</BentoCardTitle>
-                <div className="px-5 pb-5">
+                <div className="px-4 sm:px-5 pb-5">
                   {maintenanceCosts && maintenanceCosts.totalCost > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Summary */}
@@ -550,7 +550,7 @@ export default function ReportsPage() {
               {/* ── Asset Age Distribution ────────────────── */}
               <BentoCard as="button" className={cardHoverLink} onClick={() => navigate('/aio-system/assets')}>
                 <BentoCardTitle icon={Package} accent="#014da3">Age Distribution</BentoCardTitle>
-                <div className="px-5 pb-5">
+                <div className="px-4 sm:px-5 pb-5">
                   {ageStats.length > 0 ? (
                     <div className="min-h-[260px] flex items-center justify-center">
                       <Doughnut
@@ -588,7 +588,7 @@ export default function ReportsPage() {
             {/* ═══ ROW 3: Maintenance Costs (system-wide summary) ═══ */}
             <BentoCard>
               <BentoCardTitle icon={DollarSign} accent="#012061" onExport={exportCostSummary} exportLabel="Export maintenance costs summary">Maintenance Costs Summary</BentoCardTitle>
-              <div className="px-5 pb-5">
+              <div className="px-4 sm:px-5 pb-5">
                 {/* ── Date Range Filter ─── */}
                 <div className="flex flex-wrap items-end gap-3 mb-4 pb-4 border-b border-slate-100 dark:border-slate-700">
                   <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
@@ -672,7 +672,7 @@ export default function ReportsPage() {
                           Top 10 Most Expensive Assets
                         </div>
                         {costSummary.topCostAssets.length > 0 ? (
-                          <div className="rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+                          <div className="rounded-xl border border-slate-100 dark:border-slate-700 overflow-x-auto">
                             <table className="w-full text-xs">
                               <thead>
                                 <tr className="bg-[#012061]">

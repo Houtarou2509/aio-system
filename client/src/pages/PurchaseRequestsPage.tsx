@@ -276,7 +276,7 @@ function ConvertDialog({
 function SuccessToast({ assetId, onDismiss }: { assetId: string; onDismiss: () => void }) {
   const navigate = useNavigate();
   return (
-    <div className="shrink-0 px-6 py-2.5 bg-emerald-50 dark:bg-emerald-950/50 border-b border-emerald-200 dark:border-emerald-800 text-sm text-emerald-800 dark:text-emerald-200 text-center font-medium flex items-center justify-center gap-3">
+    <div className="shrink-0 px-4 sm:px-6 py-2.5 bg-emerald-50 dark:bg-emerald-950/50 border-b border-emerald-200 dark:border-emerald-800 text-sm text-emerald-800 dark:text-emerald-200 text-center font-medium flex items-center justify-center gap-3">
       <span>Asset created successfully from purchase request.</span>
       <button
         onClick={() => { navigate(`/assets?highlight=${assetId}`); onDismiss(); }}
@@ -406,7 +406,7 @@ export default function PurchaseRequestsPage() {
   return (
     <div className="min-h-dvh flex flex-col pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
       {/* ── Header ── */}
-      <header className="sticky top-0 z-10 bg-[#012061] px-6 py-4 flex items-center justify-between shadow-md">
+      <header className="sticky top-[56px] md:top-0 z-10 bg-[#012061] px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shadow-md">
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-[#f8931f] text-white">
             <ShoppingCart className="w-4 h-4" />
@@ -431,13 +431,13 @@ export default function PurchaseRequestsPage() {
 
       {/* ── Regular Toast ── */}
       {toast && !successAssetId && (
-        <div className="shrink-0 px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 text-sm text-[#012061] dark:text-slate-100 text-center font-medium">
+        <div className="shrink-0 px-4 sm:px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 text-sm text-[#012061] dark:text-slate-100 text-center font-medium">
           {toast}
         </div>
       )}
 
       {/* ── Table / Empty State ── */}
-      <div className="flex-1 overflow-auto px-6 py-4">
+      <div className="flex-1 overflow-auto px-4 sm:px-6 py-4">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 text-[#f8931f] animate-spin" />

@@ -243,7 +243,7 @@ export default function QRScannerModal({ open, onClose, onAssetResolved }: Props
           <button
             onClick={handleClose}
             disabled={isClosing}
-            className="text-gray-400 hover:text-gray-700 text-lg leading-none disabled:opacity-50"
+            className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-700 text-lg leading-none disabled:opacity-50"
           >
             ✕
           </button>

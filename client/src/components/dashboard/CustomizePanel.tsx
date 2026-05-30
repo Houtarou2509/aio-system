@@ -48,11 +48,11 @@ export function CustomizePanel({ prefs, onSave, onClose }: Props) {
       <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
       {/* Panel */}
-      <div className="fixed right-0 top-0 bottom-0 z-50 w-80 bg-white dark:bg-slate-800 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col">
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full sm:w-80 bg-white dark:bg-slate-800 shadow-2xl border-l border-slate-200 dark:border-slate-700 flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700">
           <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight">Customize Dashboard</h2>
-          <button onClick={onClose} className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+          <button onClick={onClose} className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -92,13 +92,13 @@ export function CustomizePanel({ prefs, onSave, onClose }: Props) {
                 {/* Toggle switch */}
                 <button
                   onClick={() => toggle(pref.id)}
-                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
+                  className={`relative inline-flex h-6 w-11 sm:h-5 sm:w-9 shrink-0 items-center rounded-full transition-colors duration-200 ${
                     pref.visible ? 'bg-[#f8931f]' : 'bg-slate-200 dark:bg-slate-700'
                   }`}
                 >
                   <span
-                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                      pref.visible ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                    className={`inline-block h-4 w-4 sm:h-3.5 sm:w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                      pref.visible ? 'translate-x-[22px] sm:translate-x-[18px]' : 'translate-x-[4px] sm:translate-x-[3px]'
                     }`}
                   />
                 </button>
@@ -108,16 +108,16 @@ export function CustomizePanel({ prefs, onSave, onClose }: Props) {
                   <button
                     onClick={() => moveUp(i)}
                     disabled={i === 0}
-                    className="p-0.5 rounded text-slate-300 dark:text-slate-600 hover:text-[#f8931f] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="p-1.5 rounded text-slate-300 dark:text-slate-600 hover:text-[#f8931f] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
-                    <ChevronUp className="h-3 w-3" />
+                    <ChevronUp className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={() => moveDown(i)}
                     disabled={i === draft.length - 1}
-                    className="p-0.5 rounded text-slate-300 dark:text-slate-600 hover:text-[#f8931f] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    className="p-1.5 rounded text-slate-300 dark:text-slate-600 hover:text-[#f8931f] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
-                    <ChevronDown className="h-3 w-3" />
+                    <ChevronDown className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>

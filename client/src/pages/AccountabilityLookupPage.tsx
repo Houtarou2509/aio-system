@@ -444,7 +444,7 @@ export default function AccountabilityLookupPage() {
                 <button
                   key={f}
                   onClick={() => setStatusFilter(f)}
-                  className={`rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                  className={`rounded-md px-3 py-2 text-[11px] font-medium transition-colors ${
                     statusFilter === f
                       ? 'bg-[#012061] text-white'
                       : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'

@@ -193,7 +193,7 @@ function ReturnStationModal({ open, onClose, onSave }: { open: boolean; onClose:
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 sm:mx-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b rounded-t-xl" style={{ background: '#012061' }}>
           <div className="flex items-center gap-2">
             <QrCode className="w-5 h-5 text-[#f8931f]" />
@@ -631,7 +631,7 @@ export default function IssuancesPage() {
     <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
 
       {/* ═══ STICKY NAVY HEADER ═════════════════════════════ */}
-      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
+      <header className="sticky top-[56px] md:top-0 z-30 shrink-0 bg-[#012061] px-4 sm:px-6 py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-4">
           {/* Left: Title */}
           <div className="flex items-center gap-3">
@@ -675,17 +675,17 @@ export default function IssuancesPage() {
 
       {/* Pre-filter banner */}
       {preFilterPersonnel && (
-        <div className="shrink-0 px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 flex items-center justify-between">
+        <div className="shrink-0 px-4 sm:px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 flex items-center justify-between">
           <span className="text-xs font-semibold text-[#f8931f]">Filtered by profile — showing only this person's active issuances</span>
           <a href="/issuances" className="text-xs font-semibold text-[#012061] hover:underline">Clear filter</a>
         </div>
       )}
 
       {/* ═══ HORIZONTAL FILTER BAR ══════════════════════════ */}
-      <section className="px-6 pt-3 pb-2 shrink-0">
-        <div className="flex flex-row items-center gap-4 flex-wrap bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2.5">
+      <section className="px-4 sm:px-6 pt-3 pb-2 shrink-0">
+        <div className="flex flex-row items-center gap-2 sm:gap-4 flex-wrap sm:flex-nowrap bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2.5">
           {/* Search */}
-          <div className="relative flex-1 min-w-[200px]">
+          <div className="relative flex-1 min-w-0 sm:min-w-[200px]">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             <input
               type="text"
@@ -711,7 +711,7 @@ export default function IssuancesPage() {
 
       {/* ═══ BULK ACTION TOOLBAR ════════════════════════════ */}
       {selectedIds.size > 0 && (
-        <div className="shrink-0 px-6 py-2 bg-[#012061]/5 dark:bg-slate-700/40 border-b border-[#012061]/10 flex items-center justify-between">
+        <div className="shrink-0 px-4 sm:px-6 py-2 bg-[#012061]/5 dark:bg-slate-700/40 border-b border-[#012061]/10 flex items-center justify-between">
           <span className="text-sm font-semibold text-[#012061] dark:text-slate-100">
             ☑ {selectedIds.size} issuance{selectedIds.size !== 1 ? 's' : ''} selected
           </span>
@@ -732,13 +732,13 @@ export default function IssuancesPage() {
 
       {/* Toast */}
       {toast && (
-        <div className="shrink-0 px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 text-sm text-[#012061] dark:text-slate-100 text-center font-medium">
+        <div className="shrink-0 px-4 sm:px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 text-sm text-[#012061] dark:text-slate-100 text-center font-medium">
           {toast}
         </div>
       )}
 
       {/* ═══ TABLE or EMPTY STATE ═══════════════════════════ */}
-      <div className="flex-1 overflow-auto px-6 py-4">
+      <div className="flex-1 overflow-auto px-4 sm:px-6 py-4">
         {loading ? (
           <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 text-slate-400 animate-spin" /></div>
         ) : issuances.length === 0 ? (
@@ -1217,7 +1217,7 @@ export default function IssuancesPage() {
 
       {/* ═══ PAGINATION ════════════════════════════════════ */}
       {meta && meta.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 border-t border-slate-200 dark:border-slate-700 px-6 py-2 shrink-0 bg-white dark:bg-slate-800">
+        <div className="flex items-center justify-center gap-2 border-t border-slate-200 dark:border-slate-700 px-4 sm:px-6 py-2 shrink-0 bg-white dark:bg-slate-800">
           <button className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
             disabled={meta.page <= 1 || loading} onClick={() => setPage(Math.max(1, meta.page - 1))}>Prev</button>
           <span className="text-sm text-slate-500 dark:text-slate-400">Page {meta.page} of {meta.totalPages}</span>
@@ -1231,7 +1231,7 @@ export default function IssuancesPage() {
       <ReturnStationModal open={showReturn} onClose={() => setShowReturn(false)} onSave={fetchIssuances} />
       <QRReturnScanner open={showQRReturn} onClose={() => setShowQRReturn(false)} onReturned={fetchIssuances} />
       <Dialog open={returnTargets.length > 0} onOpenChange={(open) => { if (!open) closeReturnModal(); }}>
-        <DialogContent showCloseButton={false} className="max-w-lg overflow-hidden rounded-xl border-0 bg-white p-0 shadow-2xl dark:bg-slate-900">
+        <DialogContent showCloseButton={false} className="w-full max-w-lg sm:mx-4 overflow-hidden rounded-xl border-0 bg-white p-0 shadow-2xl dark:bg-slate-900">
           <div className="flex items-center justify-between px-5 py-4" style={{ background: '#012061' }}>
             <DialogHeader className="gap-0">
               <div className="flex items-center gap-2">
@@ -1325,7 +1325,7 @@ export default function IssuancesPage() {
       </Dialog>
       {signingTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setSigningTarget(null)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 sm:mx-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b rounded-t-xl" style={{ background: '#012061' }}>
               <div className="flex items-center gap-2">
                 <PenLine className="w-5 h-5 text-[#f8931f]" />
@@ -1354,7 +1354,7 @@ export default function IssuancesPage() {
       )}
       {/* ─── Transfer Modal ─── */}
       <Dialog open={!!transferTarget} onOpenChange={(open) => { if (!open) closeTransferModal(); }}>
-        <DialogContent showCloseButton={false} className="max-w-lg overflow-hidden rounded-xl border-0 bg-white p-0 shadow-2xl dark:bg-slate-900">
+        <DialogContent showCloseButton={false} className="w-full max-w-lg sm:mx-4 overflow-hidden rounded-xl border-0 bg-white p-0 shadow-2xl dark:bg-slate-900">
           <div className="flex items-center justify-between px-5 py-4" style={{ background: '#012061' }}>
             <DialogHeader className="gap-0">
               <div className="flex items-center gap-2">

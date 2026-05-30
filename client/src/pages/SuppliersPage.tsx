@@ -47,7 +47,7 @@ function Skeleton() {
       <div className="animate-pulse">
         <div className="h-10 bg-[#012061] rounded-t-lg" />
         {[1, 2, 3, 4, 5].map(i => (
-          <div key={i} className="flex gap-4 px-6 py-3 border-b border-slate-100 dark:border-slate-700">
+          <div key={i} className="flex gap-4 px-4 sm:px-6 py-3 border-b border-slate-100 dark:border-slate-700">
             <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded flex-1" />
             <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-24" />
             <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-32" />
@@ -96,7 +96,7 @@ function DeleteConfirmModal({
             </p>
           )}
         </div>
-        <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-100 dark:border-slate-700">
+        <div className="flex justify-end gap-2 px-4 sm:px-6 py-4 border-t border-slate-100 dark:border-slate-700">
           <button
             onClick={onClose}
             className="rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm font-medium text-[#012061] dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
@@ -184,7 +184,7 @@ export default function SuppliersPage() {
     <div className="min-h-dvh bg-[#f1f3f5] dark:bg-slate-900">
       {/* ═══ NAVY HEADER ══════════════════════════════════ */}
       <header className="sticky top-0 z-30 bg-[#012061] shadow-[0_1px_0_#f8931f,0_4px_16px_rgba(1,32,97,0.3)]">
-        <div className="flex items-center justify-between px-6 py-3">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/15">
               <Truck className="h-5 w-5 text-[#f8931f]" />
@@ -205,7 +205,7 @@ export default function SuppliersPage() {
         </div>
       </header>
 
-      <div className="px-6 py-4">
+      <div className="px-4 sm:px-6 py-4">
         {loading ? (
           <Skeleton />
         ) : suppliers.length === 0 ? (

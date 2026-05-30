@@ -157,7 +157,7 @@ export default function NotificationsPage() {
     <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
 
       {/* ═══ STICKY NAVY HEADER ═════════════════════════════ */}
-      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
+      <header className="sticky top-[56px] md:top-0 z-30 shrink-0 bg-[#012061] px-4 sm:px-6 py-3 sm:py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Bell className="h-6 w-6 text-[#f8931f]" />

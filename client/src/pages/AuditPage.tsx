@@ -108,7 +108,7 @@ export default function AuditPage() {
     <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
 
       {/* ═══ STICKY NAVY HEADER ═════════════════════════════ */}
-      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
+      <header className="sticky top-[56px] md:top-0 z-30 shrink-0 bg-[#012061] px-4 sm:px-6 py-3 sm:py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-4">
           {/* Left: Title */}
           <div className="flex items-center gap-3">
@@ -131,7 +131,7 @@ export default function AuditPage() {
       <div className="flex-1 flex flex-col overflow-auto bg-light-bg dark:bg-slate-900">
 
       {/* ═══ HORIZONTAL FILTER BAR ══════════════════════════ */}
-      <section className="px-6 pt-3 pb-2 shrink-0">
+      <section className="px-4 sm:px-6 pt-3 pb-2 shrink-0">
         <div className="flex flex-row items-center gap-3 flex-wrap bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2.5">
           {/* Entity Type */}
           <select
@@ -214,7 +214,7 @@ export default function AuditPage() {
       </section>
 
       {/* ═══ TABLE ══════════════════════════════════════════ */}
-      <div className="flex-1 overflow-auto px-6 py-4">
+      <div className="flex-1 overflow-auto px-4 sm:px-6 py-4">
         {loading ? (
           <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 text-slate-400 animate-spin" /></div>
         ) : logs.length === 0 ? (
@@ -332,7 +332,7 @@ export default function AuditPage() {
                       {/* Expanded Technical View */}
                       {isExpanded && (
                         <tr key={`${l.id}-detail`} className="bg-slate-50 dark:bg-slate-700/30">
-                          <td colSpan={8} className="px-6 py-3">
+                          <td colSpan={8} className="px-3 sm:px-6 py-3">
                             <div className="flex gap-6 text-xs">
                               <div className="space-y-1 min-w-0">
                                 <span className="font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px]">Technical View</span>
@@ -385,7 +385,7 @@ export default function AuditPage() {
 
       {/* ═══ PAGINATION ════════════════════════════════════ */}
       {meta && meta.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 border-t border-slate-200 dark:border-slate-700 px-6 py-2 shrink-0 bg-white dark:bg-slate-800">
+        <div className="flex items-center justify-center gap-2 border-t border-slate-200 dark:border-slate-700 px-4 sm:px-6 py-2 shrink-0 bg-white dark:bg-slate-800">
           <button className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"
             disabled={meta.page <= 1} onClick={() => setFilters({ ...filters, page: meta.page - 1 })}>Prev</button>
           <span className="text-sm text-slate-500 dark:text-slate-400">Page {meta.page} of {meta.totalPages}</span>

@@ -434,7 +434,7 @@ export default function UserManagementPage() {
     <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
 
       {/* ═══ STICKY NAVY HEADER ═════════════════════════════ */}
-      <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-6 py-4 min-h-[56px]">
+      <header className="sticky top-[56px] md:top-0 z-30 shrink-0 bg-[#012061] px-4 sm:px-6 py-3 sm:py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-4">
           {/* Left: Title */}
           <div className="flex items-center gap-3">
@@ -469,7 +469,7 @@ export default function UserManagementPage() {
       <div className="flex-1 flex flex-col overflow-auto bg-light-bg dark:bg-slate-900">
 
       {/* ═══ KPI TILES ═══════════════════════════════════════ */}
-      <section className="px-6 pt-4 shrink-0">
+      <section className="px-4 sm:px-6 pt-4 shrink-0">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
@@ -511,7 +511,7 @@ export default function UserManagementPage() {
       </section>
 
       {/* ═══ HORIZONTAL FILTER BAR ══════════════════════════ */}
-      <section className="px-6 pt-3 pb-2 shrink-0">
+      <section className="px-4 sm:px-6 pt-3 pb-2 shrink-0">
         <div className="flex flex-row items-center gap-4 flex-wrap bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-2.5">
           {/* Search */}
           <div className="relative flex-1 min-w-[200px]">
@@ -554,13 +554,13 @@ export default function UserManagementPage() {
 
       {/* Toast */}
       {toast && (
-        <div className="shrink-0 px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 text-sm text-[#012061] dark:text-slate-100 text-center font-medium">
+        <div className="shrink-0 px-4 sm:px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 text-sm text-[#012061] dark:text-slate-100 text-center font-medium">
           {toast}
         </div>
       )}
 
       {/* ═══ TABLE or EMPTY STATE ═══════════════════════════ */}
-      <div className="flex-1 overflow-auto px-6 py-4">
+      <div className="flex-1 overflow-auto px-4 sm:px-6 py-4">
         {users.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-[#f8931f]/10 mb-4">

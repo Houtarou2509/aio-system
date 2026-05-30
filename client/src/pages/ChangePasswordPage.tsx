@@ -104,7 +104,7 @@ export default function ChangePasswordPage() {
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-slate-900 flex flex-col">
       {/* Navy header bar */}
-      <div className="bg-[#012061] h-16 flex items-center px-6 shadow-md">
+      <div className="bg-[#012061] h-16 flex items-center px-4 sm:px-6 shadow-md">
         <span className="text-white text-lg font-bold tracking-wide">AIO System</span>
       </div>
 
