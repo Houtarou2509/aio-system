@@ -60,7 +60,7 @@ function DocStatusBadge({ status }: { status: string | undefined | null }) {
   }
   // 'issued' or any other → Active (navy)
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-[#012061]/10 px-2 py-0.5 text-[10px] font-bold text-[#012061] border border-[#012061]/20">
+    <span className="inline-flex items-center gap-1 rounded-full bg-[#012061]/10 px-2 py-0.5 text-[10px] font-bold text-[#012061] border border-[#012061]/20 dark:bg-slate-700/50 dark:text-slate-100 dark:border-slate-600">
       Active
     </span>
   );
@@ -81,8 +81,8 @@ function VerifiedBadge({ signedAt, signatoryName, documentNumber }: { signedAt: 
         <ShieldCheck className="h-2.5 w-2.5" /> Verified
       </button>
       {open && (
-        <div className="absolute z-50 left-0 top-full mt-1 w-72 rounded-lg border border-slate-200 bg-white shadow-xl p-3 text-xs text-slate-700">
-          <div className="font-bold text-sm text-[#012061] mb-2 flex items-center gap-1.5">
+        <div className="absolute z-50 left-0 top-full mt-1 w-72 rounded-lg border border-slate-200 bg-white shadow-xl p-3 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+          <div className="font-bold text-sm text-[#012061] mb-2 flex items-center gap-1.5 dark:text-slate-100">
             <ShieldCheck className="h-4 w-4 text-emerald-600" /> Signature Verified
           </div>
           <div className="space-y-1.5">
@@ -193,7 +193,7 @@ function ReturnStationModal({ open, onClose, onSave }: { open: boolean; onClose:
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 sm:mx-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 sm:mx-auto dark:bg-slate-800" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b rounded-t-xl" style={{ background: '#012061' }}>
           <div className="flex items-center gap-2">
             <QrCode className="w-5 h-5 text-[#f8931f]" />
@@ -202,12 +202,12 @@ function ReturnStationModal({ open, onClose, onSave }: { open: boolean; onClose:
           <button onClick={onClose} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-5 space-y-4">
-          <p className="text-xs text-slate-500">Scan QR code or enter asset name/serial/property # to find active issuances.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Scan QR code or enter asset name/serial/property # to find active issuances.</p>
           <div className="flex gap-2">
             <input value={scanValue} onChange={e => setScanValue(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSearch()}
               placeholder="Scan or type..."
-              className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent"
+              className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-[#f8931f] focus:border-transparent dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
               autoFocus />
             <button onClick={handleSearch} className="px-4 py-2 rounded-lg text-xs font-semibold bg-[#012061] text-white hover:bg-[#001a4d]">Find</button>
           </div>
@@ -225,11 +225,11 @@ function ReturnStationModal({ open, onClose, onSave }: { open: boolean; onClose:
             </div>
           )}
           {searchResults.length > 0 && (
-            <div className="border rounded-lg divide-y max-h-60 overflow-y-auto">
+            <div className="border rounded-lg divide-y max-h-60 overflow-y-auto dark:border-slate-700 dark:divide-slate-700">
               {searchResults.map(iss => (
                 <div key={iss.id} className="px-3 py-2.5 flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-semibold" style={{ color: '#012061' }}>{iss.asset?.name || '—'}</p>
+                    <p className="text-sm font-semibold text-[#012061] dark:text-slate-100">{iss.asset?.name || '—'}</p>
                     <p className="text-[10px] text-slate-500">
                       S/N: {iss.asset?.serialNumber || '—'} • Issued to: {iss.personnel?.fullName || iss.assignedTo || '—'} • {new Date(iss.assignedAt).toLocaleDateString()}
                     </p>
@@ -790,7 +790,7 @@ export default function IssuancesPage() {
                         </td>
                       <td className="px-4 py-4">
                         <div className="flex flex-col">
-                          <p className="font-bold text-sm" style={{ color: '#012061' }}>{iss.asset?.name || '—'}</p>
+                          <p className="font-bold text-sm text-[#012061] dark:text-slate-100">{iss.asset?.name || '—'}</p>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span className="text-[10px] font-medium text-slate-400 uppercase tracking-tight">S/N:</span>
                             <span className="text-[10px] text-slate-500 dark:text-slate-400">{iss.asset?.serialNumber || '—'}</span>
@@ -963,14 +963,14 @@ export default function IssuancesPage() {
                           title={isExpanded ? 'Collapse issuance' : 'Expand issuance'}
                         >
                           {isExpanded
-                            ? <ChevronDown className="w-3.5 h-3.5 text-[#012061]" />
+                            ? <ChevronDown className="w-3.5 h-3.5 text-[#012061] dark:text-slate-100" />
                             : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                           }
                         </button>
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex flex-col gap-1">
-                          <button onClick={toggleBatch} className="text-left font-bold text-sm hover:text-[#f8931f] transition-colors" style={{ color: '#012061' }}>
+                          <button onClick={toggleBatch} className="text-left font-bold text-sm text-[#012061] hover:text-[#f8931f] transition-colors dark:text-slate-100 dark:hover:text-[#f8931f]">
                             {batchItems.length} Assets
                           </button>
                           <ul className="space-y-0.5">
@@ -1053,7 +1053,7 @@ export default function IssuancesPage() {
                             <PermissionGate permissions={['issuances:return']}>
                               <button
                                 onClick={() => openReturnModal(batchItems.filter((item: Issuance) => !item.returnedAt))}
-                                className="inline-flex items-center gap-1 rounded-md border border-[#012061]/30 bg-white h-8 px-2.5 text-[10px] font-semibold text-[#012061] whitespace-nowrap hover:border-[#f8931f] hover:text-[#f8931f] hover:shadow-sm transition-all"
+                                className="inline-flex items-center gap-1 rounded-md border border-[#012061]/30 bg-white h-8 px-2.5 text-[10px] font-semibold text-[#012061] whitespace-nowrap hover:border-[#f8931f] hover:text-[#f8931f] hover:shadow-sm transition-all dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100 dark:hover:border-[#f8931f] dark:hover:text-[#f8931f]"
                                 title="Return all active assets in this batch"
                               >
                                 <RotateCcw className="w-3 h-3 shrink-0" /> Return all
@@ -1256,8 +1256,8 @@ export default function IssuancesPage() {
             </Button>
           </div>
           <div className="p-5 space-y-4">
-            <div className="rounded-lg border border-[#012061]/10 bg-[#012061]/5 px-3 py-2">
-              <p className="text-xs font-semibold text-[#012061]">
+            <div className="rounded-lg border border-[#012061]/10 bg-[#012061]/5 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+              <p className="text-xs font-semibold text-[#012061] dark:text-slate-100">
                 {returnTargets.length === 1
                   ? `Returning ${returnTargets[0].asset?.name || 'selected asset'}`
                   : `Returning ${returnTargets.length} active assets in this batch`}
@@ -1325,7 +1325,7 @@ export default function IssuancesPage() {
       </Dialog>
       {signingTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setSigningTarget(null)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 sm:mx-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 sm:mx-auto dark:bg-slate-800" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b rounded-t-xl" style={{ background: '#012061' }}>
               <div className="flex items-center gap-2">
                 <PenLine className="w-5 h-5 text-[#f8931f]" />
@@ -1334,14 +1334,14 @@ export default function IssuancesPage() {
               <button onClick={() => setSigningTarget(null)} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-5 space-y-4">
-              <p className="text-xs text-slate-500">Typed sign-off records the recipient acknowledgement timestamp and signer name. For a batch, all active assignments in the batch are signed together.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Typed sign-off records the recipient acknowledgement timestamp and signer name. For a batch, all active assignments in the batch are signed together.</p>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Signer Name</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1 dark:text-slate-300">Signer Name</label>
                 <input value={signerName} onChange={e => setSignerName(e.target.value)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" autoFocus />
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-[#f8931f] focus:border-transparent dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" autoFocus />
               </div>
-              <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-500">
-                Asset: <span className="font-semibold text-[#012061]">{signingTarget.asset?.name || (signingTarget.bulkBatchId ? 'Batch issuance' : '—')}</span>
+              <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                Asset: <span className="font-semibold text-[#012061] dark:text-slate-100">{signingTarget.asset?.name || (signingTarget.bulkBatchId ? 'Batch issuance' : '—')}</span>
               </div>
               <button onClick={submitSignOff} disabled={signing || !signerName.trim()}
                 className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#012061] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#001a4d] disabled:opacity-50">
@@ -1383,8 +1383,8 @@ export default function IssuancesPage() {
               <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 text-[#f8931f] animate-spin" /></div>
             ) : (
               <>
-                <div className="rounded-lg border border-[#012061]/10 bg-[#012061]/5 px-3 py-2">
-                  <p className="text-xs font-semibold text-[#012061]">
+                <div className="rounded-lg border border-[#012061]/10 bg-[#012061]/5 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+                  <p className="text-xs font-semibold text-[#012061] dark:text-slate-100">
                     Transferring: {transferTarget?.asset?.name || 'selected asset'}
                   </p>
                   <p className="mt-0.5 text-[10px] text-slate-500">

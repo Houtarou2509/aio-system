@@ -17,6 +17,39 @@ function getClientIp(req: Request): string {
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
   return Array.isArray(ip) ? ip[0] : String(ip);
 }
+
+function formatValidationError(validationError: { issues?: Array<{ path: (string | number)[]; message: string; code?: string }> }): string {
+  const issue = validationError.issues?.[0];
+  if (!issue) return 'Please check the form and try again.';
+  const field = issue.path.join('.');
+  const labels: Record<string, string> = {
+    name: 'Name',
+    type: 'Type',
+    manufacturer: 'Manufacturer',
+    owner: 'Owner',
+    serialNumber: 'Serial number',
+    purchasePrice: 'Purchase price',
+    purchaseDate: 'Purchase date',
+    status: 'Status',
+    location: 'Location',
+    assignedTo: 'Assigned to',
+    propertyNumber: 'Property number',
+    remarks: 'Remarks',
+    warrantyExpiry: 'Warranty expiry date',
+    warrantyNotes: 'Warranty notes',
+    depreciationMethod: 'Depreciation method',
+    usefulLifeYears: 'Useful life',
+    salvageValue: 'Salvage value',
+    supplierId: 'Supplier',
+    ids: 'Selected assets',
+    assetIds: 'Selected assets',
+    personnelId: 'Personnel',
+    issuanceIds: 'Selected issuances',
+  };
+  const label = labels[field] || field || 'This field';
+  if (issue.code === 'invalid_enum_value') return `${label} has an invalid selection.`;
+  return field ? `${label}: ${issue.message}` : issue.message;
+}
 import {
   createAssetSchema,
   updateAssetSchema,
@@ -133,7 +166,7 @@ router.post('/', hasPermission('assets:create'), upload.single('image'), async (
     }
     // Validate parsed body
     const parsed = createAssetSchema.safeParse(body);
-    if (!parsed.success) return error(res, parsed.error.message, 422);
+    if (!parsed.success) return error(res, formatValidationError(parsed.error), 422);
     
     let asset = await assetService.createAsset(parsed.data, req.user!.id, getClientIp(req), String(req.headers['user-agent'] || ''));
     
@@ -395,7 +428,7 @@ router.post('/import', hasPermission('assets:create'), importUpload.single('file
 router.patch('/bulk-status', hasPermission('assets:edit'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkStatusSchema.safeParse(req.body);
-    if (!parsed.success) return error(res, parsed.error.message, 422);
+    if (!parsed.success) return error(res, formatValidationError(parsed.error), 422);
 
     const { ids, status } = parsed.data;
 
@@ -439,7 +472,7 @@ router.patch('/bulk-status', hasPermission('assets:edit'), async (req: Request, 
 router.delete('/bulk-delete', hasPermission('assets:delete'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkDeleteSchema.safeParse(req.body);
-    if (!parsed.success) return error(res, parsed.error.message, 422);
+    if (!parsed.success) return error(res, formatValidationError(parsed.error), 422);
 
     const { ids } = parsed.data;
     const now = new Date();
@@ -471,7 +504,7 @@ router.delete('/bulk-delete', hasPermission('assets:delete'), async (req: Reques
 router.post('/bulk-assign', hasPermission('assets:edit'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkAssignSchema.safeParse(req.body);
-    if (!parsed.success) return error(res, parsed.error.message, 422);
+    if (!parsed.success) return error(res, formatValidationError(parsed.error), 422);
 
     const { assetIds, personnelId, notes } = parsed.data;
     const results = [];
@@ -528,7 +561,7 @@ router.post('/bulk-assign', hasPermission('assets:edit'), async (req: Request, r
 router.post('/bulk-return', hasPermission('assets:edit'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkReturnSchema.safeParse(req.body);
-    if (!parsed.success) return error(res, parsed.error.message, 422);
+    if (!parsed.success) return error(res, formatValidationError(parsed.error), 422);
 
     const { issuanceIds, condition } = parsed.data;
     const results = [];
@@ -575,7 +608,7 @@ router.post('/bulk-return', hasPermission('assets:edit'), async (req: Request, r
 router.post('/bulk-update', hasPermission('assets:edit'), async (req: Request, res: Response) => {
   try {
     const parsed = bulkUpdateSchema.safeParse(req.body);
-    if (!parsed.success) return error(res, parsed.error.message, 422);
+    if (!parsed.success) return error(res, formatValidationError(parsed.error), 422);
 
     const { assetIds, location, status } = parsed.data;
 
@@ -641,7 +674,7 @@ router.put('/:id', hasPermission('assets:edit'), upload.single('image'), async (
       body = JSON.parse(req.body.data);
     }
     const parsed = updateAssetSchema.safeParse(body);
-    if (!parsed.success) return error(res, parsed.error.message, 422);
+    if (!parsed.success) return error(res, formatValidationError(parsed.error), 422);
     
     let asset = await assetService.updateAsset(String(req.params.id), parsed.data, req.user!.id, getClientIp(req), String(req.headers['user-agent'] || ''));
     
@@ -720,7 +753,7 @@ router.post('/:id/image', hasPermission('assets:edit'), upload.single('image'), 
 router.post('/:id/dispose', hasPermission('assets:delete'), async (req: Request, res: Response) => {
   try {
     const parsed = disposeAssetSchema.safeParse(req.body);
-    if (!parsed.success) return error(res, parsed.error.message, 422);
+    if (!parsed.success) return error(res, formatValidationError(parsed.error), 422);
 
     const asset = await assetService.disposeAsset(
       String(req.params.id),

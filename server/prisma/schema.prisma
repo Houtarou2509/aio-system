@@ -33,8 +33,33 @@ model User {
   labelTemplates     LabelTemplate[]
   purchaseRequests   PurchaseRequest[]  @relation("PurchaseRequests")
   approvedRequests   PurchaseRequest[]  @relation("ApprovedRequests")
+  issueReports       IssueReport[]       @relation("IssueReportReporter")
 
   @@map("users")
+}
+
+model IssueReport {
+  id                 String            @id @default(uuid())
+  reporterId         String?
+  reporter           User?             @relation("IssueReportReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  reporterName       String?
+  reporterEmail      String?
+  reporterRole       String?
+  pageUrl            String
+  issueType          IssueReportType
+  description        String            @db.Text
+  stepsToReproduce   String?           @db.Text
+  screenshotUrl      String?
+  userAgent          String?
+  status             IssueReportStatus @default(OPEN)
+  adminNotes         String?           @db.Text
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([status])
+  @@index([reporterId])
+  @@index([createdAt])
+  @@map("issue_reports")
 }
 
 model Asset {
@@ -235,6 +260,21 @@ enum BackupStatus {
   IN_PROGRESS
   COMPLETED
   FAILED
+}
+
+enum IssueReportType {
+  BUG
+  DATA_ISSUE
+  UI_ISSUE
+  ACCESS_PERMISSION
+  OTHER
+}
+
+enum IssueReportStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  WONT_FIX
 }
 
 enum NotificationType {

@@ -48,6 +48,13 @@ function statusBadge(status: string) {
   );
 }
 
+function backupWarning(lastBackup: string | null): string | null {
+  if (!lastBackup) return 'No completed backup exists yet. Create one before rollout.';
+  const ageMs = Date.now() - new Date(lastBackup).getTime();
+  if (ageMs > 24 * 60 * 60 * 1000) return 'Latest completed backup is older than 24 hours.';
+  return null;
+}
+
 /* ═══════════════════════════════════════════════════════════
    BACKUP MANAGEMENT PAGE
    ═══════════════════════════════════════════════════════════ */
@@ -122,6 +129,7 @@ export default function BackupManagementPage() {
     { key: 'total', label: 'TOTAL BACKUPS', icon: Archive, value: stats.totalBackups.toString(), color: '#f8931f' },
     { key: 'size', label: 'TOTAL SIZE', icon: HardDrive, value: formatSize(stats.totalSize), color: '#7B1113' },
   ];
+  const warning = backupWarning(stats.lastBackup);
 
   return (
     <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
@@ -149,6 +157,11 @@ export default function BackupManagementPage() {
 
         {/* KPI tiles */}
         <section className="px-4 sm:px-6 pt-4 shrink-0">
+          {warning && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+              {warning}
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {KPI.map(({ key, label, icon: Icon, value, color, isDate }) => (
               <div key={key} className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">

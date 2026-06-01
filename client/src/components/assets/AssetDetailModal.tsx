@@ -72,12 +72,12 @@ function InfoCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-xs">
+    <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-xs dark:border-slate-600 dark:bg-slate-800">
       <div className="flex items-center gap-2 mb-3">
         <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-[#f8931f]/10 text-[#f8931f]">
           <Icon className="w-3.5 h-3.5" />
         </div>
-        <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">{title}</h3>
+        <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-100 uppercase tracking-wider">{title}</h3>
       </div>
       <div className="space-y-2 text-sm">{children}</div>
     </div>
@@ -88,7 +88,7 @@ function InfoCard({
 function InfoRow({ label, value, highlight }: { label: string; value: React.ReactNode; highlight?: boolean }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-slate-500 dark:text-slate-400 text-xs">{label}</span>
+      <span className="text-slate-500 dark:text-slate-300 text-xs">{label}</span>
       <span className={`text-xs font-medium text-right ${highlight ? 'text-[#f8931f]' : 'text-slate-900 dark:text-slate-100'}`}>{value}</span>
     </div>
   );
@@ -142,7 +142,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
     <>
       <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
         <DialogContent
-          className="sm:max-w-6xl h-[100dvh] md:h-[700px] flex flex-col p-0 gap-0 overflow-hidden"
+          className="sm:max-w-6xl h-[100dvh] md:h-[700px] flex flex-col p-0 gap-0 overflow-hidden dark:bg-slate-900"
           showCloseButton={false}
         >
           {/* ─── Header Bar ─── */}
@@ -186,7 +186,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                   )}
                 <button
                   onClick={onClose}
-                  className="rounded-lg border border-white/20 bg-white dark:bg-slate-800/10 p-1.5 text-slate-700 dark:text-white/60 hover:text-white hover:bg-white/20 transition-colors shrink-0 min-w-[44px] min-h-[44px]"
+                  className="rounded-lg border border-white/20 bg-white/10 p-1.5 text-white/70 hover:text-white hover:bg-white/20 transition-colors shrink-0 min-w-[44px] min-h-[44px]"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -200,7 +200,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
             onValueChange={setTab}
             className="flex-1 flex flex-col min-h-0"
           >
-            <div className="px-6 pt-3 shrink-0 border-b border-slate-100 dark:border-slate-700">
+            <div className="px-6 pt-3 shrink-0 border-b border-slate-100 dark:border-slate-700 dark:bg-slate-900">
               <TabsList variant="line" className="w-full justify-start gap-0 overflow-x-auto flex-nowrap">
                 {[
                   { value: 'overview', label: 'Overview', icon: Info },
@@ -213,7 +213,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                   <TabsTrigger
                     key={t.value}
                     value={t.value}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium capitalize whitespace-nowrap data-active:text-[#f8931f] data-active:after:bg-[#f8931f] hover:text-[#f8931f]"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium capitalize whitespace-nowrap text-slate-600 dark:text-slate-300 data-active:text-[#f8931f] data-active:after:bg-[#f8931f] hover:text-[#f8931f]"
                   >
                     <t.icon className="w-3.5 h-3.5" />
                     {t.label}
@@ -224,7 +224,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
 
             {/* ─── Scrollable Content ─── */}
             <ScrollArea className="flex-1 min-h-0">
-              <div className="p-6">
+              <div className="p-6 dark:bg-slate-900">
 
                 {/* ─── Overview Tab ─── */}
                 {tab === 'overview' && (
@@ -247,9 +247,9 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 py-12">
-                        <ImageIcon className="h-10 w-10 text-slate-300 mb-2" />
-                        <p className="text-sm text-slate-400 font-medium">No Image Available</p>
+                      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 dark:border-slate-600 dark:bg-slate-800">
+                        <ImageIcon className="h-10 w-10 text-slate-300 dark:text-slate-400 mb-2" />
+                        <p className="text-sm text-slate-400 dark:text-slate-300 font-medium">No Image Available</p>
                       </div>
                     )}
 

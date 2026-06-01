@@ -115,6 +115,11 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     throw new ApiError(authData.error?.message || 'Authentication failed', 401);
   }
 
+  // Guard: if response is not JSON, throw a friendly error instead of a raw parse error
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new ApiError('Server returned an unexpected response. Please try again or contact an administrator.', res.status);
+  }
   const data = await res.json();
   if (!data.success) {
     throw new ApiError(data.error?.message || 'Request failed', res.status, data.error);

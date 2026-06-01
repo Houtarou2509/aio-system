@@ -245,14 +245,14 @@ export default function AccountabilityReportPage() {
       <div className="px-4 sm:px-6 py-4 space-y-4">
 
       {/* Filters */}
-      <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-4">
+      <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-4 dark:border-slate-700 dark:bg-slate-800">
         <div className="flex items-center gap-2 mb-3">
           <Filter className="w-4 h-4 text-slate-500" />
-          <span className="text-sm font-semibold text-slate-700">Filters</span>
+          <span className="text-sm font-semibold text-slate-700 dark:text-slate-100">Filters</span>
           {hasActiveFilters && (
             <button
               onClick={clearFilters}
-              className="ml-auto inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-red-600 hover:border-red-200 transition-colors"
+              className="ml-auto inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-red-600 hover:border-red-200 transition-colors dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               <X className="w-3 h-3" /> Clear filters
             </button>
@@ -266,7 +266,7 @@ export default function AccountabilityReportPage() {
               <FileText className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
                 type="text"
-                className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#012061]/30 focus:border-[#012061] font-mono"
+                className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#012061]/30 focus:border-[#012061] font-mono bg-white text-slate-800 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
                 placeholder="e.g. AGR-20260522-..."
                 value={agreementNoSearch}
                 onChange={(e) => setAgreementNoSearch(e.target.value)}
@@ -289,7 +289,7 @@ export default function AccountabilityReportPage() {
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
                 type="text"
-                className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#012061]/30 focus:border-[#012061]"
+                className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#012061]/30 focus:border-[#012061] bg-white text-slate-800 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
                 placeholder="Search personnel..."
                 value={selectedPersonnelId ? personnelOptions.find((p) => p.id === selectedPersonnelId)?.fullName || '' : personnelSearch}
                 onChange={(e) => {
@@ -310,14 +310,14 @@ export default function AccountabilityReportPage() {
               )}
             </div>
             {showPersonnelDropdown && !selectedPersonnelId && (
-              <div className="absolute z-30 mt-1 w-full max-h-48 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg">
+              <div className="absolute z-30 mt-1 w-full max-h-48 overflow-auto bg-white border border-slate-200 rounded-md shadow-lg dark:border-slate-700 dark:bg-slate-900">
                 {filteredPersonnel.length === 0 && (
                   <div className="px-3 py-2 text-xs text-slate-400">No personnel found</div>
                 )}
                 {filteredPersonnel.slice(0, 20).map((p) => (
                   <button
                     key={p.id}
-                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 text-slate-700"
+                    className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 text-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                     onClick={() => {
                       setSelectedPersonnelId(p.id);
                       setPersonnelSearch('');
@@ -405,7 +405,7 @@ export default function AccountabilityReportPage() {
       )}
 
       {/* Results table */}
-      <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden dark:border-slate-700 dark:bg-slate-800">
         <div className="overflow-x-auto max-h-[calc(100vh-320px)] overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10">
@@ -424,7 +424,7 @@ export default function AccountabilityReportPage() {
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {loading ? (
                 <tr>
                   <td colSpan={13} className="text-center py-12">
@@ -442,19 +442,19 @@ export default function AccountabilityReportPage() {
                 rows.map((row, idx) => (
                   <tr
                     key={idx}
-                    className={`hover:bg-slate-50 transition-colors ${
-                      row.isOverdue ? 'bg-[#7B1113]/5' : ''
+                    className={`hover:bg-slate-50 transition-colors dark:hover:bg-slate-700/50 ${
+                      row.isOverdue ? 'bg-[#7B1113]/5 dark:bg-[#7B1113]/20' : 'dark:bg-slate-800'
                     }`}
                   >
-                    <td className="px-3 py-2 font-medium text-slate-800 whitespace-nowrap">
+                    <td className="px-3 py-2 font-medium text-slate-800 whitespace-nowrap dark:text-slate-100">
                       {row.personnelName || '—'}
                     </td>
-                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{row.designation || '—'}</td>
-                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{row.project || '—'}</td>
-                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{row.institution || '—'}</td>
-                    <td className="px-3 py-2 text-slate-800 whitespace-nowrap">{row.assetName || '—'}</td>
-                    <td className="px-3 py-2 text-slate-600 font-mono text-xs whitespace-nowrap">{row.serialNumber || '—'}</td>
-                    <td className="px-3 py-2 text-slate-600 font-mono text-xs whitespace-nowrap">{row.propertyNumber || '—'}</td>
+                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap dark:text-slate-300">{row.designation || '—'}</td>
+                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap dark:text-slate-300">{row.project || '—'}</td>
+                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap dark:text-slate-300">{row.institution || '—'}</td>
+                    <td className="px-3 py-2 text-slate-800 whitespace-nowrap dark:text-slate-100">{row.assetName || '—'}</td>
+                    <td className="px-3 py-2 text-slate-600 font-mono text-xs whitespace-nowrap dark:text-slate-300">{row.serialNumber || '—'}</td>
+                    <td className="px-3 py-2 text-slate-600 font-mono text-xs whitespace-nowrap dark:text-slate-300">{row.propertyNumber || '—'}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {row.condition ? (
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
@@ -475,8 +475,8 @@ export default function AccountabilityReportPage() {
                         }`}>{row.returnCondition}</span>
                       ) : '—'}
                     </td>
-                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{formatDate(row.assignedAt)}</td>
-                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{formatDate(row.returnedAt)}</td>
+                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap dark:text-slate-300">{formatDate(row.assignedAt)}</td>
+                    <td className="px-3 py-2 text-slate-600 whitespace-nowrap dark:text-slate-300">{formatDate(row.returnedAt)}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {row.status === 'active' ? (
                         <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
@@ -499,7 +499,7 @@ export default function AccountabilityReportPage() {
                         <button
                           type="button"
                           onClick={() => openDocumentModal(row.documentNumber!)}
-                          className="inline-flex items-center gap-1 font-mono text-xs text-[#012061] hover:text-[#f8931f] hover:underline underline-offset-2 transition-colors cursor-pointer text-left"
+                          className="inline-flex items-center gap-1 font-mono text-xs text-[#012061] hover:text-[#f8931f] hover:underline underline-offset-2 transition-colors cursor-pointer text-left dark:text-slate-100 dark:hover:text-[#f8931f]"
                           title="View agreement document details"
                         >
                           <FileSignature className="w-3.5 h-3.5 shrink-0 opacity-60" />
@@ -518,7 +518,7 @@ export default function AccountabilityReportPage() {
 
         {/* Pagination */}
         {total > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
+          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 dark:border-slate-700">
             <p className="text-xs text-slate-500">
               Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}
             </p>

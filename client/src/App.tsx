@@ -26,6 +26,9 @@ import MaintenanceCalendarPage from './pages/MaintenanceCalendarPage';
 import BackupManagementPage from './pages/BackupManagementPage';
 import AccountabilityReportPage from './pages/AccountabilityReportPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
+import HelpPage from './pages/HelpPage';
+import IssueReportsPage from './pages/IssueReportsPage';
+import SystemHealthPage from './pages/SystemHealthPage';
 import './index.css';
 
 function App() {
@@ -64,6 +67,9 @@ function App() {
             <Route path="maintenance-calendar" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN','STAFF'] as any}><MaintenanceCalendarPage /></ProtectedRoute>} />
             <Route path="backups" element={<ProtectedRoute requiredRole="ADMIN"><BackupManagementPage /></ProtectedRoute>} />
             <Route path="accountability/report" element={<ProtectedRoute requiredRole="ADMIN"><AccountabilityReportPage /></ProtectedRoute>} />
+            <Route path="help" element={<HelpPage />} />
+            <Route path="issues" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><IssueReportsPage /></ProtectedRoute>} />
+            <Route path="system-health" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><SystemHealthPage /></ProtectedRoute>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { NavLink, Outlet, Link } from 'react-router-dom';
-import { BookOpen, Settings2, LayoutDashboard, Package, Wrench, Users, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, ScanLine, FileBarChart } from 'lucide-react';
+import { BookOpen, Settings2, LayoutDashboard, Package, Wrench, Users, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, ScanLine, FileBarChart, AlertCircle, HelpCircle } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/notifications/NotificationBell';
 import { useTheme } from '../context/ThemeContext';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import ShortcutsHelpModal from '../components/ShortcutsHelpModal';
+import ReportIssueModal from './support/ReportIssueModal';
 
 /* ─── Navigation Sections ─── */
 const inventoryNav = [
@@ -34,6 +35,7 @@ export default function AppLayout() {
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [reportIssueOpen, setReportIssueOpen] = useState(false);
   const { helpOpen, setHelpOpen } = useKeyboardShortcuts();
 
   const visibleInventory = inventoryNav.filter(item => !item.roles || item.roles.includes(user?.role || ''));
@@ -108,18 +110,26 @@ export default function AppLayout() {
             </button>
           </div>
           <button
+            onClick={() => setReportIssueOpen(true)}
+            className="mb-1.5 w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-white/10 hover:text-[#f8931f] transition-colors"
+          >
+            <AlertCircle className="h-4 w-4" />
+            <span>Report Issue</span>
+          </button>
+          <Link
+            to="/help"
+            className="mb-1.5 w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-white/10 hover:text-[#f8931f] transition-colors"
+          >
+            <HelpCircle className="h-4 w-4" />
+            <span>Quick Guide</span>
+          </Link>
+          <button
             onClick={logout}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-[#7B1113] hover:text-white transition-colors"
           >
             <LogOut className="h-4 w-4" />
             <span>Logout</span>
           </button>
-          <Link
-            to="/change-password"
-            className="block text-center text-[10px] text-slate-500 hover:text-[#f8931f] transition-colors mt-1.5"
-          >
-            Change password
-          </Link>
         </div>
       </aside>
 
@@ -180,19 +190,27 @@ export default function AppLayout() {
                 <p className="text-[10px] tracking-widest font-medium text-[#f8931f] uppercase">{user?.role?.replace('_', '-')}</p>
               </div>
               <button
+                onClick={() => { setMobileOpen(false); setReportIssueOpen(true); }}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-white/10 hover:text-[#f8931f] transition-colors"
+              >
+                <AlertCircle className="h-4 w-4" />
+                <span>Report Issue</span>
+              </button>
+              <Link
+                to="/help"
+                onClick={() => setMobileOpen(false)}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-white/10 hover:text-[#f8931f] transition-colors"
+              >
+                <HelpCircle className="h-4 w-4" />
+                <span>Quick Guide</span>
+              </Link>
+              <button
                 onClick={() => { setMobileOpen(false); logout(); }}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-[#7B1113] hover:text-white transition-colors"
               >
                 <LogOut className="h-4 w-4" />
                 <span>Logout</span>
               </button>
-              <Link
-                to="/change-password"
-                onClick={() => setMobileOpen(false)}
-                className="block text-center text-[10px] text-slate-500 hover:text-[#f8931f] transition-colors mt-1.5"
-              >
-                Change password
-              </Link>
             </div>
           </div>
         </div>
@@ -234,6 +252,7 @@ export default function AppLayout() {
 
       {/* Keyboard Shortcuts Help Modal */}
       <ShortcutsHelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <ReportIssueModal open={reportIssueOpen} onClose={() => setReportIssueOpen(false)} />
     </div>
   );
 }

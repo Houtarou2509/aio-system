@@ -173,14 +173,14 @@ function SessionExpiredModal({ open, onClose }: { open: boolean; onClose: () => 
   };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 dark:bg-slate-800" onClick={e => e.stopPropagation()}>
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
             <AlertTriangle className="w-5 h-5 text-amber-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-slate-900 mb-1">Session Expired</h3>
-            <p className="text-sm text-slate-500 mb-4">Your session has expired for security reasons. Please log in again to continue.</p>
+            <h3 className="font-semibold text-slate-900 mb-1 dark:text-slate-100">Session Expired</h3>
+            <p className="text-sm text-slate-500 mb-4 dark:text-slate-400">Your session has expired for security reasons. Please log in again to continue.</p>
             <button onClick={goToLogin}
               className="w-full rounded-lg bg-[#f8931f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#e07e0a] transition-colors">
               Go to Login
@@ -279,34 +279,34 @@ function SearchableDropdown({ label, items, value, onChange, placeholder }: {
 
   return (
     <div className="relative" ref={setRefEl} onKeyDown={handleKeyDown}>
-      <label className="block text-[10px] font-medium text-slate-500 mb-1">{label}</label>
+      <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-400 mb-1">{label}</label>
       {/* Trigger button — always visible */}
       <button
         type="button"
         onClick={() => { if (isOpen) closeMenu(); else openMenu(); }}
-        className="w-full flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm text-left hover:border-slate-300 transition-colors"
+        className="w-full flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-left hover:border-slate-300 transition-colors dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-500"
       >
-        <span className={selectedItem ? 'text-slate-700' : 'text-slate-400'}>
+        <span className={selectedItem ? 'text-slate-700 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500'}>
           {selectedItem ? selectedItem.name : placeholder}
         </span>
         <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {/* Dropdown menu — absolutely positioned overlay */}
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1 z-50 border border-[#f8931f] rounded-lg shadow-lg bg-white">
+        <div className="absolute left-0 right-0 top-full mt-1 z-50 border border-[#f8931f] rounded-lg shadow-lg bg-white dark:bg-slate-900">
           <input
             autoFocus
             value={filter}
             onChange={e => { setFilter(e.target.value); setHighlightIndex(0); }}
             placeholder={`Search ${label.toLowerCase()}...`}
-            className="w-full border-0 px-3 py-2 text-sm outline-none rounded-t-lg"
+            className="w-full border-0 px-3 py-2 text-sm outline-none rounded-t-lg bg-white text-slate-800 placeholder:text-slate-400 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
           />
-          <div className="max-h-36 overflow-y-auto border-t">
+          <div className="max-h-36 overflow-y-auto border-t border-slate-200 dark:border-slate-700">
             {/* None option */}
             <button
               type="button"
               onClick={() => selectItem(null)}
-              className={`w-full text-left px-3 py-2 text-sm text-slate-400 hover:bg-slate-50 ${highlightIndex === 0 ? 'bg-slate-100' : ''}`}
+              className={`w-full text-left px-3 py-2 text-sm text-slate-400 hover:bg-slate-50 dark:text-slate-500 dark:hover:bg-slate-800 ${highlightIndex === 0 ? 'bg-slate-100 dark:bg-slate-800' : ''}`}
             >
               None
             </button>
@@ -316,8 +316,8 @@ function SearchableDropdown({ label, items, value, onChange, placeholder }: {
                 type="button"
                 onClick={() => selectItem(item)}
                 className={`w-full text-left px-3 py-2 text-sm hover:bg-[#f8931f]/10 transition-colors ${
-                  String(item.id) === value ? 'bg-[#f8931f]/10 text-[#f8931f] font-medium' : 'text-slate-700'
-                } ${highlightIndex === idx + 1 ? 'bg-slate-100' : ''}`}
+                  String(item.id) === value ? 'bg-[#f8931f]/10 text-[#f8931f] font-medium' : 'text-slate-700 dark:text-slate-200'
+                } ${highlightIndex === idx + 1 ? 'bg-slate-100 dark:bg-slate-800' : ''}`}
               >
                 {item.name}
               </button>
@@ -534,7 +534,7 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 sm:mx-0 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 sm:mx-0 max-h-[90vh] flex flex-col dark:bg-slate-800" onClick={e => e.stopPropagation()}>
         {/* Header — pinned top */}
         <div className="flex items-center justify-between px-5 py-4 border-b rounded-t-xl shrink-0" style={{ background: '#012061' }}>
           <h2 className="text-sm font-bold text-white">{editing ? 'Edit Profile' : 'Add Profile'}</h2>
@@ -551,13 +551,13 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
             <div className="flex gap-4 items-start">
               {/* Profile photo */}
               <div className="flex flex-col items-center gap-1.5 shrink-0">
-                <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-slate-200 flex items-center justify-center bg-slate-100 shrink-0">
+                <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-slate-200 flex items-center justify-center bg-slate-100 shrink-0 dark:border-slate-700 dark:bg-slate-900">
                   {photoPreview ? (
                     <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
                   ) : form.fullName ? (
-                    <span className="text-xl font-bold text-[#012061]">{getInitials(form.fullName)}</span>
+                    <span className="text-xl font-bold text-[#012061] dark:text-slate-100">{getInitials(form.fullName)}</span>
                   ) : (
-                    <User className="w-8 h-8 text-slate-300" />
+                    <User className="w-8 h-8 text-slate-300 dark:text-slate-500" />
                   )}
                 </div>
                 <div className="flex flex-col items-center gap-0.5">
@@ -578,7 +578,7 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
                 <div>
                   <label className="block text-[10px] font-medium text-slate-500 mb-1">Full Name *</label>
                   <input required value={form.fullName} onChange={e => setForm({ ...form, fullName: e.target.value })}
-                    placeholder="Full Name" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                    placeholder="Full Name" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-[#f8931f] focus:border-transparent dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500" />
                 </div>
                 <SearchableDropdown
                   label="Designation"
@@ -596,12 +596,12 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
               <div>
                 <label className="block text-[10px] font-medium text-slate-500 mb-1">Email</label>
                 <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                  placeholder="Email" type="email" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                  placeholder="Email" type="email" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-[#f8931f] focus:border-transparent dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500" />
               </div>
               <div>
                 <label className="block text-[10px] font-medium text-slate-500 mb-1">Phone</label>
                 <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
-                  placeholder="Phone" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                  placeholder="Phone" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-[#f8931f] focus:border-transparent dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500" />
               </div>
             </div>
           </div>
@@ -629,12 +629,12 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
               <div>
                 <label className="block text-[10px] font-medium text-slate-500 mb-1">Project Year</label>
                 <input value={form.projectYear} onChange={e => setForm({ ...form, projectYear: e.target.value })}
-                  placeholder="e.g. 2024" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                  placeholder="e.g. 2024" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-[#f8931f] focus:border-transparent dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500" />
               </div>
               <div>
                 <label className="block text-[10px] font-medium text-slate-500 mb-1">Date Hired</label>
                 <input value={form.hiredDate} onChange={e => setForm({ ...form, hiredDate: e.target.value })}
-                  type="date" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                  type="date" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-[#f8931f] focus:border-transparent dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
               </div>
             </div>
           </div>
@@ -646,14 +646,14 @@ function PersonnelFormModal({ open, onClose, onSave, editing, showToast }: {
               <label className="block text-[10px] font-medium text-slate-500 mb-1">Employment History / Previous Projects{!editing && ' (create-only)'}</label>
               <textarea value={form.employmentHistory} onChange={e => setForm({ ...form, employmentHistory: e.target.value })}
                 placeholder="Employment History / Previous Projects..." rows={3}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-[#f8931f] focus:border-transparent dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500" />
             </div>
           </div>
 
           </div>
           {/* Footer buttons — pinned bottom */}
-          <div className="flex justify-end gap-2 px-5 py-3 border-t border-slate-100 shrink-0 bg-white rounded-b-xl">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+          <div className="flex justify-end gap-2 px-5 py-3 border-t border-slate-100 shrink-0 bg-white rounded-b-xl dark:border-slate-700 dark:bg-slate-800">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg dark:text-slate-300 dark:hover:bg-slate-700">Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-semibold text-white bg-[#f8931f] rounded-lg hover:bg-[#e07e0a] disabled:opacity-50">
               {saving ? 'Saving...' : editing ? 'Update' : 'Create'}
             </button>
@@ -730,7 +730,7 @@ function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-10 overflow-y-auto" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 sm:mx-0 mb-10" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 sm:mx-0 mb-10 dark:bg-slate-800" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="px-6 py-4 border-b rounded-t-xl" style={{ background: '#012061' }}>
           <div className="flex items-center justify-between">
@@ -768,18 +768,18 @@ function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail
 
         {/* Employment History */}
         {personnel.employmentHistory && (
-          <div className="px-6 py-3 border-t">
-            <h3 className="text-xs font-semibold text-[#012061] mb-2 flex items-center gap-1.5">
+          <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-700">
+            <h3 className="text-xs font-semibold text-[#012061] mb-2 flex items-center gap-1.5 dark:text-slate-100">
               <FileText className="w-3.5 h-3.5 text-[#f8931f]" />
               Employment History / Previous Projects
             </h3>
-            <p className="text-xs text-slate-600 whitespace-pre-line leading-relaxed bg-slate-50 rounded-lg p-3">{personnel.employmentHistory}</p>
+            <p className="text-xs text-slate-600 whitespace-pre-line leading-relaxed bg-slate-50 rounded-lg p-3 dark:bg-slate-900 dark:text-slate-300">{personnel.employmentHistory}</p>
           </div>
         )}
 
         {/* Signed Agreement */}
-        <div className="px-6 py-3 border-t">
-          <h3 className="text-xs font-semibold text-[#012061] mb-2 flex items-center gap-1.5">
+        <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-700">
+          <h3 className="text-xs font-semibold text-[#012061] mb-2 flex items-center gap-1.5 dark:text-slate-100">
             <FileText className="w-3.5 h-3.5 text-[#f8931f]" />
             Signed Agreement
           </h3>
@@ -819,9 +819,9 @@ function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail
         </div>
 
         {/* Active Possessions */}
-        <div className="px-6 py-3 border-t">
+        <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold text-[#012061] flex items-center gap-1.5">
+            <h3 className="text-xs font-semibold text-[#012061] flex items-center gap-1.5 dark:text-slate-100">
               <Package className="w-3.5 h-3.5 text-[#f8931f]" />
               Active Possessions ({activeLoans.length})
             </h3>
@@ -865,8 +865,8 @@ function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail
         </div>
 
         {/* Past Issuances */}
-        <div className="px-6 py-3 border-t">
-          <h3 className="text-xs font-semibold text-[#012061] mb-2 flex items-center gap-1.5">
+        <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-700">
+          <h3 className="text-xs font-semibold text-[#012061] mb-2 flex items-center gap-1.5 dark:text-slate-100">
             <FileText className="w-3.5 h-3.5 text-slate-400" />
             Past Issuances ({pastLoans.length})
           </h3>
@@ -904,8 +904,8 @@ function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail
 
         {/* Employment History Log */}
         {personnel.historyLogs && personnel.historyLogs.length > 0 && (
-          <div className="px-6 py-3 border-t">
-            <h3 className="text-xs font-semibold text-[#012061] mb-2 flex items-center gap-1.5">
+          <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-700">
+            <h3 className="text-xs font-semibold text-[#012061] mb-2 flex items-center gap-1.5 dark:text-slate-100">
               <FileText className="w-3.5 h-3.5 text-[#f8931f]" />
               Employment History Log ({personnel.historyLogs.length})
             </h3>
@@ -924,7 +924,7 @@ function ProfileDetailModal({ personnel, onClose }: { personnel: PersonnelDetail
                 {personnel.historyLogs.map(h => (
                   <tr key={h.id} className="border-b border-slate-100">
                     <td className="py-1.5 text-slate-500">{new Date(h.loggedAt).toLocaleDateString()}</td>
-                    <td className="py-1.5 font-medium text-slate-700">{h.designation || '—'}</td>
+                    <td className="py-1.5 font-medium text-slate-700 dark:text-slate-200">{h.designation || '—'}</td>
                     <td className="py-1.5 text-slate-500">{h.institutionName || '—'}</td>
                     <td className="py-1.5 text-slate-500">{h.projectName || '—'}</td>
                     <td className="py-1.5 text-slate-500">{h.projectYear || '—'}</td>
@@ -974,7 +974,7 @@ function AccountabilityDrawer({
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
       {/* Drawer panel */}
-      <div className="relative z-10 w-full max-w-3xl h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+      <div className="relative z-10 w-full max-w-3xl h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 dark:bg-slate-900">
         {/* Header */}
         <div className="px-5 py-4 border-b shrink-0" style={{ background: '#012061' }}>
           <div className="flex items-center justify-between">
@@ -1003,27 +1003,27 @@ function AccountabilityDrawer({
               {/* ─── Info Row ─── */}
               <div className="flex flex-wrap gap-3">
                 {data.personnel.designation && (
-                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-3 py-1.5">
+                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-3 py-1.5 dark:bg-slate-800">
                     <Briefcase className="w-3 h-3 text-slate-400" />
-                    <span className="text-xs text-slate-700">{data.personnel.designation}</span>
+                    <span className="text-xs text-slate-700 dark:text-slate-200">{data.personnel.designation}</span>
                   </div>
                 )}
                 {data.personnel.project && (
-                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-3 py-1.5">
+                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-3 py-1.5 dark:bg-slate-800">
                     <Package className="w-3 h-3 text-slate-400" />
-                    <span className="text-xs text-slate-700">{data.personnel.project}</span>
+                    <span className="text-xs text-slate-700 dark:text-slate-200">{data.personnel.project}</span>
                   </div>
                 )}
                 {data.personnel.institution && (
-                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-3 py-1.5">
+                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-3 py-1.5 dark:bg-slate-800">
                     <Building2 className="w-3 h-3 text-slate-400" />
-                    <span className="text-xs text-slate-700">{data.personnel.institution}</span>
+                    <span className="text-xs text-slate-700 dark:text-slate-200">{data.personnel.institution}</span>
                   </div>
                 )}
                 {data.personnel.email && (
-                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-3 py-1.5">
+                  <div className="flex items-center gap-1.5 bg-slate-50 rounded-lg px-3 py-1.5 dark:bg-slate-800">
                     <Mail className="w-3 h-3 text-slate-400" />
-                    <span className="text-xs text-slate-700">{data.personnel.email}</span>
+                    <span className="text-xs text-slate-700 dark:text-slate-200">{data.personnel.email}</span>
                   </div>
                 )}
               </div>
@@ -1054,14 +1054,14 @@ function AccountabilityDrawer({
 
               {/* ─── Active Assets ─── */}
               <div>
-                <h3 className="text-xs font-semibold text-[#012061] flex items-center gap-1.5 mb-2">
+                <h3 className="text-xs font-semibold text-[#012061] flex items-center gap-1.5 mb-2 dark:text-slate-100">
                   <Package className="w-3.5 h-3.5 text-[#f8931f]" />
                   Active Assets ({data.activeAssignments.length})
                 </h3>
                 {data.activeAssignments.length === 0 ? (
                   <p className="text-xs text-slate-400 italic py-2">No active assets held.</p>
                 ) : (
-                  <div className="overflow-x-auto rounded-lg border border-slate-200">
+                  <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-[#012061] text-left">
@@ -1075,14 +1075,14 @@ function AccountabilityDrawer({
                       </thead>
                       <tbody>
                         {data.activeAssignments.map(a => (
-                          <tr key={a.id} className="border-b border-slate-100 bg-white">
-                            <td className="px-3 py-2 font-semibold text-[#012061]">{a.assetName || '—'}</td>
-                            <td className="px-3 py-2 text-xs text-slate-600 font-mono">{a.serialNumber || '—'}</td>
-                            <td className="px-3 py-2 text-xs text-slate-600 font-mono">{a.propertyNumber || '—'}</td>
+                          <tr key={a.id} className="border-b border-slate-100 bg-white dark:border-slate-700 dark:bg-slate-800">
+                            <td className="px-3 py-2 font-semibold text-[#012061] dark:text-slate-100">{a.assetName || '—'}</td>
+                            <td className="px-3 py-2 text-xs text-slate-600 font-mono dark:text-slate-300">{a.serialNumber || '—'}</td>
+                            <td className="px-3 py-2 text-xs text-slate-600 font-mono dark:text-slate-300">{a.propertyNumber || '—'}</td>
                             <td className="px-3 py-2">
                               <span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-emerald-50 text-emerald-700">{a.condition || 'Good'}</span>
                             </td>
-                            <td className="px-3 py-2 text-xs text-slate-600">{new Date(a.assignedAt).toLocaleDateString()}</td>
+                            <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-300">{new Date(a.assignedAt).toLocaleDateString()}</td>
                             <td className="px-3 py-2">
                               {a.agreementDocumentId ? (
                                 <button
@@ -1108,7 +1108,7 @@ function AccountabilityDrawer({
               <div>
                 <button
                   onClick={() => setShowReturned(!showReturned)}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-[#012061] hover:text-[#f8931f] transition-colors mb-2"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-[#012061] hover:text-[#f8931f] transition-colors mb-2 dark:text-slate-100 dark:hover:text-[#f8931f]"
                 >
                   {showReturned ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                   <FileText className="w-3.5 h-3.5 text-slate-400" />
@@ -1118,7 +1118,7 @@ function AccountabilityDrawer({
                   data.returnedAssignments.length === 0 ? (
                     <p className="text-xs text-slate-400 italic pl-5">No returned assets yet.</p>
                   ) : (
-                    <div className="overflow-x-auto rounded-lg border border-slate-200 ml-5">
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 ml-5 dark:border-slate-700">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="bg-[#012061] text-left">
@@ -1132,13 +1132,13 @@ function AccountabilityDrawer({
                         </thead>
                         <tbody>
                           {data.returnedAssignments.map(a => (
-                            <tr key={a.id} className="border-b border-slate-100 bg-white">
-                              <td className="px-3 py-2 font-semibold text-[#012061]">{a.assetName || '—'}</td>
-                              <td className="px-3 py-2 text-xs text-slate-600 font-mono">{a.serialNumber || '—'}</td>
+                            <tr key={a.id} className="border-b border-slate-100 bg-white dark:border-slate-700 dark:bg-slate-800">
+                              <td className="px-3 py-2 font-semibold text-[#012061] dark:text-slate-100">{a.assetName || '—'}</td>
+                              <td className="px-3 py-2 text-xs text-slate-600 font-mono dark:text-slate-300">{a.serialNumber || '—'}</td>
                               <td className="px-3 py-2"><span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-emerald-50 text-emerald-700">{a.condition || 'Good'}</span></td>
                               <td className="px-3 py-2"><span className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide bg-slate-100 text-slate-600">{a.returnCondition || a.condition || '—'}</span></td>
-                              <td className="px-3 py-2 text-xs text-slate-500 max-w-[120px] truncate">{a.returnNote || '—'}</td>
-                              <td className="px-3 py-2 text-xs text-slate-600">{new Date(a.returnedAt).toLocaleDateString()}</td>
+                              <td className="px-3 py-2 text-xs text-slate-500 max-w-[120px] truncate dark:text-slate-400">{a.returnNote || '—'}</td>
+                              <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-300">{new Date(a.returnedAt).toLocaleDateString()}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1150,14 +1150,14 @@ function AccountabilityDrawer({
 
               {/* ─── Agreement Documents ─── */}
               <div>
-                <h3 className="text-xs font-semibold text-[#012061] flex items-center gap-1.5 mb-2">
+                <h3 className="text-xs font-semibold text-[#012061] flex items-center gap-1.5 mb-2 dark:text-slate-100">
                   <FolderOpen className="w-3.5 h-3.5 text-[#f8931f]" />
                   Agreement Documents ({data.agreementDocuments.length})
                 </h3>
                 {data.agreementDocuments.length === 0 ? (
                   <p className="text-xs text-slate-400 italic">No agreement documents.</p>
                 ) : (
-                  <div className="overflow-x-auto rounded-lg border border-slate-200">
+                  <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-[#012061] text-left">
@@ -1171,12 +1171,12 @@ function AccountabilityDrawer({
                       </thead>
                       <tbody>
                         {data.agreementDocuments.map(doc => (
-                          <tr key={doc.id} className="border-b border-slate-100 bg-white">
-                            <td className="px-3 py-2 font-semibold text-[#012061] text-xs">{doc.documentNumber}</td>
+                          <tr key={doc.id} className="border-b border-slate-100 bg-white dark:border-slate-700 dark:bg-slate-800">
+                            <td className="px-3 py-2 font-semibold text-[#012061] text-xs dark:text-slate-100">{doc.documentNumber}</td>
                             <td className="px-3 py-2"><DocStatusBadge status={doc.status} /></td>
-                            <td className="px-3 py-2 text-xs text-slate-600">{new Date(doc.issuedAt).toLocaleDateString()}</td>
-                            <td className="px-3 py-2 text-xs text-slate-600">{doc.assetCount}</td>
-                            <td className="px-3 py-2 text-xs text-slate-600">
+                            <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-300">{new Date(doc.issuedAt).toLocaleDateString()}</td>
+                            <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-300">{doc.assetCount}</td>
+                            <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
                               {doc.recipientSignedAt ? new Date(doc.recipientSignedAt).toLocaleDateString() : '—'}
                             </td>
                             <td className="px-3 py-2">
@@ -1204,9 +1204,9 @@ function AccountabilityDrawer({
 
 function InfoCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="flex items-start gap-2 bg-slate-50 rounded-lg px-3 py-2">
+    <div className="flex items-start gap-2 bg-slate-50 rounded-lg px-3 py-2 dark:bg-slate-800">
       <span className="text-slate-400 mt-0.5">{icon}</span>
-      <div><p className="text-[10px] text-slate-500">{label}</p><p className="text-xs font-medium text-slate-700">{value}</p></div>
+      <div><p className="text-[10px] text-slate-500 dark:text-slate-400">{label}</p><p className="text-xs font-medium text-slate-700 dark:text-slate-100">{value}</p></div>
     </div>
   );
 }
@@ -1470,17 +1470,17 @@ export default function ProfilesPage() {
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); if (p.photoUrl) setExpandedImage(p.photoUrl); }}
-                          className="w-8 h-8 rounded-full overflow-hidden border border-slate-200 flex items-center justify-center shrink-0 bg-slate-100 cursor-pointer hover:ring-2 hover:ring-[#f8931f]/40 hover:border-[#f8931f]/40 transition-all"
+                          className="w-8 h-8 rounded-full overflow-hidden border border-slate-200 dark:border-slate-600 flex items-center justify-center shrink-0 bg-slate-100 dark:bg-slate-700 cursor-pointer hover:ring-2 hover:ring-[#f8931f]/40 hover:border-[#f8931f]/40 transition-all"
                           title={`View photo for ${p.fullName}`}
                           aria-label={`View photo for ${p.fullName}`}
                         >
                           {p.photoUrl ? (
                             <img src={p.photoUrl} alt={p.fullName} className="w-full h-full object-cover" />
                           ) : (
-                            <span className="text-[10px] font-bold text-[#012061]">{p.fullName.trim().split(/\s+/).length === 1 ? p.fullName.slice(0, 2).toUpperCase() : (p.fullName.trim().split(/\s+/)[0][0] + p.fullName.trim().split(/\s+/).slice(-1)[0][0]).toUpperCase()}</span>
+                            <span className="text-[10px] font-bold text-[#012061] dark:text-slate-100">{p.fullName.trim().split(/\s+/).length === 1 ? p.fullName.slice(0, 2).toUpperCase() : (p.fullName.trim().split(/\s+/)[0][0] + p.fullName.trim().split(/\s+/).slice(-1)[0][0]).toUpperCase()}</span>
                           )}
                         </button>
-                        <button onClick={() => openDetail(p)} className="text-sm font-semibold hover:underline" style={{ color: '#012061' }}>{p.fullName}</button>
+                        <button onClick={() => openDetail(p)} className="text-sm font-semibold text-[#012061] hover:underline dark:text-slate-100 dark:hover:text-[#f8931f]">{p.fullName}</button>
                       </div>
                     </td>
                     <td className="px-4 py-3">

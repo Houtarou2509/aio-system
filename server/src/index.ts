@@ -34,6 +34,8 @@ import searchRoutes from './routes/search.routes';
 import supplierRoutes from './routes/supplier.routes';
 import settingsRoutes from './routes/settings.routes';
 import accountabilityRoutes from './routes/accountability.routes';
+import issueRoutes from './routes/issue.routes';
+import systemRoutes from './routes/system.routes';
 import { startCronJobs } from './jobs/cron';
 
 // Start server only when not in test
@@ -110,6 +112,8 @@ app.use('/api/search', searchRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/accountability', accountabilityRoutes);
+app.use('/api/issues', issueRoutes);
+app.use('/api/system', systemRoutes);
 
 // Redirect root to /aio-system/
 app.get('/', (_req, res) => {

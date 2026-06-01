@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import {
   Settings2, Shield, Send, ChevronDown,
   Archive, History, Users, ShoppingCart, Truck,
-  Bell, Lock, HardDrive,
+  Bell, Lock, HardDrive, AlertCircle, Activity, HelpCircle,
 } from 'lucide-react';
 import { PermissionGate } from '../components/auth';
+import { useAuth } from '../context/AuthContext';
 
 /* ─── Accordion Section ──────────────────────────────────── */
 
@@ -31,10 +32,10 @@ function AccordionSection({
         className="w-full flex items-center gap-4 px-4 sm:px-6 py-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-left"
       >
         <div className="flex items-center justify-center w-9 h-9 rounded-lg shrink-0 bg-[#012061]/10 dark:bg-slate-700/50">
-          <Icon className="w-5 h-5" style={{ color: '#012061' }} />
+          <Icon className="w-5 h-5 text-[#012061] dark:text-[#f8931f]" />
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="text-sm font-bold" style={{ color: '#012061' }}>{title}</h2>
+          <h2 className="text-sm font-bold text-[#012061] dark:text-slate-100">{title}</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>
         </div>
         <ChevronDown
@@ -53,10 +54,15 @@ function AccordionSection({
 /* ─── Quick Stat Row ─────────────────────────────────────── */
 
 function StatLine({ label, value, color = '#012061' }: { label: string; value: string; color?: string }) {
+  const valueClass = color === '#f8931f'
+    ? 'text-[#f8931f]'
+    : color === '#0891b2'
+      ? 'text-cyan-600 dark:text-cyan-300'
+      : 'text-[#012061] dark:text-slate-100';
   return (
     <div className="flex items-center justify-between py-1.5">
       <span className="text-xs text-slate-500 dark:text-slate-400">{label}</span>
-      <span className="text-xs font-semibold" style={{ color }}>{value}</span>
+      <span className={`text-xs font-semibold ${valueClass}`}>{value}</span>
     </div>
   );
 }
@@ -134,7 +140,9 @@ function QuickLink({ to, icon: Icon, label }: { to: string; icon: React.ElementT
    ═══════════════════════════════════════════════════════════ */
 
 export default function SettingsPage() {
+  const { user } = useAuth();
   const [backupStats, setBackupStats] = useState<{ lastBackup: string | null; totalBackups: number }>({ lastBackup: null, totalBackups: 0 });
+  const canManageSupport = user?.role === 'ADMIN' || user?.role === 'STAFF_ADMIN';
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -203,6 +211,32 @@ export default function SettingsPage() {
         </AccordionSection>
         </PermissionGate>
 
+        {canManageSupport && (
+        <AccordionSection
+          icon={Activity}
+          title="System Health"
+          subtitle="Server, database, backups, and storage diagnostics"
+        >
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <p className="text-xs text-slate-500 dark:text-slate-400">Check operational status before rollout and after user reports.</p>
+            <QuickLink to="/system-health" icon={Activity} label="Open Diagnostics" />
+          </div>
+        </AccordionSection>
+        )}
+
+        {canManageSupport && (
+        <AccordionSection
+          icon={AlertCircle}
+          title="Support"
+          subtitle="Issue reports and quick user guidance"
+        >
+          <div className="flex items-center gap-3 flex-wrap">
+            <QuickLink to="/issues" icon={AlertCircle} label="Issue Reports" />
+            <QuickLink to="/help" icon={HelpCircle} label="Quick Guide" />
+          </div>
+        </AccordionSection>
+        )}
+
         <PermissionGate permissions={['users:view']}>
         <AccordionSection
           icon={Users}
@@ -251,13 +285,13 @@ export default function SettingsPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
-                <p className="text-xs font-semibold" style={{ color: '#012061' }}>In-App Notifications</p>
+                <p className="text-xs font-semibold text-[#012061] dark:text-slate-100">In-App Notifications</p>
                 <p className="text-[11px] text-slate-400">Warranty expirations, maintenance overdue alerts</p>
               </div>
               <QuickLink to="/notifications" icon={Bell} label="View All" />
             </div>
             <div className="border-t border-slate-200 dark:border-slate-700 pt-3">
-              <p className="text-xs font-semibold mb-2" style={{ color: '#012061' }}>Email Alerts</p>
+              <p className="text-xs font-semibold mb-2 text-[#012061] dark:text-slate-100">Email Alerts</p>
               <EmailTestInline />
             </div>
           </div>

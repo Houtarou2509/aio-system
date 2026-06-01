@@ -39,6 +39,13 @@ export async function seedUsers(): Promise<Record<string, UserFixture>> {
   for (const def of USER_DEFS) {
     const hash = await bcrypt.hash(def.password, 4);
     const perms = JSON.stringify(DEFAULT_PERMISSIONS[def.role] || []);
+    const staleUsernameUser = await prisma.user.findUnique({ where: { username: def.username } });
+    if (staleUsernameUser && staleUsernameUser.email !== def.email) {
+      await prisma.user.update({
+        where: { id: staleUsernameUser.id },
+        data: { username: `${def.username}_stale_${Date.now()}` },
+      });
+    }
     const user = await prisma.user.upsert({
       where: { email: def.email },
       update: { passwordHash: hash, role: def.role, permissions: perms },
