@@ -29,6 +29,7 @@ import ChangePasswordPage from './pages/ChangePasswordPage';
 import HelpPage from './pages/HelpPage';
 import IssueReportsPage from './pages/IssueReportsPage';
 import SystemHealthPage from './pages/SystemHealthPage';
+import DataQualityPage from './pages/DataQualityPage';
 import './index.css';
 
 function App() {
@@ -70,6 +71,7 @@ function App() {
             <Route path="help" element={<HelpPage />} />
             <Route path="issues" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><IssueReportsPage /></ProtectedRoute>} />
             <Route path="system-health" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><SystemHealthPage /></ProtectedRoute>} />
+            <Route path="data-quality" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><DataQualityPage /></ProtectedRoute>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

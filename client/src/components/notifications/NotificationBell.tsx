@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, Wrench, ShieldAlert, Check, Inbox } from 'lucide-react';
+import { Bell, Wrench, ShieldAlert, ShieldX, Clock, Check, Inbox } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
 
 interface NotificationItem {
   id: string;
-  type: 'WARRANTY_EXPIRING' | 'MAINTENANCE_OVERDUE';
+  type: 'WARRANTY_EXPIRING' | 'WARRANTY_EXPIRED' | 'MAINTENANCE_OVERDUE' | 'MAINTENANCE_DUE_SOON';
   message: string;
   assetId: string;
   isRead: boolean;
@@ -46,12 +46,26 @@ const TYPE_CONFIG = {
     border: 'border-brand-red/30',
     label: 'Warranty',
   },
+  WARRANTY_EXPIRED: {
+    icon: ShieldX,
+    color: 'text-[#991b1b]',
+    bg: 'bg-[#991b1b]/10',
+    border: 'border-[#991b1b]/30',
+    label: 'Warranty Expired',
+  },
   MAINTENANCE_OVERDUE: {
     icon: Wrench,
     color: 'text-brand-orange',
     bg: 'bg-brand-orange/10',
     border: 'border-brand-orange/30',
     label: 'Maintenance',
+  },
+  MAINTENANCE_DUE_SOON: {
+    icon: Clock,
+    color: 'text-[#b45309]',
+    bg: 'bg-[#b45309]/10',
+    border: 'border-[#b45309]/30',
+    label: 'Due Soon',
   },
 } as const;
 

@@ -136,7 +136,7 @@ export async function listAssets(query: {
   return { items: enriched, total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) };
 }
 
-// Helper to clean warranty fields for DB
+// Helper to clean warranty and blank-string fields for DB
 function cleanWarrantyFields(data: any) {
   const result: any = { ...data };
   // warrantyExpiry: empty string → null, valid date string → Date
@@ -151,6 +151,24 @@ function cleanWarrantyFields(data: any) {
   if ('warrantyNotes' in result) {
     if (result.warrantyNotes === '' || result.warrantyNotes === null) {
       result.warrantyNotes = null;
+    }
+  }
+  // propertyNumber: empty string → null (blank means "no property number")
+  if ('propertyNumber' in result) {
+    if (result.propertyNumber === '' || result.propertyNumber === undefined) {
+      result.propertyNumber = null;
+    }
+  }
+  // serialNumber: empty string → null (blank means "no serial number")
+  if ('serialNumber' in result) {
+    if (result.serialNumber === '') {
+      result.serialNumber = null;
+    }
+  }
+  // assignedTo: empty string → null (blank means "no assignee")
+  if ('assignedTo' in result) {
+    if (result.assignedTo === '' || result.assignedTo === undefined) {
+      result.assignedTo = null;
     }
   }
   return result;

@@ -1,16 +1,14 @@
 import { NotificationType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { sendSystemAlert } from './email.service';
 
 /**
- * Scan assets and maintenance schedules, generating notifications
- * for warranties expiring within 30 days and overdue maintenance.
+ * Scan assets and maintenance schedules, generating in-app notifications
+ * for warranties expiring/expired and maintenance overdue/due-soon.
  * Deduplicates by (assetId + type) — skips if one already exists.
- * Sends email alerts to admins when notifications are created.
+ * In-app only — no email sending.
  */
 export async function checkAndGenerateNotifications(): Promise<number> {
   let created = 0;
-  const emailMessages: { subject: string; message: string }[] = [];
 
   const now = new Date();
   const thirtyDays = new Date();
@@ -48,10 +46,6 @@ export async function checkAndGenerateNotifications(): Promise<number> {
         },
       });
       created++;
-      emailMessages.push({
-        subject: `Warranty Expiring: ${asset.name}`,
-        message,
-      });
     }
   }
 
@@ -84,17 +78,73 @@ export async function checkAndGenerateNotifications(): Promise<number> {
         },
       });
       created++;
-      emailMessages.push({
-        subject: `Maintenance Overdue: ${schedule.asset.name}`,
-        message,
-      });
     }
   }
 
-  // ── Send batched email alerts ──
-  if (emailMessages.length > 0) {
-    for (const m of emailMessages) {
-      await sendSystemAlert(m.subject, m.message);
+  // ── Warranty already expired ──
+  const expiredWarranties = await prisma.asset.findMany({
+    where: {
+      warrantyExpiry: {
+        not: null,
+        lt: now,
+      },
+      deletedAt: null,
+    },
+    select: { id: true, name: true, warrantyExpiry: true },
+  });
+
+  for (const asset of expiredWarranties) {
+    const expiryDate = asset.warrantyExpiry!;
+    const message = `Warranty expired on ${asset.name} (expired ${expiryDate.toISOString().split('T')[0]})`;
+
+    const existing = await prisma.notification.findFirst({
+      where: { assetId: asset.id, type: NotificationType.WARRANTY_EXPIRED },
+    });
+
+    if (!existing) {
+      await prisma.notification.create({
+        data: {
+          type: NotificationType.WARRANTY_EXPIRED,
+          message,
+          assetId: asset.id,
+        },
+      });
+      created++;
+    }
+  }
+
+  // ── Maintenance due soon (within 7 days) ──
+  const sevenDays = new Date();
+  sevenDays.setDate(now.getDate() + 7);
+
+  const dueSoonSchedules = await prisma.maintenanceSchedule.findMany({
+    where: {
+      scheduledDate: {
+        gte: now,
+        lte: sevenDays,
+      },
+      status: { not: 'completed' },
+      completedAt: null,
+    },
+    include: { asset: { select: { id: true, name: true } } },
+  });
+
+  for (const schedule of dueSoonSchedules) {
+    const message = `Maintenance due soon for ${schedule.asset.name} (scheduled ${schedule.scheduledDate.toISOString().split('T')[0]})`;
+
+    const existing = await prisma.notification.findFirst({
+      where: { assetId: schedule.assetId, type: NotificationType.MAINTENANCE_DUE_SOON },
+    });
+
+    if (!existing) {
+      await prisma.notification.create({
+        data: {
+          type: NotificationType.MAINTENANCE_DUE_SOON,
+          message,
+          assetId: schedule.assetId,
+        },
+      });
+      created++;
     }
   }
 

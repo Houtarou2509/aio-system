@@ -744,7 +744,8 @@ export default function IssuancesPage() {
         ) : issuances.length === 0 ? (
           <EmptyState onAdd={() => setShowBulkWizard(true)} />
         ) : (
-          <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-300px)] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+          <>
+          <div className="hidden md:block overflow-x-auto overflow-y-auto max-h-[calc(100vh-300px)] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#012061] text-left">
@@ -1212,6 +1213,370 @@ export default function IssuancesPage() {
             </tbody>
           </table>
           </div>
+          {/* ─── MOBILE CARD VIEW ─── */}
+          <div className="md:hidden space-y-2">
+            {groupedIssuances.map(row => {
+              if (row.type === 'single') {
+                const iss = row.item;
+                return (
+                  <div key={iss.id} className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                    {/* Header: Asset name + status badge */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-sm text-[#012061] dark:text-slate-100 truncate">{iss.asset?.name || '—'}</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">S/N: {iss.asset?.serialNumber || '—'}</p>
+                      </div>
+                      <div className="shrink-0">
+                        {iss.returnedAt ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                            <CheckCircle2 className="w-3 h-3" /> Returned
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Active
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Personnel & date */}
+                    <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400 mb-2">
+                      <span className="font-semibold">{iss.personnel?.fullName || iss.assignedTo || '—'}</span>
+                      <span className="text-slate-300 dark:text-slate-600">·</span>
+                      <span>{new Date(iss.assignedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                    </div>
+
+                    {/* Document status badges */}
+                    {(iss.recipientSignedAt || iss.agreementDocument?.status) && (
+                      <div className="flex flex-wrap items-center gap-1 mb-2 pt-1.5 border-t border-slate-100 dark:border-slate-700/50">
+                        {iss.recipientSignedAt && (
+                          <span className="text-[10px] font-semibold text-[#012061] dark:text-slate-200">
+                            Signed by {iss.recipientSignatureName || 'recipient'}
+                          </span>
+                        )}
+                        {iss.agreementDocument?.signedPdfPath && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                            <CheckCircle2 className="h-2.5 w-2.5" /> PDF
+                          </span>
+                        )}
+                        <DocStatusBadge status={iss.agreementDocument?.status} />
+                        {iss.recipientSignedAt && iss.agreementDocument?.documentNumber && (
+                          <VerifiedBadge
+                            signedAt={iss.recipientSignedAt}
+                            signatoryName={iss.recipientSignatureName}
+                            documentNumber={iss.agreementDocument.documentNumber}
+                          />
+                        )}
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                      {!iss.returnedAt && (
+                        <PermissionGate permissions={['issuances:return']}>
+                          <button
+                            onClick={() => openReturnModal([iss])}
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all"
+                            title="Return this asset"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </button>
+                        </PermissionGate>
+                      )}
+                      {!iss.returnedAt && (
+                        <PermissionGate permissions={['issuances:create']}>
+                          <button
+                            onClick={() => openTransferModal(iss)}
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all"
+                            title="Transfer asset to another personnel"
+                          >
+                            <ArrowRightLeft className="w-4 h-4" />
+                          </button>
+                        </PermissionGate>
+                      )}
+                      {!iss.returnedAt && !iss.recipientSignedAt && (
+                        <PermissionGate permissions={['issuances:edit']}>
+                          <button
+                            onClick={() => openSignModal(iss)}
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all"
+                            title="Digital sign-off"
+                          >
+                            <PenLine className="w-4 h-4" />
+                          </button>
+                        </PermissionGate>
+                      )}
+                      {iss.agreementDocument?.signedPdfPath && (
+                        <button
+                          onClick={() => {
+                            const url = toPublicFileUrl(iss.agreementDocument?.signedPdfPath);
+                            if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                          }}
+                          className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all"
+                          title="View signed agreement document"
+                        >
+                          <FileText className="w-4 h-4" />
+                        </button>
+                      )}
+                      {iss.agreementDocument || iss.agreementText ? (
+                        <button
+                          onClick={() => openAgreementPreview({
+                            personnelName: iss.personnel?.fullName,
+                            position: iss.personnel?.position || undefined,
+                            department: iss.personnel?.department || undefined,
+                            project: iss.personnel?.project || undefined,
+                            assetName: iss.asset?.name,
+                            serialNumber: iss.asset?.serialNumber || undefined,
+                            propertyNumber: iss.asset?.propertyNumber || undefined,
+                            condition: iss.condition,
+                            templateId: iss.agreementId || undefined,
+                            agreementText: iss.agreementDocument?.resolvedText || iss.agreementText || undefined,
+                            title: iss.agreementDocument?.title || undefined,
+                            documentNumber: iss.agreementDocument?.documentNumber || undefined,
+                            propertyOfficerName: iss.agreementDocument?.propertyOfficerName || undefined,
+                            authorizedRepName: iss.agreementDocument?.authorizedRepName || undefined,
+                            agreementDocumentId: iss.agreementDocument?.id || undefined,
+                            signedPdfPath: iss.agreementDocument?.signedPdfPath || undefined,
+                            signedUploadedAt: iss.agreementDocument?.signedUploadedAt || undefined,
+                            personnelId: iss.personnelId || undefined,
+                            recipientSignedAt: iss.recipientSignedAt || undefined,
+                            recipientSignatureName: iss.recipientSignatureName || undefined,
+                          })}
+                          className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#012061] dark:hover:text-white transition-all"
+                          title="View agreement document"
+                        >
+                          <FileText className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-300 dark:text-slate-600 cursor-not-allowed" title="No agreement document available">
+                          <FileText className="w-4 h-4" />
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              // Batch issuance card
+              if (row.type !== 'batch') return null;
+              const batchItems = row.items;
+              const first = batchItems[0];
+              const batchAgreementDocument = batchItems.find((item: Issuance) => item.agreementDocument)?.agreementDocument || first.agreementDocument;
+              const allReturned = batchItems.every((i: Issuance) => i.returnedAt);
+              const anyReturned = batchItems.some((i: Issuance) => i.returnedAt);
+              const batchId = row.batchId;
+              const isBatchExpanded = expandedBatches.has(batchId || '');
+              const toggleBatchExpand = () => {
+                setExpandedBatches(prev => {
+                  const next = new Set(prev);
+                  if (next.has(batchId || '')) next.delete(batchId || '');
+                  else next.add(batchId || '');
+                  return next;
+                });
+              };
+              return (
+                <div key={`batch-card-${batchId}`} className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                  {/* Header: Batch label + status badge */}
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-sm text-[#012061] dark:text-slate-100">
+                          {first.personnel?.fullName || first.assignedTo || '—'}
+                        </p>
+                        <span className="inline-flex items-center rounded-full bg-[#012061]/10 px-2 py-0.5 text-[10px] font-bold text-[#012061] dark:bg-slate-700 dark:text-slate-200">Batch</span>
+                      </div>
+                      <button onClick={toggleBatchExpand} className="text-left text-xs text-[#012061] hover:text-[#f8931f] dark:text-slate-300 dark:hover:text-[#f8931f] font-semibold mt-0.5 flex items-center gap-1">
+                        {batchItems.length} Assets
+                        {isBatchExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                      </button>
+                    </div>
+                    <div className="shrink-0">
+                      {allReturned ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle2 className="w-3 h-3" /> All returned
+                        </span>
+                      ) : anyReturned ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                          {batchItems.filter(i => i.returnedAt).length}/{batchItems.length} returned
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Active
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Date */}
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+                    {new Date(first.assignedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                  </div>
+
+                  {/* Document status badges */}
+                  {(first.recipientSignedAt || batchAgreementDocument?.status) && (
+                    <div className="flex flex-wrap items-center gap-1 mb-2 pt-1.5 border-t border-slate-100 dark:border-slate-700/50">
+                      {first.recipientSignedAt && (
+                        <span className="text-[10px] font-semibold text-[#012061] dark:text-slate-200">
+                          Signed by {first.recipientSignatureName || 'recipient'}
+                        </span>
+                      )}
+                      {batchAgreementDocument?.signedPdfPath && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                          <CheckCircle2 className="h-2.5 w-2.5" /> PDF
+                        </span>
+                      )}
+                      <DocStatusBadge status={batchAgreementDocument?.status} />
+                      {first.recipientSignedAt && batchAgreementDocument?.documentNumber && (
+                        <VerifiedBadge
+                          signedAt={first.recipientSignedAt}
+                          signatoryName={first.recipientSignatureName}
+                          documentNumber={batchAgreementDocument.documentNumber}
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {/* Expand/collapse: individual items */}
+                  {isBatchExpanded && (
+                    <div className="space-y-1.5 mb-2 pt-1.5 border-t border-slate-100 dark:border-slate-700/50">
+                      {batchItems.map(bi => (
+                        <div key={bi.id} className="flex items-center gap-2 rounded-md bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5">
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${bi.returnedAt ? 'bg-emerald-400' : 'bg-[#f8931f]/40'}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs font-semibold truncate ${bi.returnedAt ? 'text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
+                              {bi.returnedAt && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 inline mr-0.5" />}
+                              {bi.asset?.name || '—'}
+                            </p>
+                            {bi.asset?.serialNumber && (
+                              <p className="text-[10px] text-slate-400">S/N: {bi.asset.serialNumber}</p>
+                            )}
+                          </div>
+                          <div className="shrink-0 flex items-center gap-1">
+                            {bi.returnedAt ? (
+                              <span className="text-[10px] font-semibold text-emerald-500">Returned</span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Active</span>
+                            )}
+                            {!bi.returnedAt && (
+                              <>
+                                <PermissionGate permissions={['issuances:create']}>
+                                  <button
+                                    onClick={() => openTransferModal(bi)}
+                                    className="inline-flex items-center justify-center h-7 w-7 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all"
+                                    title="Transfer asset"
+                                  >
+                                    <ArrowRightLeft className="w-3.5 h-3.5" />
+                                  </button>
+                                </PermissionGate>
+                                <PermissionGate permissions={['issuances:return']}>
+                                  <button
+                                    onClick={() => openReturnModal([bi])}
+                                    className="inline-flex items-center justify-center h-7 w-7 rounded-md bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all"
+                                    title={`Return ${bi.asset?.name || 'this asset'}`}
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                  </button>
+                                </PermissionGate>
+                                {!bi.recipientSignedAt && (
+                                  <PermissionGate permissions={['issuances:edit']}>
+                                    <button
+                                      onClick={() => openSignModal(bi)}
+                                      className="inline-flex items-center justify-center h-7 w-7 rounded-md bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all"
+                                      title="Digital sign-off"
+                                    >
+                                      <PenLine className="w-3.5 h-3.5" />
+                                    </button>
+                                  </PermissionGate>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                    {!allReturned && (
+                      <PermissionGate permissions={['issuances:return']}>
+                        <button
+                          onClick={() => openReturnModal(batchItems.filter((item: Issuance) => !item.returnedAt))}
+                          className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-all"
+                          title="Return all active assets in this batch"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                      </PermissionGate>
+                    )}
+                    {!allReturned && !first.recipientSignedAt && (
+                      <PermissionGate permissions={['issuances:edit']}>
+                        <button
+                          onClick={() => openSignModal(first)}
+                          className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all"
+                          title="Digital sign-off for batch"
+                        >
+                          <PenLine className="w-4 h-4" />
+                        </button>
+                      </PermissionGate>
+                    )}
+                    {batchAgreementDocument?.signedPdfPath && (
+                      <button
+                        onClick={() => {
+                          const url = toPublicFileUrl(batchAgreementDocument?.signedPdfPath);
+                          if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                        }}
+                        className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all"
+                        title="View signed agreement document"
+                      >
+                        <FileText className="w-4 h-4" />
+                      </button>
+                    )}
+                    {batchAgreementDocument || first.agreementText ? (
+                      <button
+                        onClick={() => openAgreementPreview({
+                          personnelName: first.personnel?.fullName,
+                          position: first.personnel?.position || undefined,
+                          department: first.personnel?.department || undefined,
+                          project: first.personnel?.project || undefined,
+                          assetName: `${batchItems.length} assets`,
+                          serialNumber: undefined,
+                          propertyNumber: undefined,
+                          condition: first.condition,
+                          templateId: first.agreementId || undefined,
+                          agreementText: batchAgreementDocument?.resolvedText || first.agreementText || undefined,
+                          title: batchAgreementDocument?.title || undefined,
+                          documentNumber: batchAgreementDocument?.documentNumber || undefined,
+                          propertyOfficerName: batchAgreementDocument?.propertyOfficerName || undefined,
+                          authorizedRepName: batchAgreementDocument?.authorizedRepName || undefined,
+                          agreementDocumentId: batchAgreementDocument?.id || undefined,
+                          signedPdfPath: batchAgreementDocument?.signedPdfPath || undefined,
+                          signedUploadedAt: batchAgreementDocument?.signedUploadedAt || undefined,
+                          personnelId: first.personnelId || undefined,
+                          assets: batchItems.map(bi => ({
+                            name: bi.asset?.name || '—',
+                            serialNumber: bi.asset?.serialNumber || undefined,
+                            propertyNumber: bi.asset?.propertyNumber || undefined,
+                            condition: bi.condition || first.condition || undefined,
+                          })),
+                          recipientSignedAt: first.recipientSignedAt || undefined,
+                          recipientSignatureName: first.recipientSignatureName || undefined,
+                        })}
+                        className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-[#012061] dark:hover:text-white transition-all"
+                        title="View agreement document"
+                      >
+                        <FileText className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <span className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-300 dark:text-slate-600 cursor-not-allowed" title="No agreement document available">
+                        <FileText className="w-4 h-4" />
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          </>
         )}
       </div>
 

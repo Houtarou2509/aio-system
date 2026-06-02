@@ -117,3 +117,8 @@
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
 }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff !important; color: #000 !important; }
+}

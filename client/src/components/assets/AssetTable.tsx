@@ -57,143 +57,221 @@ export function AssetTable({
     sortBy === field ? (sortOrder === 'asc' ? ' ↑' : ' ↓') : '';
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-      <table className="w-full text-sm">
-        {/* ── Header: Navy ──────────────────────────────── */}
-        <thead>
-          <tr className="bg-[#012061] text-left">
-            <th className="px-3 py-2.5 w-10">
-              <input
-                type="checkbox"
-                ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
-                checked={allSelected}
-                onChange={onToggleSelectAll}
-                className="rounded border-white/30 accent-[#f8931f]"
-              />
-            </th>
-            <th className="px-2 py-2.5 w-12" />
-            <th className="cursor-pointer px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase" onClick={() => onSort('name')}>
-              Name{sortIcon('name')}
-            </th>
-            <th className="cursor-pointer px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase" onClick={() => onSort('type')}>
-              Type{sortIcon('type')}
-            </th>
-            <th className="cursor-pointer px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase" onClick={() => onSort('status')}>
-              Status{sortIcon('status')}
-            </th>
-            <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Location</th>
-            <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Assigned To</th>
-            <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Property #</th>
-            {!isGuest && (
-              <th className="cursor-pointer px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase" onClick={() => onSort('purchasePrice')}>
-                Price{sortIcon('purchasePrice')}
+    <>
+      {/* ── Desktop table ────────────────────────────────── */}
+      <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+        <table className="w-full text-sm">
+          {/* ── Header: Navy ──────────────────────────────── */}
+          <thead>
+            <tr className="bg-[#012061] text-left">
+              <th className="px-3 py-2.5 w-10">
+                <input
+                  type="checkbox"
+                  ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                  checked={allSelected}
+                  onChange={onToggleSelectAll}
+                  className="rounded border-white/30 accent-[#f8931f]"
+                />
               </th>
-            )}
-            <th className="cursor-pointer px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase" onClick={() => onSort('createdAt')}>
-              Added{sortIcon('createdAt')}
-            </th>
-          </tr>
-        </thead>
+              <th className="px-2 py-2.5 w-12" />
+              <th className="cursor-pointer px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase" onClick={() => onSort('name')}>
+                Name{sortIcon('name')}
+              </th>
+              <th className="cursor-pointer px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase" onClick={() => onSort('type')}>
+                Type{sortIcon('type')}
+              </th>
+              <th className="cursor-pointer px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase" onClick={() => onSort('status')}>
+                Status{sortIcon('status')}
+              </th>
+              <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Location</th>
+              <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Assigned To</th>
+              <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Property #</th>
+              {!isGuest && (
+                <th className="cursor-pointer px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase" onClick={() => onSort('purchasePrice')}>
+                  Price{sortIcon('purchasePrice')}
+                </th>
+              )}
+              <th className="cursor-pointer px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase" onClick={() => onSort('createdAt')}>
+                Added{sortIcon('createdAt')}
+              </th>
+            </tr>
+          </thead>
 
-        {/* ── Body: Clickable rows ────────────────────────── */}
-        <tbody>
-          {assets.map(a => {
-            const isSelected = selectedIds.has(a.id);
-            const imgUrl = getImageUrl(a.imageUrl);
-            return (
-              <tr
-                key={a.id}
-                className={`group border-b border-slate-100 dark:border-slate-700 cursor-pointer transition-colors
-                  ${isSelected ? 'bg-[#f8931f]/5 border-l-2 border-l-[#f8931f]' : 'hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-l-2 hover:border-l-[#f8931f]'}
-                `}
-                onClick={() => onView(a)}
-              >
-                {/* Checkbox — stop propagation so row click doesn't toggle */}
-                <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => onToggleSelect(a.id)}
-                    className="rounded border-slate-300 dark:border-slate-600 accent-[#f8931f]"
-                  />
+          {/* ── Body: Clickable rows ────────────────────────── */}
+          <tbody>
+            {assets.map(a => {
+              const isSelected = selectedIds.has(a.id);
+              const imgUrl = getImageUrl(a.imageUrl);
+              return (
+                <tr
+                  key={a.id}
+                  className={`group border-b border-slate-100 dark:border-slate-700 cursor-pointer transition-colors
+                    ${isSelected ? 'bg-[#f8931f]/5 border-l-2 border-l-[#f8931f]' : 'hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-l-2 hover:border-l-[#f8931f]'}
+                  `}
+                  onClick={() => onView(a)}
+                >
+                  {/* Checkbox — stop propagation so row click doesn't toggle */}
+                  <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => onToggleSelect(a.id)}
+                      className="rounded border-slate-300 dark:border-slate-600 accent-[#f8931f]"
+                    />
+                  </td>
+
+                  {/* Image thumbnail — click opens lightbox, not detail modal */}
+                  <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
+                    {imgUrl ? (
+                      <img
+                        src={imgUrl}
+                        alt={a.name}
+                        className="h-10 w-10 rounded-full object-cover border-2 border-slate-100 dark:border-slate-700 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => onImageClick?.(imgUrl)}
+                      />
+                    ) : (
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#012061]">
+                        <Package className="h-4 w-4 text-[#f8931f]" />
+                      </div>
+                    )}
+                  </td>
+
+                  {/* Name — Bold Navy */}
+                  <td className="px-3 py-2 font-semibold text-[#012061] dark:text-slate-100 whitespace-nowrap">
+                    {a.name}
+                    {(() => {
+                      const w = getWarrantyStatus((a as any).warrantyExpiry);
+                      if (w.status === 'expiring') return <span className="ml-1 text-[#f8931f]" title={`Warranty expiring on ${formatWarrantyDate((a as any).warrantyExpiry)}`}>⚠</span>;
+                      if (w.status === 'expired') return <span className="ml-1 text-red-500" title={`Warranty expired on ${formatWarrantyDate((a as any).warrantyExpiry)}`}>⚠</span>;
+                      return null;
+                    })()}
+                    {(() => {
+                      const m = getMaintenanceWarning((a as any).maintenanceSchedules ?? []);
+                      if (m.level === 'overdue') return <span className="ml-1 text-red-500 cursor-help text-sm" title={`Maintenance overdue: ${m.title}`}>🔧</span>;
+                      if (m.level === 'soon') return <span className="ml-1 text-[#f8931f] cursor-help text-sm" title={`Maintenance due in ${m.daysUntil} days: ${m.title}`}>🔧</span>;
+                      return null;
+                    })()}
+                  </td>
+
+                  {/* Type */}
+                  <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">{a.type}</td>
+
+                  {/* Status — Pill */}
+                  <td className="px-3 py-2">
+                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide ${STATUS_COLORS[a.status] || 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                      {a.status}
+                    </span>
+                  </td>
+
+                  {/* Location */}
+                  <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">{a.location || <span className="text-slate-300">—</span>}</td>
+
+                  {/* Assigned To */}
+                  <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">{a.assignedTo || <span className="text-slate-300">—</span>}</td>
+
+                  {/* Property # */}
+                  <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 font-mono">{(a as any).propertyNumber || <span className="text-slate-300">—</span>}</td>
+
+                  {/* Price */}
+                  {!isGuest && (
+                    <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                      {a.purchasePrice != null ? <span className="font-medium">₱{Number(a.purchasePrice).toLocaleString()}</span> : <span className="text-slate-300">—</span>}
+                    </td>
+                  )}
+
+                  {/* Added */}
+                  <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    {new Date(a.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}
+                  </td>
+                </tr>
+              );
+            })}
+
+            {assets.length === 0 && (
+              <tr>
+                <td colSpan={10} className="px-3 py-12 text-center text-sm text-slate-400">
+                  No assets found
                 </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
-                {/* Image thumbnail — click opens lightbox, not detail modal */}
-                <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
+      {/* ── Mobile card view ─────────────────────────────── */}
+      <div className="md:hidden">
+        {assets.map(a => {
+          const imgUrl = getImageUrl(a.imageUrl);
+          return (
+            <div
+              key={a.id}
+              className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 mb-2 cursor-pointer active:bg-slate-50 dark:active:bg-slate-700 transition-colors"
+              onClick={() => onView(a)}
+            >
+              <div className="flex items-start gap-3">
+                {/* Image / icon */}
+                <div className="shrink-0" onClick={e => e.stopPropagation()}>
                   {imgUrl ? (
                     <img
                       src={imgUrl}
                       alt={a.name}
-                      className="h-10 w-10 rounded-full object-cover border-2 border-slate-100 dark:border-slate-700 cursor-pointer hover:opacity-80 transition-opacity"
+                      className="h-11 w-11 rounded-full object-cover border-2 border-slate-100 dark:border-slate-700"
                       onClick={() => onImageClick?.(imgUrl)}
                     />
                   ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#012061]">
-                      <Package className="h-4 w-4 text-[#f8931f]" />
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#012061]">
+                      <Package className="h-5 w-5 text-[#f8931f]" />
                     </div>
                   )}
-                </td>
+                </div>
 
-                {/* Name — Bold Navy */}
-                <td className="px-3 py-2 font-semibold text-[#012061] dark:text-slate-100 whitespace-nowrap">
-                  {a.name}
-                  {(() => {
-                    const w = getWarrantyStatus((a as any).warrantyExpiry);
-                    if (w.status === 'expiring') return <span className="ml-1 text-[#f8931f]" title={`Warranty expiring on ${formatWarrantyDate((a as any).warrantyExpiry)}`}>⚠</span>;
-                    if (w.status === 'expired') return <span className="ml-1 text-red-500" title={`Warranty expired on ${formatWarrantyDate((a as any).warrantyExpiry)}`}>⚠</span>;
-                    return null;
-                  })()}
-                  {(() => {
-                    const m = getMaintenanceWarning((a as any).maintenanceSchedules ?? []);
-                    if (m.level === 'overdue') return <span className="ml-1 text-red-500 cursor-help text-sm" title={`Maintenance overdue: ${m.title}`}>🔧</span>;
-                    if (m.level === 'soon') return <span className="ml-1 text-[#f8931f] cursor-help text-sm" title={`Maintenance due in ${m.daysUntil} days: ${m.title}`}>🔧</span>;
-                    return null;
-                  })()}
-                </td>
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  {/* Row 1: Name + Status badge */}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-sm text-[#012061] dark:text-slate-100 truncate">
+                      {a.name}
+                      {(() => {
+                        const w = getWarrantyStatus((a as any).warrantyExpiry);
+                        if (w.status === 'expiring') return <span className="ml-1 text-[#f8931f]" title={`Warranty expiring on ${formatWarrantyDate((a as any).warrantyExpiry)}`}>⚠</span>;
+                        if (w.status === 'expired') return <span className="ml-1 text-red-500" title={`Warranty expired on ${formatWarrantyDate((a as any).warrantyExpiry)}`}>⚠</span>;
+                        return null;
+                      })()}
+                      {(() => {
+                        const m = getMaintenanceWarning((a as any).maintenanceSchedules ?? []);
+                        if (m.level === 'overdue') return <span className="ml-1 text-red-500 cursor-help text-sm" title={`Maintenance overdue: ${m.title}`}>🔧</span>;
+                        if (m.level === 'soon') return <span className="ml-1 text-[#f8931f] cursor-help text-sm" title={`Maintenance due in ${m.daysUntil} days: ${m.title}`}>🔧</span>;
+                        return null;
+                      })()}
+                    </span>
+                    <span className={`shrink-0 inline-block rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wide ${STATUS_COLORS[a.status] || 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                      {a.status}
+                    </span>
+                  </div>
 
-                {/* Type */}
-                <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">{a.type}</td>
+                  {/* Row 2: Type + Property # */}
+                  <div className="flex items-center justify-between gap-2 mt-0.5">
+                    <span className="text-xs text-slate-600 dark:text-slate-400">{a.type}</span>
+                    {(a as any).propertyNumber && (
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono shrink-0">{(a as any).propertyNumber}</span>
+                    )}
+                  </div>
 
-                {/* Status — Pill */}
-                <td className="px-3 py-2">
-                  <span className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide ${STATUS_COLORS[a.status] || 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
-                    {a.status}
-                  </span>
-                </td>
+                  {/* Row 3: Location */}
+                  {a.location && (
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{a.location}</div>
+                  )}
 
-                {/* Location */}
-                <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">{a.location || <span className="text-slate-300">—</span>}</td>
-
-                {/* Assigned To */}
-                <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400">{a.assignedTo || <span className="text-slate-300">—</span>}</td>
-
-                {/* Property # */}
-                <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 font-mono">{(a as any).propertyNumber || <span className="text-slate-300">—</span>}</td>
-
-                {/* Price */}
-                {!isGuest && (
-                  <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                    {a.purchasePrice != null ? <span className="font-medium">₱{Number(a.purchasePrice).toLocaleString()}</span> : <span className="text-slate-300">—</span>}
-                  </td>
-                )}
-
-                {/* Added */}
-                <td className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                  {new Date(a.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}
-                </td>
-              </tr>
-            );
-          })}
-
-          {assets.length === 0 && (
-            <tr>
-              <td colSpan={10} className="px-3 py-12 text-center text-sm text-slate-400">
-                No assets found
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+                  {/* Row 4: Assigned To */}
+                  {a.assignedTo && (
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Assigned: {a.assignedTo}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }

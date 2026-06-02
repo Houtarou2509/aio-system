@@ -275,6 +275,8 @@ describe('Asset CRUD — Unique Property Number', () => {
         type: 'LAPTOP',
         serialNumber: `SN-DUP-${Date.now()}`,
         propertyNumber: 'PROP-UNIQ-001',
+        purchasePrice: 1000,
+        purchaseDate: '2025-01-15',
       });
 
     expect(res.status).toBe(409);
@@ -293,6 +295,8 @@ describe('Asset CRUD — Unique Property Number', () => {
         type: 'LAPTOP',
         serialNumber: `SN-NO-PN-${Date.now()}`,
         propertyNumber: '',
+        purchasePrice: 1000,
+        purchaseDate: '2025-01-15',
       });
 
     expect(res.status).toBe(201);
@@ -304,11 +308,11 @@ describe('Asset CRUD — Unique Property Number', () => {
     const res1 = await request(app)
       .post('/api/assets')
       .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
-      .send({ name: 'Blank PN 1', type: 'LAPTOP', serialNumber: `SN-BLANK1-${Date.now()}`, propertyNumber: '' });
+      .send({ name: 'Blank PN 1', type: 'LAPTOP', serialNumber: `SN-BLANK1-${Date.now()}`, propertyNumber: '', purchasePrice: 1000, purchaseDate: '2025-01-15' });
     const res2 = await request(app)
       .post('/api/assets')
       .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
-      .send({ name: 'Blank PN 2', type: 'LAPTOP', serialNumber: `SN-BLANK2-${Date.now()}`, propertyNumber: '' });
+      .send({ name: 'Blank PN 2', type: 'LAPTOP', serialNumber: `SN-BLANK2-${Date.now()}`, propertyNumber: '', purchasePrice: 1000, purchaseDate: '2025-01-15' });
 
     expect(res1.status).toBe(201);
     expect(res2.status).toBe(201);
@@ -371,6 +375,8 @@ describe('Asset CRUD — Unique Property Number', () => {
         type: 'LAPTOP',
         serialNumber: `SN-REUSE-${Date.now()}`,
         propertyNumber: 'PROP-DEL-001',
+        purchasePrice: 1000,
+        purchaseDate: '2025-01-15',
       });
 
     expect(res.status).toBe(409);

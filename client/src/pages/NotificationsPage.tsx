@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Bell, Wrench, ShieldAlert, Check, Inbox, CheckCheck,
+  Bell, Wrench, ShieldAlert, ShieldX, Clock, Check, Inbox, CheckCheck,
   ChevronLeft, ChevronRight, ExternalLink,
 } from 'lucide-react';
 
 /* ─── Types ─── */
 interface NotificationItem {
   id: string;
-  type: 'WARRANTY_EXPIRING' | 'MAINTENANCE_OVERDUE';
+  type: 'WARRANTY_EXPIRING' | 'WARRANTY_EXPIRED' | 'MAINTENANCE_OVERDUE' | 'MAINTENANCE_DUE_SOON';
   message: string;
   assetId: string;
   isRead: boolean;
@@ -50,6 +50,14 @@ const TYPE_CONFIG = {
     label: 'Warranty Expiring',
     dot: 'bg-[#7B1113]',
   },
+  WARRANTY_EXPIRED: {
+    icon: ShieldX,
+    color: 'text-[#991b1b]',
+    bg: 'bg-[#991b1b]/10',
+    border: 'border-[#991b1b]/30',
+    label: 'Warranty Expired',
+    dot: 'bg-[#991b1b]',
+  },
   MAINTENANCE_OVERDUE: {
     icon: Wrench,
     color: 'text-[#f8931f]',
@@ -57,6 +65,14 @@ const TYPE_CONFIG = {
     border: 'border-[#f8931f]/30',
     label: 'Maintenance Overdue',
     dot: 'bg-[#f8931f]',
+  },
+  MAINTENANCE_DUE_SOON: {
+    icon: Clock,
+    color: 'text-[#b45309]',
+    bg: 'bg-[#b45309]/10',
+    border: 'border-[#b45309]/30',
+    label: 'Maintenance Due Soon',
+    dot: 'bg-[#b45309]',
   },
 } as const;
 

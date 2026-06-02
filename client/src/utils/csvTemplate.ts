@@ -12,7 +12,7 @@ export function downloadAssetCsvTemplate() {
   ].join(',');
 
   const row2 = [
-    'Acer All-in-One', 'Desktop', 'ASSIGNED', 'Acer', 'SN-005678',
+    'Acer All-in-One', 'Desktop', 'PENDING_ASSIGNMENT', 'Acer', 'SN-005678',
     '49999', '2023-06-01', 'Juan dela Cruz', 'PROP-002', 'Room 202', 'IT Department',
     'For accounting dept', '2025-06-01', '1-year carry-in',
   ].join(',');
@@ -57,7 +57,7 @@ export type RowValidationResult =
   | { valid: true }
   | { valid: false; reason: string };
 
-const VALID_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED'];
+const VALID_STATUSES = ['AVAILABLE', 'PENDING_ASSIGNMENT', 'MAINTENANCE', 'RETIRED', 'LOST'];
 
 export function validateAssetRow(
   row: Record<string, string>,

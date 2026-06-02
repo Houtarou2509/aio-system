@@ -4,6 +4,7 @@ import {
   Settings2, Shield, Send, ChevronDown,
   Archive, History, Users, ShoppingCart, Truck,
   Bell, Lock, HardDrive, AlertCircle, Activity, HelpCircle,
+  ShieldCheck,
 } from 'lucide-react';
 import { PermissionGate } from '../components/auth';
 import { useAuth } from '../context/AuthContext';
@@ -210,6 +211,19 @@ export default function SettingsPage() {
           </div>
         </AccordionSection>
         </PermissionGate>
+
+        {canManageSupport && (
+        <AccordionSection
+          icon={ShieldCheck}
+          title="Data Quality"
+          subtitle="Identify and fix missing asset data"
+        >
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <p className="text-xs text-slate-500 dark:text-slate-400">Review assets with missing fields like property number, serial number, owner, and more.</p>
+            <QuickLink to="/data-quality" icon={ShieldCheck} label="Open Dashboard" />
+          </div>
+        </AccordionSection>
+        )}
 
         {canManageSupport && (
         <AccordionSection

@@ -12,6 +12,7 @@ import { validateEnv } from './utils/env';
 import { globalErrorHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth.routes';
 import assetRoutes from './routes/asset.routes';
+import importPreviewRoutes from './routes/import-preview.routes';
 import userRoutes from './routes/user.routes';
 import maintenanceRoutes from './routes/maintenance.routes';
 import auditRoutes from './routes/audit.routes';
@@ -36,6 +37,7 @@ import settingsRoutes from './routes/settings.routes';
 import accountabilityRoutes from './routes/accountability.routes';
 import issueRoutes from './routes/issue.routes';
 import systemRoutes from './routes/system.routes';
+import dataQualityRoutes from './routes/data-quality.routes';
 import { startCronJobs } from './jobs/cron';
 
 // Start server only when not in test
@@ -89,6 +91,7 @@ app.use('/api/guest', guestRoutes);
 
 // API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/assets/import', importPreviewRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/assets', maintenanceRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
@@ -114,6 +117,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/accountability', accountabilityRoutes);
 app.use('/api/issues', issueRoutes);
 app.use('/api/system', systemRoutes);
+app.use('/api/data-quality', dataQualityRoutes);
 
 // Redirect root to /aio-system/
 app.get('/', (_req, res) => {

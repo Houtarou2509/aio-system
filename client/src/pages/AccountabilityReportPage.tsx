@@ -404,8 +404,8 @@ export default function AccountabilityReportPage() {
         </div>
       )}
 
-      {/* Results table */}
-      <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden dark:border-slate-700 dark:bg-slate-800">
+      {/* Results table — desktop */}
+      <div className="hidden md:block bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden dark:border-slate-700 dark:bg-slate-800">
         <div className="overflow-x-auto max-h-[calc(100vh-320px)] overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10">
@@ -544,6 +544,144 @@ export default function AccountabilityReportPage() {
           </div>
         )}
       </div>
+
+      {/* Results cards — mobile */}
+      <div className="md:hidden space-y-2">
+        {loading ? (
+          <div className="flex flex-col items-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+            <p className="text-slate-400 mt-2 text-xs">Loading report...</p>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="text-center py-12 text-slate-400 text-sm">
+            No records found matching your filters.
+          </div>
+        ) : (
+          rows.map((row, idx) => (
+            <div
+              key={idx}
+              className={`bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 ${
+                row.isOverdue ? 'bg-[#7B1113]/5 dark:bg-[#7B1113]/20' : ''
+              }`}
+            >
+              {/* Header: Personnel + Status */}
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="font-semibold text-slate-800 dark:text-slate-100 text-sm truncate">
+                  {row.personnelName || '—'}
+                </span>
+                <div className="flex items-center gap-1 shrink-0">
+                  {row.status === 'active' ? (
+                    <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
+                      Active
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                      Returned
+                    </span>
+                  )}
+                  {row.isOverdue && (
+                    <span className="inline-flex rounded-full bg-[#7B1113] px-1.5 py-0.5 text-[9px] font-bold text-white">
+                      OVERDUE
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Asset name */}
+              <div className="font-semibold text-slate-800 dark:text-slate-100 text-sm mb-1">
+                {row.assetName || '—'}
+              </div>
+
+              {/* Serial No. / Property No. */}
+              <div className="flex gap-3 text-xs text-slate-600 dark:text-slate-300 mb-1">
+                <span className="font-mono">S/N: {row.serialNumber || '—'}</span>
+                <span className="font-mono">P/N: {row.propertyNumber || '—'}</span>
+              </div>
+
+              {/* Designation / Project / Institution */}
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-600 dark:text-slate-300 mb-1">
+                {row.designation && <span>{row.designation}</span>}
+                {row.project && <span>{row.project}</span>}
+                {row.institution && <span>{row.institution}</span>}
+              </div>
+
+              {/* Issued → Returned dates */}
+              <div className="text-xs text-slate-600 dark:text-slate-300 mb-1">
+                {formatDate(row.assignedAt)}
+                {row.returnedAt ? (
+                  <> → {formatDate(row.returnedAt)}</>
+                ) : (
+                  <span className="text-blue-600 font-medium"> → Active</span>
+                )}
+              </div>
+
+              {/* Condition badges */}
+              {(row.condition || row.returnCondition) && (
+                <div className="flex flex-wrap gap-1.5 mb-1">
+                  {row.condition && (
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      row.condition.toLowerCase() === 'good' ? 'bg-emerald-50 text-emerald-700' :
+                      row.condition.toLowerCase() === 'fair' ? 'bg-amber-50 text-amber-700' :
+                      row.condition.toLowerCase() === 'damaged' ? 'bg-red-50 text-red-700' :
+                      'bg-slate-50 text-slate-600'
+                    }`}>{row.condition}</span>
+                  )}
+                  {row.returnCondition && (
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      row.returnCondition.toLowerCase() === 'good' ? 'bg-emerald-50 text-emerald-700' :
+                      row.returnCondition.toLowerCase() === 'fair' ? 'bg-amber-50 text-amber-700' :
+                      row.returnCondition.toLowerCase() === 'damaged' ? 'bg-red-50 text-red-700' :
+                      'bg-slate-50 text-slate-600'
+                    }`}>{row.returnCondition}</span>
+                  )}
+                </div>
+              )}
+
+              {/* Agreement document number */}
+              {row.documentNumber && (
+                <button
+                  type="button"
+                  onClick={() => openDocumentModal(row.documentNumber!)}
+                  className="inline-flex items-center gap-1 font-mono text-xs text-[#012061] hover:text-[#f8931f] hover:underline underline-offset-2 transition-colors cursor-pointer text-left dark:text-slate-100 dark:hover:text-[#f8931f]"
+                  title="View agreement document details"
+                >
+                  <FileSignature className="w-3.5 h-3.5 shrink-0 opacity-60" />
+                  {row.documentNumber}
+                </button>
+              )}
+            </div>
+          ))
+        )}
+
+        {/* Mobile pagination */}
+        {total > 0 && (
+          <div className="flex items-center justify-between pt-2 pb-1">
+            <p className="text-xs text-slate-500">
+              {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => fetchReport(page - 1)}
+                disabled={page <= 1}
+                className="inline-flex items-center gap-1 px-2.5 py-2.5 text-xs rounded border border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-slate-700 dark:hover:bg-slate-700"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Prev
+              </button>
+              <span className="text-xs text-slate-500 px-2">
+                {page}/{totalPages || 1}
+              </span>
+              <button
+                onClick={() => fetchReport(page + 1)}
+                disabled={page >= totalPages}
+                className="inline-flex items-center gap-1 px-2.5 py-2.5 text-xs rounded border border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-slate-700 dark:hover:bg-slate-700"
+              >
+                Next <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       </div>
       </div>
 

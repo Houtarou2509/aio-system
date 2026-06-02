@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { parseCsvFile, validateAssetRow, RowValidationResult, downloadAssetCsvTemplate } from '../../utils/csvTemplate';
-import { CheckCircle, XCircle, AlertTriangle, Package, Download } from 'lucide-react';
+import { downloadAssetCsvTemplate } from '../../utils/csvTemplate';
+import { CheckCircle, XCircle, AlertTriangle, Package, Download, Loader2 } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -10,10 +10,22 @@ interface Props {
 
 type Step = 'upload' | 'preview' | 'result';
 
-interface ParsedRow {
-  rowNumber: number;
-  data: Record<string, string>;
-  validation: RowValidationResult;
+interface PreviewRow {
+  row: number;
+  status: 'valid' | 'invalid' | 'warning';
+  data: Record<string, string | null>;
+  reason: string | null;
+  field: string | null;
+}
+
+interface PreviewData {
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  warningRows: number;
+  duplicatePropertyNumbers: string[];
+  duplicateSerialNumbers: string[];
+  results: PreviewRow[];
 }
 
 interface ImportResultRow {
@@ -38,23 +50,28 @@ const STATUS_STYLES: Record<string, { icon: typeof CheckCircle; bg: string; text
   warning: { icon: AlertTriangle, bg: 'bg-amber-50 dark:bg-amber-950/30', text: 'text-amber-700 dark:text-amber-300', label: 'Warning' },
 };
 
+const PREVIEW_STYLES: Record<string, { icon: typeof CheckCircle; text: string; label: string }> = {
+  valid: { icon: CheckCircle, text: 'text-emerald-600', label: 'Valid' },
+  invalid: { icon: XCircle, text: 'text-red-600', label: 'Invalid' },
+  warning: { icon: AlertTriangle, text: 'text-amber-600', label: 'Warning' },
+};
+
 export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) {
   const [step, setStep] = useState<Step>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
-  const [rows, setRows] = useState<ParsedRow[]>([]);
+  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [importing, setImporting] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
-
-  const validRows = rows.filter(r => r.validation.valid);
-  const invalidRows = rows.filter(r => !r.validation.valid);
 
   const reset = useCallback(() => {
     setStep('upload');
     setFile(null);
     setFileError(null);
-    setRows([]);
+    setPreviewData(null);
     setImporting(false);
+    setLoading(false);
     setResult(null);
   }, []);
 
@@ -74,7 +91,6 @@ export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) 
       r.field || '',
       r.reason || '',
     ].map(cell => {
-      // Escape cells containing commas, quotes, or newlines
       if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
         return `"${cell.replace(/"/g, '""')}"`;
       }
@@ -90,6 +106,33 @@ export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) 
     URL.revokeObjectURL(url);
   }, [result]);
 
+  const downloadPreviewReport = useCallback(() => {
+    if (!previewData) return;
+    const headers = ['Row', 'Status', 'Name', 'Type', 'SerialNumber', 'PropertyNumber', 'Reason'];
+    const csvRows = previewData.results.map(r => [
+      String(r.row),
+      r.status,
+      r.data.name || '',
+      r.data.type || '',
+      r.data.serialNumber || '',
+      r.data.propertyNumber || '',
+      r.reason || '',
+    ].map(cell => {
+      if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
+        return `"${cell.replace(/"/g, '""')}"`;
+      }
+      return cell;
+    }).join(','));
+    const csv = [headers.join(','), ...csvRows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `import-preview-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [previewData]);
+
   const handleFileSelect = async (selectedFile: File) => {
     setFileError(null);
     if (!selectedFile.name.endsWith('.csv')) {
@@ -97,22 +140,24 @@ export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) 
       return;
     }
     setFile(selectedFile);
+    setLoading(true);
     try {
-      const parsed = await parseCsvFile(selectedFile);
-      if (parsed.length === 0) {
-        setRows([]);
-        setStep('preview');
-        return;
-      }
-      const mapped: ParsedRow[] = parsed.map((row, i) => ({
-        rowNumber: i + 2,
-        data: row,
-        validation: validateAssetRow(row, i + 2),
-      }));
-      setRows(mapped);
+      const token = localStorage.getItem('accessToken');
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      const res = await fetch('/api/assets/import/preview', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error?.message || 'Preview failed');
+      setPreviewData(data.data);
       setStep('preview');
-    } catch {
-      setFileError('Failed to parse CSV file');
+    } catch (err: any) {
+      setFileError(err.message || 'Failed to preview CSV');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -140,6 +185,9 @@ export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) 
   };
 
   if (!isOpen) return null;
+
+  const validCount = previewData?.validRows ?? 0;
+  const canImport = validCount > 0 && !importing;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onMouseDown={e => { if (e.target === e.currentTarget) handleClose(); }}>
@@ -175,9 +223,18 @@ export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) 
                 onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
                 onDrop={e => { e.preventDefault(); e.stopPropagation(); const f = e.dataTransfer.files[0]; if (f) handleFileSelect(f); }}
               >
-                <div className="text-3xl mb-2">📁</div>
-                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Click or drag CSV file here</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Maximum 5MB</p>
+                {loading ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="h-6 w-6 animate-spin text-[#012061] dark:text-[#f8931f]" />
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Analyzing file...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-3xl mb-2">📁</div>
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Click or drag CSV file here</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Maximum 5MB</p>
+                  </>
+                )}
                 <input
                   id="csv-file-input"
                   type="file"
@@ -191,49 +248,104 @@ export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) 
           )}
 
           {/* Step 2: Preview */}
-          {step === 'preview' && (
+          {step === 'preview' && previewData && (
             <div className="space-y-4">
-              {rows.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-8">Found 0 rows in the file. The CSV must have a header row and at least one data row.</p>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs">
-                      <span className="text-emerald-600 font-semibold">{validRows.length} valid</span>
-                      {invalidRows.length > 0 && <span className="text-red-600 font-semibold ml-3">{invalidRows.length} with errors</span>}
-                    </div>
-                    <button onClick={reset} className="text-xs text-[#012061] dark:text-[#f8931f] hover:underline">Choose different file</button>
-                  </div>
-                  <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-auto max-h-[50vh]">
-                    <table className="w-full text-xs">
-                      <thead className="bg-[#012061] sticky top-0">
-                        <tr>
-                          <th className="px-3 py-2 text-left font-semibold text-white/70 uppercase tracking-widest text-[10px]">#</th>
-                          <th className="px-3 py-2 text-left font-semibold text-white/70 uppercase tracking-widest text-[10px]">Name</th>
-                          <th className="px-3 py-2 text-left font-semibold text-white/70 uppercase tracking-widest text-[10px]">Type</th>
-                          <th className="px-3 py-2 text-left font-semibold text-white/70 uppercase tracking-widest text-[10px]">Status</th>
-                          <th className="px-3 py-2 text-left font-semibold text-white/70 uppercase tracking-widest text-[10px]">Result</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                        {rows.map(r => (
-                          <tr key={r.rowNumber} className={!r.validation.valid ? 'bg-red-50 dark:bg-red-950/30' : ''}>
-                            <td className="px-3 py-1.5 text-slate-500 dark:text-slate-400">{r.rowNumber}</td>
-                            <td className="px-3 py-1.5 text-slate-700 dark:text-slate-300">{r.data.name || '—'}</td>
-                            <td className="px-3 py-1.5 text-slate-700 dark:text-slate-300">{r.data.type || '—'}</td>
-                            <td className="px-3 py-1.5 text-slate-700 dark:text-slate-300">{r.data.status || '—'}</td>
-                            <td className="px-3 py-1.5">
-                              {r.validation.valid
-                                ? <span className="text-emerald-600">✓ Ready</span>
-                                : <span className="text-red-600">✗ {r.validation.reason}</span>}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
+              {/* Summary cards */}
+              <div className="grid grid-cols-4 gap-3">
+                <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-center">
+                  <p className="text-2xl font-bold text-[#012061] dark:text-slate-100">{previewData.totalRows}</p>
+                  <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase font-semibold">Total</p>
+                </div>
+                <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3 text-center">
+                  <p className="text-2xl font-bold text-emerald-600">{previewData.validRows}</p>
+                  <p className="text-[10px] tracking-widest text-emerald-700/70 uppercase font-semibold">Valid</p>
+                </div>
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-center">
+                  <p className="text-2xl font-bold text-amber-600">{previewData.warningRows}</p>
+                  <p className="text-[10px] tracking-widest text-amber-700/70 uppercase font-semibold">Warnings</p>
+                </div>
+                <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-4 py-3 text-center">
+                  <p className="text-2xl font-bold text-red-600">{previewData.invalidRows}</p>
+                  <p className="text-[10px] tracking-widest text-red-700/70 uppercase font-semibold">Invalid</p>
+                </div>
+              </div>
+
+              {/* Duplicate warnings */}
+              {(previewData.duplicatePropertyNumbers.length > 0 || previewData.duplicateSerialNumbers.length > 0) && (
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 mb-1">Duplicate values detected in CSV</p>
+                  {previewData.duplicateSerialNumbers.length > 0 && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      <span className="font-medium">Serial numbers:</span> {previewData.duplicateSerialNumbers.join(', ')}
+                    </p>
+                  )}
+                  {previewData.duplicatePropertyNumbers.length > 0 && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      <span className="font-medium">Property numbers:</span> {previewData.duplicatePropertyNumbers.join(', ')}
+                    </p>
+                  )}
+                </div>
               )}
+
+              <div className="flex items-center justify-between">
+                <button onClick={downloadPreviewReport} className="text-xs text-[#012061] dark:text-[#f8931f] hover:underline flex items-center gap-1">
+                  <Download className="h-3 w-3" /> Download Preview Report
+                </button>
+                <button onClick={reset} className="text-xs text-[#012061] dark:text-[#f8931f] hover:underline">Choose different file</button>
+              </div>
+
+              {/* Preview table */}
+              <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-auto max-h-[40vh]">
+                <table className="w-full text-xs">
+                  <thead className="bg-[#012061] sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-white/70 uppercase tracking-widest text-[10px]">#</th>
+                      <th className="px-3 py-2 text-left font-semibold text-white/70 uppercase tracking-widest text-[10px]">Name</th>
+                      <th className="px-3 py-2 text-left font-semibold text-white/70 uppercase tracking-widest text-[10px]">Type</th>
+                      <th className="px-3 py-2 text-left font-semibold text-white/70 uppercase tracking-widest text-[10px]">S/N</th>
+                      <th className="px-3 py-2 text-left font-semibold text-white/70 uppercase tracking-widest text-[10px]">Property #</th>
+                      <th className="px-3 py-2 text-left font-semibold text-white/70 uppercase tracking-widest text-[10px]">Status</th>
+                      <th className="px-3 py-2 text-left font-semibold text-white/70 uppercase tracking-widest text-[10px]">Result</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                    {previewData.results.map(r => {
+                      const style = PREVIEW_STYLES[r.status] || PREVIEW_STYLES.invalid;
+                      const Icon = style.icon;
+                      const rowBg = r.status === 'invalid' ? 'bg-red-50 dark:bg-red-950/20' : r.status === 'warning' ? 'bg-amber-50 dark:bg-amber-950/20' : '';
+                      return (
+                        <tr key={r.row} className={rowBg}>
+                          <td className="px-3 py-1.5 text-slate-500 dark:text-slate-400">{r.row}</td>
+                          <td className="px-3 py-1.5 text-slate-700 dark:text-slate-300">{r.data.name || '—'}</td>
+                          <td className="px-3 py-1.5 text-slate-700 dark:text-slate-300">{r.data.type || '—'}</td>
+                          <td className="px-3 py-1.5 text-slate-700 dark:text-slate-300">{r.data.serialNumber || '—'}</td>
+                          <td className="px-3 py-1.5 text-slate-700 dark:text-slate-300">{r.data.propertyNumber || '—'}</td>
+                          <td className="px-3 py-1.5 text-slate-700 dark:text-slate-300">{r.data.status || '—'}</td>
+                          <td className="px-3 py-1.5">
+                            <span className={`inline-flex items-center gap-1 ${style.text} font-semibold`}>
+                              <Icon className="h-3.5 w-3.5" />
+                              {style.label}
+                            </span>
+                            {r.reason && (
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{r.reason}</p>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2 fallback: no preview data (shouldn't happen but just in case) */}
+          {step === 'preview' && !previewData && (
+            <div className="space-y-4">
+              <p className="text-xs text-slate-500 dark:text-slate-400 text-center py-8">No preview data available. Please try uploading again.</p>
+              <div className="flex justify-center">
+                <button onClick={reset} className="text-xs text-[#012061] dark:text-[#f8931f] hover:underline">Choose different file</button>
+              </div>
             </div>
           )}
 
@@ -303,13 +415,13 @@ export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) 
           )}
           {step === 'preview' && (
             <>
-              <button onClick={reset} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Back</button>
+              <button onClick={reset} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Cancel</button>
               <button
                 onClick={handleImport}
-                disabled={importing || validRows.length === 0}
+                disabled={!canImport}
                 className="rounded-lg bg-[#012061] px-4 py-2 text-xs font-bold text-white hover:bg-[#012061]/90 disabled:opacity-50 transition-colors"
               >
-                {importing ? 'Importing...' : `Import ${validRows.length} valid row${validRows.length !== 1 ? 's' : ''}`}
+                {importing ? 'Importing...' : `Confirm Import (${previewData ? previewData.validRows + previewData.warningRows : 0} row${(previewData ? previewData.validRows + previewData.warningRows : 0) !== 1 ? 's' : ''})`}
               </button>
             </>
           )}

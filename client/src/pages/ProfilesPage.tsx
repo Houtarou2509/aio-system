@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, apiFetchBlob, ApiError, AUTH_EXPIRED_EVENT } from '../lib/api';
 import {
-  Users, PlusCircle, Search, Loader2, Eye, X, UserCircle, User, Briefcase, Building2, Calendar, Mail, Phone, Package, FileText, AlertTriangle, CheckCircle2, CheckCircle, Info, ChevronDown, ChevronRight, Edit3, Trash2, ClipboardCheck, FolderOpen,
+  Users, PlusCircle, Search, Loader2, Eye, X, UserCircle, User, Briefcase, Building2, Calendar, Mail, Phone, Package, FileText, AlertTriangle, CheckCircle2, CheckCircle, Info, ChevronDown, ChevronRight, Edit3, Trash2, ClipboardCheck, FolderOpen, Printer,
 } from 'lucide-react';
 import { CameraCaptureModal } from '../components/ui/CameraCaptureModal';
 import BulkIssuanceWizard from '../components/issuances/BulkIssuanceWizard';
 import PDFPreviewModal from '../components/issuances/PDFPreviewModal';
 import { PermissionGate } from '../components/auth/PermissionGate';
+import { RoleGate } from '../components/auth/RoleGate';
 import { useAgreementPreview } from '../hooks/useAgreementPreview';
 
 /* ─── Types ─── */
@@ -957,6 +958,85 @@ function AccountabilityDrawer({
   const [error, setError] = useState('');
   const [showReturned, setShowReturned] = useState(false);
 
+  const handlePrintSummary = () => {
+    if (!data) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const date = new Date().toLocaleString();
+    const activeRows = data.activeAssignments.map(a => `
+      <tr>
+        <td>${a.assetName || '—'}</td>
+        <td>${a.serialNumber || '—'}</td>
+        <td>${a.propertyNumber || '—'}</td>
+        <td>${a.condition || 'Good'}</td>
+        <td>${new Date(a.assignedAt).toLocaleDateString()}</td>
+        <td>${a.documentNumber || (a.agreementDocumentId ? 'View' : '—')}</td>
+      </tr>`).join('');
+
+    printWindow.document.write(`<html><head><title>Accountability Summary - ${data.personnel.fullName}</title>
+    <style>
+      body { font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; color: #000; background: #fff; }
+      h1 { color: #012061; margin-bottom: 0; font-size: 24px; }
+      .subtitle { color: #f8931f; font-weight: 600; font-size: 14px; margin: 0; }
+      .header-line { border-bottom: 2px solid #012061; margin: 12px 0 16px; }
+      .info-row { display: flex; gap: 32px; margin: 6px 0; }
+      .info-label { font-weight: 600; color: #333; min-width: 120px; }
+      .info-value { color: #000; }
+      h2 { color: #012061; font-size: 16px; margin-top: 24px; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+      th { background: #012061; color: white; padding: 8px 12px; text-align: left; font-size: 12px; }
+      td { padding: 8px 12px; border-bottom: 1px solid #ddd; font-size: 13px; }
+      .sig-section { margin-top: 48px; }
+      .sig-line { margin: 28px 0; }
+      .sig-line hr { border: none; border-top: 1px solid #333; width: 220px; margin: 0 0 4px; }
+      .sig-label { font-size: 12px; color: #666; }
+      .generated-date { font-size: 11px; color: #999; margin-top: 4px; }
+      @media print { body { margin: 20px; } }
+    </style></head><body>
+    <h1>AIO System</h1>
+    <p class="subtitle">Personnel Accountability Summary</p>
+    <div class="header-line"></div>
+
+    <div class="info-row"><span class="info-label">Name:</span><span class="info-value">${data.personnel.fullName}</span></div>
+    ${data.personnel.designation ? `<div class="info-row"><span class="info-label">Designation:</span><span class="info-value">${data.personnel.designation}</span></div>` : ''}
+    ${data.personnel.project ? `<div class="info-row"><span class="info-label">Project:</span><span class="info-value">${data.personnel.project}</span></div>` : ''}
+    ${data.personnel.institution ? `<div class="info-row"><span class="info-label">Institution:</span><span class="info-value">${data.personnel.institution}</span></div>` : ''}
+    ${data.personnel.email ? `<div class="info-row"><span class="info-label">Email:</span><span class="info-value">${data.personnel.email}</span></div>` : ''}
+
+    <h2>Active Assigned Assets (${data.activeAssignments.length})</h2>
+    ${data.activeAssignments.length > 0 ? `
+    <table>
+      <thead>
+        <tr>
+          <th>Asset Name</th>
+          <th>Serial No.</th>
+          <th>Property No.</th>
+          <th>Condition at Issue</th>
+          <th>Issuance Date</th>
+          <th>Agreement Doc #</th>
+        </tr>
+      </thead>
+      <tbody>${activeRows}</tbody>
+    </table>` : '<p style="color:#999;font-style:italic;margin-top:8px;">No active assets held.</p>'}
+
+    <h2>Summary</h2>
+    <div class="info-row"><span class="info-label">Assets Held:</span><span class="info-value">${data.summary.totalAssetsHeld}</span></div>
+    <div class="info-row"><span class="info-label">Assets Returned:</span><span class="info-value">${data.summary.totalAssetsReturned}</span></div>
+    <div class="info-row"><span class="info-label">Agreements:</span><span class="info-value">${data.summary.totalAgreements}</span></div>
+
+    <div class="sig-section">
+      <div class="sig-line"><hr><div class="sig-label">Acknowledged by</div></div>
+      <div class="sig-line"><hr><div class="sig-label">Received by</div></div>
+      <div class="sig-line"><hr><div class="sig-label">Date</div></div>
+    </div>
+
+    <p class="generated-date">Generated: ${date}</p>
+    </body></html>`);
+    printWindow.document.close();
+    setTimeout(() => { printWindow.print(); }, 300);
+  };
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -971,7 +1051,7 @@ function AccountabilityDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40 no-print" onClick={onClose} />
 
       {/* Drawer panel */}
       <div className="relative z-10 w-full max-w-3xl h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 dark:bg-slate-900">
@@ -985,7 +1065,15 @@ function AccountabilityDrawer({
                 <p className="text-[10px] text-white/60">{personnelName}</p>
               </div>
             </div>
-            <button onClick={onClose} className="text-white/70 hover:text-white transition-colors"><X className="w-4 h-4" /></button>
+            <div className="flex items-center gap-2 no-print">
+              <RoleGate roles={['ADMIN', 'STAFF_ADMIN']}>
+                <button onClick={handlePrintSummary} className="inline-flex items-center gap-1.5 text-white/70 hover:text-white text-xs font-medium transition-colors border border-white/30 rounded px-2 py-1 hover:border-white/60">
+                  <Printer className="w-3.5 h-3.5" />
+                  Print
+                </button>
+              </RoleGate>
+              <button onClick={onClose} className="text-white/70 hover:text-white transition-colors"><X className="w-4 h-4" /></button>
+            </div>
           </div>
         </div>
 
@@ -1447,7 +1535,8 @@ export default function ProfilesPage() {
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+          <>
+          <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-[#012061] text-left">
@@ -1576,6 +1665,107 @@ export default function ProfilesPage() {
               </tbody>
             </table>
           </div>
+          <div className="md:hidden space-y-2">
+            {personnel.map(p => (
+              <div key={p.id} className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                {/* Top row: avatar + name + status */}
+                <div className="flex items-start gap-3">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); if (p.photoUrl) setExpandedImage(p.photoUrl); }}
+                    className="w-10 h-10 rounded-full overflow-hidden border border-slate-200 dark:border-slate-600 flex items-center justify-center shrink-0 bg-slate-100 dark:bg-slate-700 cursor-pointer hover:ring-2 hover:ring-[#f8931f]/40 hover:border-[#f8931f]/40 transition-all"
+                  >
+                    {p.photoUrl ? (
+                      <img src={p.photoUrl} alt={p.fullName} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-xs font-bold text-[#012061] dark:text-slate-100">{p.fullName.trim().split(/\s+/).length === 1 ? p.fullName.slice(0, 2).toUpperCase() : (p.fullName.trim().split(/\s+/)[0][0] + p.fullName.trim().split(/\s+/).slice(-1)[0][0]).toUpperCase()}</span>
+                    )}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <button onClick={() => openDetail(p)} className="text-sm font-bold text-[#012061] hover:underline dark:text-slate-100 dark:hover:text-[#f8931f] truncate">{p.fullName}</button>
+                      <span className={`shrink-0 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide ${p.status === 'active' ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 border border-emerald-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700'}`}>
+                        {p.status.toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{p.designationLookup?.name || p.designation || '—'}{p.projectLookup?.name ? ` · ${p.projectLookup.name}` : ''}</div>
+                  </div>
+                </div>
+                {/* Details row */}
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  {p.personnelType === 'contractor' ? (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">Contractor</span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">Employee</span>
+                  )}
+                  {p.activeAssignments > 0 ? (
+                    <button
+                      onClick={() => navigate(`/issuances?personnel=${p.id}`)}
+                      className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-[#f8931f]/10 text-[#f8931f] hover:bg-[#f8931f]/20 transition-colors cursor-pointer"
+                    >
+                      <Package className="w-3 h-3" />{p.activeAssignments}
+                    </button>
+                  ) : <span className="text-xs text-slate-400">Items: 0</span>}
+                  {p.projectYear && <span className="text-[10px] text-slate-500 dark:text-slate-400">{p.projectYear}</span>}
+                </div>
+                {/* Readiness toggle */}
+                <div className="mt-2">
+                  <PermissionGate
+                    permissions={['issuances:edit']}
+                    fallback={(
+                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold tracking-wide ${
+                        p.isReadyForIssuance
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                          : 'border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                      }`}>
+                        {p.isReadyForIssuance ? <CheckCircle2 className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                        {p.isReadyForIssuance ? 'READY' : 'NOT READY'}
+                      </span>
+                    )}
+                  >
+                    <button
+                      onClick={() => handleToggleReadiness(p)}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold tracking-wide transition-colors ${
+                        p.isReadyForIssuance
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                          : 'border-slate-200 bg-slate-100 text-slate-500 hover:bg-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                      }`}
+                      title="Toggle issuance readiness"
+                    >
+                      {p.isReadyForIssuance ? <CheckCircle2 className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                      {p.isReadyForIssuance ? 'READY' : 'NOT READY'}
+                    </button>
+                  </PermissionGate>
+                </div>
+                {/* Action buttons */}
+                <div className="flex items-center gap-1 mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                  <button onClick={() => openDetail(p)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-[#012061] dark:hover:text-slate-100 transition-colors" title="View">
+                    <Eye className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => { setEditing(p); setShowForm(true); }} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-[#f8931f] transition-colors" title="Edit">
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <PermissionGate permissions={['issuances:create']}>
+                    <button onClick={() => { if (p.isReadyForIssuance) { setBulkWizardPersonnelId(p.id); setShowBulkWizard(true); } }}
+                      disabled={!p.isReadyForIssuance}
+                      className={`p-1.5 rounded-lg transition-colors ${p.isReadyForIssuance ? 'hover:bg-[#f8931f]/10 text-slate-400 hover:text-[#f8931f]' : 'text-slate-300 cursor-not-allowed opacity-50'}`}
+                      title={p.isReadyForIssuance ? 'Issue Assets' : 'Mark profile ready before issuing assets'}>
+                      <Package className="w-4 h-4" />
+                    </button>
+                  </PermissionGate>
+                  <button onClick={() => { setAccountabilityId(p.id); setAccountabilityName(p.fullName); }}
+                    className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-[#012061] dark:hover:text-slate-100 transition-colors" title="Accountability">
+                    <ClipboardCheck className="w-4 h-4" />
+                  </button>
+                  <div className="flex-1" />
+                  <button onClick={() => handleDelete(p.id)} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950 text-slate-400 hover:text-[#7B1113] transition-colors" title="Deactivate">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          </>
         )}
       </div>
 
