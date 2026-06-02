@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, ChevronDown, AlertTriangle, Loader2 } from 'lucide-react';
+import { ShieldCheck, ChevronDown, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
+import { apiFetch, ApiError } from '../lib/api';
 
 /* ─── Types ──────────────────────────────────────────────── */
 
@@ -124,22 +125,32 @@ export default function DataQualityPage() {
   const [error, setError] = useState<string | null>(null);
   const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    fetch('/api/data-quality', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(r => r.json())
-      .then(d => {
-        if (d.success) {
-          setData(d.data);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiFetch('/data-quality');
+      setData(res.data ?? res);
+    } catch (err: any) {
+      if (err instanceof ApiError) {
+        if (err.status === 401) {
+          setError('Session expired. Please log in again.');
+        } else if (err.status === 403) {
+          setError('You do not have permission to view Data Quality.');
         } else {
-          setError(d.error?.message || 'Failed to load data quality');
+          setError(err.message || 'Failed to load data quality');
         }
-      })
-      .catch(err => setError(err.message || 'Network error'))
-      .finally(() => setLoading(false));
+      } else if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        setError('Unable to reach the server. Please check if AIO System is running.');
+      } else {
+        setError(err.message || 'Failed to load data quality');
+      }
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const toggleCategory = (key: string) => {
     setOpenCategories(prev => {
@@ -169,9 +180,27 @@ export default function DataQualityPage() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <AlertTriangle className="w-12 h-12 text-red-500" />
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+      <div className="flex flex-col min-h-dvh pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
+        <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-4 sm:px-6 py-4 min-h-[56px]">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="h-6 w-6 text-[#f8931f]" />
+            <div>
+              <h1 className="text-lg font-bold text-white tracking-tight">Data Quality</h1>
+              <p className="text-xs text-white/50 hidden sm:block">Identify and fix missing asset data</p>
+            </div>
+          </div>
+        </header>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4 py-8">
+          <AlertTriangle className="w-12 h-12 text-red-500" />
+          <p className="text-sm text-red-600 dark:text-red-400 text-center max-w-md">{error}</p>
+          <button
+            onClick={fetchData}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#f8931f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#e07d0a] transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
@@ -180,12 +209,22 @@ export default function DataQualityPage() {
     <div className="flex flex-col min-h-dvh pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
       {/* ── Header ── */}
       <header className="sticky top-0 z-30 shrink-0 bg-[#012061] px-4 sm:px-6 py-4 min-h-[56px]">
-        <div className="flex items-center gap-3">
-          <ShieldCheck className="h-6 w-6 text-[#f8931f]" />
-          <div>
-            <h1 className="text-lg font-bold text-white tracking-tight">Data Quality</h1>
-            <p className="text-xs text-white/50 hidden sm:block">Identify and fix missing asset data</p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="h-6 w-6 text-[#f8931f]" />
+            <div>
+              <h1 className="text-lg font-bold text-white tracking-tight">Data Quality</h1>
+              <p className="text-xs text-white/50 hidden sm:block">Identify and fix missing asset data</p>
+            </div>
           </div>
+          <button
+            onClick={fetchData}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors px-3 py-1.5 text-xs font-medium text-white"
+            title="Refresh data"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
         </div>
       </header>
 
