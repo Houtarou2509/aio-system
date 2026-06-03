@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Wrench, Search, CalendarDays, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { apiFetch } from '../lib/api';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Wrench, Search, CalendarDays, Clock, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
+import { apiFetch, ApiError } from '../lib/api';
+import { AssetDetailModal } from '../components/assets';
+import type { Asset } from '../lib/api';
 
 /* ─── Types ─── */
 
@@ -85,7 +86,6 @@ function StatusBadge({ status }: { status: string }) {
    ═══════════════════════════════════════════════════════════ */
 
 export default function MaintenanceCalendarPage() {
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [data, setData] = useState<CalendarResponse | null>(null);
@@ -93,6 +93,12 @@ export default function MaintenanceCalendarPage() {
   // Filters
   const [search, setSearch] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(() => getMonthKey(new Date()));
+
+  // Asset detail modal state
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+  const [loadingAsset, setLoadingAsset] = useState<string | null>(null);
+  const [assetError, setAssetError] = useState('');
 
   // Build available month options (6 months back, 12 forward from current)
   const monthOptions = useMemo(() => {
@@ -106,25 +112,49 @@ export default function MaintenanceCalendarPage() {
   }, []);
 
   /* ── Fetch ── */
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError('');
-      try {
-        const res = await apiFetch(`/maintenance/calendar?month=${selectedMonth}`);
-        if (!cancelled) {
-          setData(res.data);
-        }
-      } catch (e: any) {
-        if (!cancelled) setError(e.message || 'Failed to load calendar');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  const fetchCalendar = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await apiFetch(`/maintenance/calendar?month=${selectedMonth}`);
+      setData(res.data);
+    } catch (e: any) {
+      setError(e.message || 'Failed to load calendar');
+    } finally {
+      setLoading(false);
     }
-    load();
-    return () => { cancelled = true; };
   }, [selectedMonth]);
+
+  useEffect(() => { fetchCalendar(); }, [fetchCalendar]);
+
+  /* ── Open Asset Detail ── */
+  const handleCardClick = async (schedule: MaintenanceSchedule) => {
+    setLoadingAsset(schedule.id);
+    setAssetError('');
+    try {
+      const res = await apiFetch(`/assets/${schedule.assetId}`);
+      const asset = res.data ?? res;
+      setSelectedAsset(asset);
+      setShowDetail(true);
+    } catch (e: any) {
+      if (e instanceof ApiError && e.status === 401) {
+        setAssetError('Session expired. Please log in again.');
+      } else if (e instanceof ApiError && e.status === 403) {
+        setAssetError('You do not have permission to view this asset.');
+      } else {
+        setAssetError('Unable to open asset details.');
+      }
+    } finally {
+      setLoadingAsset(null);
+    }
+  };
+
+  const handleCloseDetail = () => {
+    setShowDetail(false);
+    setSelectedAsset(null);
+    // Refresh calendar data after closing (maintenance actions may have changed schedules)
+    fetchCalendar();
+  };
 
   /* ── Filter & Group ── */
   const filtered = useMemo(() => {
@@ -245,6 +275,14 @@ export default function MaintenanceCalendarPage() {
           </div>
         </section>
 
+        {/* ── Asset Error Toast ── */}
+        {assetError && (
+          <div className="mx-4 sm:mx-6 mt-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm flex items-center gap-2 justify-between">
+            <span>{assetError}</span>
+            <button onClick={() => setAssetError('')} className="text-red-400 hover:text-red-600 text-xs font-medium">Dismiss</button>
+          </div>
+        )}
+
         {/* ── Schedule List ── */}
         <div className="flex-1 overflow-auto px-4 sm:px-6 pb-6">
           {loading ? (
@@ -287,15 +325,17 @@ export default function MaintenanceCalendarPage() {
                   <div className="space-y-2">
                     {items.map(schedule => {
                       const isOverdue = schedule.status === 'overdue';
+                      const isLoading = loadingAsset === schedule.id;
                       return (
                         <button
                           key={schedule.id}
-                          onClick={() => navigate(`/assets?id=${schedule.assetId}`)}
+                          onClick={() => handleCardClick(schedule)}
+                          disabled={isLoading}
                           className={`w-full text-left rounded-lg border px-4 py-3 transition-all duration-150 hover:border-[#f8931f]/50 hover:shadow-sm group ${
                             isOverdue
                               ? 'bg-red-50/30 dark:bg-red-950/20 border-red-200 dark:border-red-900/50 shadow-[0_0_10px_rgba(239,68,68,0.1)]'
                               : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
-                          }`}
+                          } ${isLoading ? 'opacity-70 cursor-wait' : 'cursor-pointer'}`}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 flex-1">
@@ -322,6 +362,7 @@ export default function MaintenanceCalendarPage() {
                                 {formatDate(schedule.scheduledDate)}
                               </span>
                               <StatusBadge status={schedule.status} />
+                              {isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#f8931f]" />}
                             </div>
                           </div>
                         </button>
@@ -334,6 +375,16 @@ export default function MaintenanceCalendarPage() {
           )}
         </div>
       </div>
+
+      {/* ═══ ASSET DETAIL MODAL ═══════════════════════════════ */}
+      {showDetail && selectedAsset && (
+        <AssetDetailModal
+          asset={selectedAsset}
+          onClose={handleCloseDetail}
+          onEdit={(_asset) => { /* Could open edit form if needed */ }}
+          initialTab="overview"
+        />
+      )}
     </div>
   );
 }

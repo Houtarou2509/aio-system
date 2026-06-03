@@ -50,6 +50,7 @@ interface Props {
   onClose: () => void;
   onEdit: (asset: Asset) => void;
   onDispose?: (asset: Asset) => void;
+  initialTab?: string;
 }
 
 /* ─── Status Badge Config ─── */
@@ -97,10 +98,10 @@ function InfoRow({ label, value, highlight }: { label: string; value: React.Reac
 /* ═════════════════════════════════════════════════════
    ASSET DETAIL MODAL
    ═════════════════════════════════════════════════════ */
-export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
+export function AssetDetailModal({ asset, onClose, onEdit, onDispose, initialTab }: Props) {
   const { user } = useAuth();
   const isGuest = user?.role === 'GUEST';
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState(initialTab || 'overview');
   const [frequentRepair, setFrequentRepair] = useState(false);
   const [showLightbox, setShowLightbox] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -133,6 +134,9 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
 
   // Reset image error state when asset changes
   useEffect(() => { setImgError(false); }, [asset.id]);
+
+  // Reset tab when asset changes (e.g. switching from calendar to different asset)
+  useEffect(() => { setTab(initialTab || 'overview'); }, [asset.id, initialTab]);
 
   const statusConf = STATUS_CONFIG[asset.status] || STATUS_CONFIG.AVAILABLE;
   const resolvedImgUrl = getImageUrl(asset.imageUrl);
@@ -209,16 +213,23 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose }: Props) {
                   { value: 'history', label: 'History', icon: User },
                   { value: 'maintenance', label: 'Maintenance', icon: Wrench },
                   { value: 'audit', label: 'Audit', icon: FileText },
-                ].map(t => (
+                ].map(t => {
+                  const isActive = tab === t.value;
+                  return (
                   <TabsTrigger
                     key={t.value}
                     value={t.value}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium capitalize whitespace-nowrap text-slate-600 dark:text-slate-300 data-active:text-[#f8931f] data-active:after:bg-[#f8931f] hover:text-[#f8931f]"
+                    className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs whitespace-nowrap transition-all rounded-md border-b-2 ${
+                      isActive
+                        ? 'font-semibold text-[#f8931f] dark:!text-[#fbb45c] border-[#f8931f] dark:border-[#fbb45c] bg-[#f8931f]/10 dark:bg-[#f8931f]/15'
+                        : 'font-medium text-slate-600 dark:!text-slate-300 border-transparent hover:text-[#f8931f] dark:hover:text-[#fbb45c] hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
                   >
-                    <t.icon className="w-3.5 h-3.5" />
+                    <t.icon className={`w-3.5 h-3.5 ${isActive ? 'text-[#f8931f] dark:text-[#fbb45c]' : ''}`} />
                     {t.label}
                   </TabsTrigger>
-                ))}
+                  );
+                })}
               </TabsList>
             </div>
 
