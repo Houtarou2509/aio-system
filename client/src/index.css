@@ -122,3 +122,22 @@
   .no-print { display: none !important; }
   body { background: #fff !important; color: #000 !important; }
 }
+
+/* Dark-mode password/text input fixes
+   Prevents browser autofill and native validation from forcing
+   white backgrounds / dark text on inputs in dark mode. */
+.dark input[type="password"],
+.dark input[type="text"] {
+  color-scheme: dark;
+}
+
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark textarea:-webkit-autofill,
+.dark textarea:-webkit-autofill:hover,
+.dark textarea:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f8fafc;
+  box-shadow: 0 0 0px 1000px #1e293b inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
