@@ -31,6 +31,8 @@ import {
   ZoomIn,
   Trash2,
   Activity,
+  AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 
 /** Resolve asset image URL — prepend base path if relative */
@@ -51,6 +53,8 @@ interface Props {
   onEdit: (asset: Asset) => void;
   onDispose?: (asset: Asset) => void;
   initialTab?: string;
+  highlightField?: string;
+  viewAllUrl?: string;
 }
 
 /* ─── Status Badge Config ─── */
@@ -86,11 +90,11 @@ function InfoCard({
 }
 
 /* ─── Info Row ─── */
-function InfoRow({ label, value, highlight }: { label: string; value: React.ReactNode; highlight?: boolean }) {
+function InfoRow({ label, value, highlight, isHighlighted }: { label: string; value: React.ReactNode; highlight?: boolean; isHighlighted?: boolean }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-slate-500 dark:text-slate-300 text-xs">{label}</span>
-      <span className={`text-xs font-medium text-right ${highlight ? 'text-[#f8931f]' : 'text-slate-900 dark:text-slate-100'}`}>{value}</span>
+    <div className={`flex items-center justify-between rounded-md px-1.5 -mx-1.5 py-0.5 transition-colors duration-300 ${isHighlighted ? 'bg-[#f8931f]/15 dark:bg-[#f8931f]/25 ring-1 ring-[#f8931f]/40 dark:ring-[#f8931f]/50' : ''}`}>
+      <span className={`text-xs ${isHighlighted ? 'text-[#f8931f] dark:text-[#fbb45c] font-semibold' : 'text-slate-500 dark:text-slate-300'}`}>{label}{isHighlighted ? ' ✎' : ''}</span>
+      <span className={`text-xs font-medium text-right ${highlight ? 'text-[#f8931f]' : isHighlighted ? 'text-[#7B1113] dark:text-[#fbb45c]' : 'text-slate-900 dark:text-slate-100'}`}>{value}</span>
     </div>
   );
 }
@@ -98,13 +102,28 @@ function InfoRow({ label, value, highlight }: { label: string; value: React.Reac
 /* ═════════════════════════════════════════════════════
    ASSET DETAIL MODAL
    ═════════════════════════════════════════════════════ */
-export function AssetDetailModal({ asset, onClose, onEdit, onDispose, initialTab }: Props) {
+export function AssetDetailModal({ asset, onClose, onEdit, onDispose, initialTab, highlightField, viewAllUrl }: Props) {
   const { user } = useAuth();
   const isGuest = user?.role === 'GUEST';
   const [tab, setTab] = useState(initialTab || 'overview');
   const [frequentRepair, setFrequentRepair] = useState(false);
   const [showLightbox, setShowLightbox] = useState(false);
   const [imgError, setImgError] = useState(false);
+
+  /* Map highlightField keys to InfoRow labels for visual emphasis */
+  const highlightedLabel = highlightField
+    ? ({
+        serialNumber: 'Serial Number',
+        propertyNumber: 'Property #',
+        owner: 'Owner',
+        location: 'Location',
+        imageUrl: 'Image',
+        purchaseDate: 'Purchase Date',
+        purchasePrice: 'Purchase Price',
+        assignedTo: 'Assigned To',
+        status: 'Status',
+      } as Record<string, string>)[highlightField] ?? null
+    : null;
   const [conditionLogs, setConditionLogs] = useState<Array<{
     id: string; event: string; condition: string; note: string | null;
     recordedByName: string | null; recordedAt: string;
@@ -188,6 +207,15 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose, initialTab
                   </button>
                   </PermissionGate>
                   )}
+                {viewAllUrl && (
+                  <a
+                    href={viewAllUrl}
+                    className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80 hover:text-white hover:bg-white/20 transition-colors inline-flex items-center gap-1 shrink-0 min-h-[44px]"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span className="hidden sm:inline">View full asset</span>
+                  </a>
+                )}
                 <button
                   onClick={onClose}
                   className="rounded-lg border border-white/20 bg-white/10 p-1.5 text-white/70 hover:text-white hover:bg-white/20 transition-colors shrink-0 min-w-[44px] min-h-[44px]"
@@ -241,6 +269,16 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose, initialTab
                 {tab === 'overview' && (
                   <div className="space-y-4">
 
+                    {/* ─── Highlight indicator banner ─── */}
+                    {highlightedLabel && (
+                      <div className="flex items-center gap-2 rounded-lg bg-[#f8931f]/10 border border-[#f8931f]/30 dark:bg-[#f8931f]/20 dark:border-[#f8931f]/40 px-3 py-2">
+                        <AlertTriangle className="w-4 h-4 text-[#f8931f] shrink-0" />
+                        <span className="text-xs font-medium text-[#7B1113] dark:text-[#fbb45c]">
+                          Data quality issue: <strong>{highlightedLabel}</strong> is missing or invalid
+                        </span>
+                      </div>
+                    )}
+
                     {/* ─── Premium Hero Image ─── */}
                     {hasImage ? (
                       <div className="relative rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 group">
@@ -258,9 +296,15 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose, initialTab
                         </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 py-12 dark:border-slate-600 dark:bg-slate-800">
-                        <ImageIcon className="h-10 w-10 text-slate-300 dark:text-slate-400 mb-2" />
-                        <p className="text-sm text-slate-400 dark:text-slate-300 font-medium">No Image Available</p>
+                      <div className={`flex flex-col items-center justify-center rounded-xl border border-dashed py-12 ${
+                        highlightedLabel === 'Image'
+                          ? 'border-[#f8931f] dark:border-[#f8931f] bg-[#f8931f]/5 dark:bg-[#f8931f]/10'
+                          : 'border-slate-200 bg-slate-50 dark:border-slate-600 dark:bg-slate-800'
+                      }`}>
+                        <ImageIcon className={`h-10 w-10 mb-2 ${highlightedLabel === 'Image' ? 'text-[#f8931f]' : 'text-slate-300 dark:text-slate-400'}`} />
+                        <p className={`text-sm font-medium ${highlightedLabel === 'Image' ? 'text-[#f8931f] dark:text-[#fbb45c]' : 'text-slate-400 dark:text-slate-300'}`}>
+                          No Image Available{highlightedLabel === 'Image' ? ' ✎' : ''}
+                        </p>
                       </div>
                     )}
 
@@ -268,19 +312,19 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose, initialTab
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* General Info */}
                       <InfoCard icon={Info} title="General Info">
-                        {!isGuest && <InfoRow label="Serial Number" value={asset.serialNumber || '—'} />}
-                        <InfoRow label="Property #" value={(asset as any).propertyNumber || '—'} />
-                        <InfoRow label="Owner" value={asset.owner || '—'} />
-                        <InfoRow label="Location" value={<span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3 text-slate-400" />{asset.location || '—'}</span>} />
-                        <InfoRow label="Assigned To" value={asset.assignedTo ? <span className="text-[#f8931f] font-semibold">{asset.assignedTo}</span> : <span className="text-slate-400 italic">Unassigned</span>} highlight={!!asset.assignedTo} />
-                        <InfoRow label="Status" value={<span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusConf.className}`}>{statusConf.label}</span>} />
+                        {!isGuest && <InfoRow label="Serial Number" value={asset.serialNumber || '—'} isHighlighted={highlightedLabel === 'Serial Number'} />}
+                        <InfoRow label="Property #" value={(asset as any).propertyNumber || '—'} isHighlighted={highlightedLabel === 'Property #'} />
+                        <InfoRow label="Owner" value={asset.owner || '—'} isHighlighted={highlightedLabel === 'Owner'} />
+                        <InfoRow label="Location" value={<span className="inline-flex items-center gap-1"><MapPin className="w-3 h-3 text-slate-400" />{asset.location || '—'}</span>} isHighlighted={highlightedLabel === 'Location'} />
+                        <InfoRow label="Assigned To" value={asset.assignedTo ? <span className="text-[#f8931f] font-semibold">{asset.assignedTo}</span> : <span className="text-slate-400 italic">Unassigned</span>} highlight={!!asset.assignedTo} isHighlighted={highlightedLabel === 'Assigned To'} />
+                        <InfoRow label="Status" value={<span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusConf.className}`}>{statusConf.label}</span>} isHighlighted={highlightedLabel === 'Status'} />
                       </InfoCard>
 
                       {/* Purchase Details — hidden for Guest role */}
                       {!isGuest && (
                         <InfoCard icon={Tag} title="Purchase Details">
-                          <InfoRow label="Purchase Price" value={asset.purchasePrice != null ? <span className="text-[#f8931f]">₱{Number(asset.purchasePrice).toLocaleString()}</span> : '—'} highlight />
-                          <InfoRow label="Purchase Date" value={asset.purchaseDate ? new Date(asset.purchaseDate).toLocaleDateString() : '—'} />
+                          <InfoRow label="Purchase Price" value={asset.purchasePrice != null ? <span className="text-[#f8931f]">₱{Number(asset.purchasePrice).toLocaleString()}</span> : '—'} highlight isHighlighted={highlightedLabel === 'Purchase Price'} />
+                          <InfoRow label="Purchase Date" value={asset.purchaseDate ? new Date(asset.purchaseDate).toLocaleDateString() : '—'} isHighlighted={highlightedLabel === 'Purchase Date'} />
                           <InfoRow label="Remarks" value={(asset as any).remarks || '—'} />
                         </InfoCard>
                       )}

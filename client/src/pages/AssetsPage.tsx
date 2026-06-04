@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAssets } from '../hooks/useAssets';
-import { assetsApi, Asset } from '../lib/api';
+import { assetsApi, Asset, ApiError } from '../lib/api';
 import { PermissionGate } from '../components/auth';
 import { AssetTable, AssetDetailModal, AssetFormModal, ImportAssetsModal, BulkActionModal, FilterPresetManager } from '../components/assets';
 import QRScannerModal from '../components/assets/QRScannerModal';
@@ -137,15 +137,30 @@ export default function AssetsPage() {
       .catch((e) => console.error('[AssetsPage] Failed to load KPI stats:', e));
   }, []);
 
+  // Stable helper to remove a single query param using the latest URL state.
+  // This avoids stale closure issues when multiple param handlers run concurrently.
+  const clearQueryParam = useCallback((name: string) => {
+    const latest = new URLSearchParams(window.location.search);
+    latest.delete(name);
+    setSearchParams(latest, { replace: true });
+  }, [setSearchParams]);
+
+  // Variant that removes multiple params at once from the latest URL state.
+  const clearQueryParams = useCallback((names: string[]) => {
+    const latest = new URLSearchParams(window.location.search);
+    for (const n of names) latest.delete(n);
+    setSearchParams(latest, { replace: true });
+  }, [setSearchParams]);
+
   // Auto-open scanner when navigated with ?action=scan (mobile bottom nav)
   // Runs on mount + when searchParams actually contain action=scan.
-  // Clears the param immediately to prevent retrigger on re-renders.
+  // Clears only the action param to preserve other params like id.
   useEffect(() => {
     if (searchParams.get('action') === 'scan') {
       setScannerOpen(true);
-      setSearchParams({}, { replace: true }); // clear param to prevent retrigger
+      clearQueryParam('action');
     }
-  }, [searchParams.get('action'), setSearchParams]);
+  }, [searchParams.get('action'), clearQueryParam]);
 
   // Handle warranty quick-filter URL params: ?warrantyExpiring=1 or ?warrantyExpired=1
   useEffect(() => {
@@ -154,15 +169,58 @@ export default function AssetsPage() {
       const from = now.toISOString().split('T')[0];
       const to = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       setFilters({ ...filters, warrantyExpiryFrom: from, warrantyExpiryTo: to, page: 1 });
-      setSearchParams({}, { replace: true });
+      clearQueryParam('warrantyExpiring');
     } else if (searchParams.get('warrantyExpired') === '1') {
       const past = new Date(2020, 0, 1).toISOString().split('T')[0];
       const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
       setFilters({ ...filters, warrantyExpiryFrom: past, warrantyExpiryTo: yesterday, page: 1 });
-      setSearchParams({}, { replace: true });
+      clearQueryParam('warrantyExpired');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  // Handle ?id= query param — fetch and open asset detail or edit modal.
+  // If mode=edit is also present, open AssetFormModal directly (skip detail modal).
+  useEffect(() => {
+    const idParam = searchParams.get('id');
+    if (!idParam) return;
+    const isEditMode = searchParams.get('mode') === 'edit';
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await assetsApi.get(idParam);
+        const asset = (result as any).data ?? result;
+        if (!cancelled) {
+          if (isEditMode) {
+            // Open edit form directly, skip the detail modal
+            setEditAsset(asset);
+            setShowForm(true);
+            clearQueryParams(['id', 'mode']);
+          } else {
+            // Open detail modal
+            setSelectedAsset(asset);
+            setShowDetail(true);
+            clearQueryParam('id');
+          }
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          const msg = err instanceof ApiError
+            ? (err.status === 401 ? 'Session expired. Please log in again.' : err.status === 404 ? 'Asset not found.' : err.message || 'Failed to load asset.')
+            : 'Failed to load asset.';
+          showToast(msg);
+          // Clear params even on error so user isn't stuck
+          if (isEditMode) {
+            clearQueryParams(['id', 'mode']);
+          } else {
+            clearQueryParam('id');
+          }
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get('id'), searchParams.get('mode')]);
 
   // Close status dropdown on outside click
   useEffect(() => {

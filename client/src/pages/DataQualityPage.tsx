@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ShieldCheck, ChevronDown, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
-import { apiFetch, ApiError } from '../lib/api';
+import { apiFetch, assetsApi, ApiError } from '../lib/api';
+import { AssetDetailModal, AssetFormModal } from '../components/assets';
+import type { Asset } from '../lib/api';
 
 /* ─── Types ──────────────────────────────────────────────── */
 
 interface AssetExample {
-  id: number;
+  id: string;
   name: string;
   type: string | null;
   status: string | null;
@@ -27,6 +28,8 @@ interface IssueCategory {
   description: string;
 }
 
+/* ─── Issue Categories ─── */
+
 const ISSUE_CATEGORIES: IssueCategory[] = [
   { key: 'missingPropertyNumber', label: 'Missing Property Number', description: 'Assets without a property number assigned' },
   { key: 'missingSerialNumber', label: 'Missing Serial Number', description: 'Assets without a serial number recorded' },
@@ -38,6 +41,20 @@ const ISSUE_CATEGORIES: IssueCategory[] = [
   { key: 'assignedWithoutPersonnel', label: 'Assigned Without Personnel', description: 'Assets marked ASSIGNED but with no assignee name' },
   { key: 'retiredVisibilityIssue', label: 'Retired/Deleted Mismatch', description: 'Retired assets still visible, or soft-deleted assets not marked retired' },
 ];
+
+/* ─── Category → field key mapping for highlight ─── */
+
+const CATEGORY_FIELD_MAP: Record<string, string> = {
+  missingPropertyNumber: 'propertyNumber',
+  missingSerialNumber: 'serialNumber',
+  missingOwner: 'owner',
+  missingLocation: 'location',
+  missingImageUrl: 'imageUrl',
+  missingPurchaseDate: 'purchaseDate',
+  missingPurchasePrice: 'purchasePrice',
+  assignedWithoutPersonnel: 'assignedTo',
+  retiredVisibilityIssue: 'status',
+};
 
 /* ─── Progress Ring ───────────────────────────────────────── */
 
@@ -119,34 +136,58 @@ function SummaryCard({ category, count, total, isOpen, onToggle }: {
    ═══════════════════════════════════════════════════════════ */
 
 export default function DataQualityPage() {
-  const navigate = useNavigate();
   const [data, setData] = useState<DataQualityResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openCategories, setOpenCategories] = useState<Set<string>>(new Set());
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  // Asset detail modal state
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+  const [loadingAssetId, setLoadingAssetId] = useState<string | null>(null);
+  const [assetError, setAssetError] = useState('');
+  const [highlightField, setHighlightField] = useState<string | undefined>(undefined);
+
+  // Asset edit form state
+  const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+  const [showEditForm, setShowEditForm] = useState(false);
+
+  // Request counter to prevent stale asset fetch race conditions
+  const fetchIdRef = useRef(0);
+
+  const fetchData = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = !!options?.silent;
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await apiFetch('/data-quality');
       setData(res.data ?? res);
     } catch (err: any) {
-      if (err instanceof ApiError) {
-        if (err.status === 401) {
-          setError('Session expired. Please log in again.');
-        } else if (err.status === 403) {
-          setError('You do not have permission to view Data Quality.');
+      if (silent) {
+        // Silent refresh failure: show a small toast, do NOT replace the dashboard
+        setAssetError('Unable to refresh data quality. Showing previous data.');
+      } else {
+        // Full load failure: show the error screen
+        if (err instanceof ApiError) {
+          if (err.status === 401) {
+            setError('Session expired. Please log in again.');
+          } else if (err.status === 403) {
+            setError('You do not have permission to view Data Quality.');
+          } else {
+            setError(err.message || 'Failed to load data quality');
+          }
+        } else if (err instanceof TypeError && err.message === 'Failed to fetch') {
+          setError('Unable to reach the server. Please check if AIO System is running.');
         } else {
           setError(err.message || 'Failed to load data quality');
         }
-      } else if (err instanceof TypeError && err.message === 'Failed to fetch') {
-        setError('Unable to reach the server. Please check if AIO System is running.');
-      } else {
-        setError(err.message || 'Failed to load data quality');
       }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -161,8 +202,67 @@ export default function DataQualityPage() {
     });
   };
 
-  const handleAssetClick = (name: string) => {
-    navigate(`/assets?search=${encodeURIComponent(name)}`);
+  /* ── Open Asset Detail from data quality issue ── */
+  const handleAssetClick = async (assetId: string, categoryKey: string) => {
+    // Increment request counter to prevent stale fetches
+    const currentFetchId = ++fetchIdRef.current;
+    setLoadingAssetId(assetId);
+    setAssetError('');
+    setHighlightField(CATEGORY_FIELD_MAP[categoryKey]);
+    try {
+      const res = await apiFetch(`/assets/${assetId}`);
+      const asset = res.data ?? res;
+      // Only apply if this is still the latest request
+      if (currentFetchId === fetchIdRef.current) {
+        setSelectedAsset(asset);
+        setShowDetail(true);
+      }
+    } catch (err: any) {
+      if (currentFetchId !== fetchIdRef.current) return; // stale request
+      if (err instanceof ApiError && err.status === 401) {
+        setAssetError('Session expired. Please log in again.');
+      } else if (err instanceof ApiError && err.status === 403) {
+        setAssetError('You do not have permission to view this asset.');
+      } else {
+        setAssetError('Unable to open asset details.');
+      }
+    } finally {
+      if (currentFetchId === fetchIdRef.current) {
+        setLoadingAssetId(null);
+      }
+    }
+  };
+
+  const handleCloseDetail = () => {
+    setShowDetail(false);
+    setSelectedAsset(null);
+    setHighlightField(undefined);
+    // Silent refresh — keeps expanded categories and scroll position
+    fetchData({ silent: true });
+  };
+
+  const handleEditFromDetail = (asset: Asset) => {
+    // Close detail modal, open edit form — stay on Data Quality page
+    setShowDetail(false);
+    setSelectedAsset(null);
+    setHighlightField(undefined);
+    setEditingAsset(asset);
+    setShowEditForm(true);
+  };
+
+  const handleUpdateAsset = async (data: any) => {
+    if (!editingAsset) return;
+    if (data instanceof FormData) await assetsApi.updateWithImage(editingAsset.id, data);
+    else await assetsApi.update(editingAsset.id, data);
+    setShowEditForm(false);
+    setEditingAsset(null);
+    // Silent refresh — updates dashboard without spinner
+    fetchData({ silent: true });
+  };
+
+  const handleCloseEditForm = () => {
+    setShowEditForm(false);
+    setEditingAsset(null);
   };
 
   // Calculate overall quality score
@@ -194,7 +294,7 @@ export default function DataQualityPage() {
           <AlertTriangle className="w-12 h-12 text-red-500" />
           <p className="text-sm text-red-600 dark:text-red-400 text-center max-w-md">{error}</p>
           <button
-            onClick={fetchData}
+            onClick={() => fetchData()}
             className="inline-flex items-center gap-2 rounded-lg bg-[#f8931f] px-4 py-2 text-sm font-semibold text-white hover:bg-[#e07d0a] transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
@@ -218,7 +318,7 @@ export default function DataQualityPage() {
             </div>
           </div>
           <button
-            onClick={fetchData}
+            onClick={() => fetchData()}
             className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors px-3 py-1.5 text-xs font-medium text-white"
             title="Refresh data"
           >
@@ -247,6 +347,14 @@ export default function DataQualityPage() {
           </div>
         </div>
 
+        {/* Asset error toast */}
+        {assetError && (
+          <div className="mx-4 sm:mx-6 mt-3 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm flex items-center justify-between">
+            <span>{assetError}</span>
+            <button onClick={() => setAssetError('')} className="text-red-400 hover:text-red-600 dark:hover:text-red-300 text-xs font-medium ml-3">Dismiss</button>
+          </div>
+        )}
+
         {/* Issue Cards */}
         <div className="px-4 sm:px-6 py-4 space-y-3">
           {ISSUE_CATEGORIES.map(cat => {
@@ -274,36 +382,41 @@ export default function DataQualityPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {examples.map(asset => (
-                          <tr key={asset.id} className="border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                            <td className="px-3 py-2">
-                              <button
-                                onClick={() => handleAssetClick(asset.name)}
-                                className="text-[#012061] dark:text-[#f8931f] hover:underline font-medium"
-                              >
-                                {asset.name}
-                              </button>
-                            </td>
-                            <td className="px-3 py-2 text-slate-600 dark:text-slate-300 hidden sm:table-cell">
-                              {asset.type || <span className="text-slate-400 italic">—</span>}
-                            </td>
-                            <td className="px-3 py-2">
-                              {asset.status ? (
-                                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                                  asset.status === 'ACTIVE'
-                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                    : asset.status === 'DISPOSED'
-                                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                                      : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                                }`}>
-                                  {asset.status}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 italic">—</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
+                        {examples.map(asset => {
+                          const isLoading = loadingAssetId === asset.id;
+                          return (
+                            <tr key={asset.id} className="border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                              <td className="px-3 py-2">
+                                <button
+                                  onClick={() => handleAssetClick(asset.id, cat.key)}
+                                  disabled={isLoading}
+                                  className={`text-[#012061] dark:text-[#f8931f] hover:underline font-medium inline-flex items-center gap-1 ${isLoading ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
+                                >
+                                  {asset.name}
+                                  {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                                </button>
+                              </td>
+                              <td className="px-3 py-2 text-slate-600 dark:text-slate-300 hidden sm:table-cell">
+                                {asset.type || <span className="text-slate-400 italic">&mdash;</span>}
+                              </td>
+                              <td className="px-3 py-2">
+                                {asset.status ? (
+                                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                    asset.status === 'ACTIVE'
+                                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                      : asset.status === 'DISPOSED'
+                                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                  }`}>
+                                    {asset.status}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 italic">&mdash;</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                     {count > examples.length && (
@@ -317,7 +430,7 @@ export default function DataQualityPage() {
                 )}
                 {isOpen && examples.length === 0 && (
                   <div className="mt-2 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-center">
-                    <p className="text-xs text-slate-400">No assets found with this issue 🎉</p>
+                    <p className="text-xs text-slate-400">{count === 0 ? 'No assets found with this issue 🎉' : 'Loading examples…'}</p>
                   </div>
                 )}
               </div>
@@ -325,6 +438,27 @@ export default function DataQualityPage() {
           })}
         </div>
       </div>
+
+      {/* ═══ ASSET DETAIL MODAL ═══════════════════════════════ */}
+      {showDetail && selectedAsset && (
+        <AssetDetailModal
+          asset={selectedAsset}
+          onClose={handleCloseDetail}
+          onEdit={handleEditFromDetail}
+          initialTab="overview"
+          highlightField={highlightField}
+        />
+      )}
+
+      {/* ═══ ASSET EDIT FORM ══════════════════════════════════ */}
+      {showEditForm && editingAsset && (
+        <AssetFormModal
+          asset={editingAsset}
+          onSubmit={handleUpdateAsset}
+          onClose={handleCloseEditForm}
+          onImageUpload={assetsApi.uploadImage}
+        />
+      )}
     </div>
   );
 }

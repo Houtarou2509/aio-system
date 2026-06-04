@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Wrench, Search, CalendarDays, Clock, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
-import { apiFetch, ApiError } from '../lib/api';
-import { AssetDetailModal } from '../components/assets';
+import { apiFetch, assetsApi, ApiError } from '../lib/api';
+import { AssetDetailModal, AssetFormModal } from '../components/assets';
 import type { Asset } from '../lib/api';
 
 /* ─── Types ─── */
@@ -100,6 +100,10 @@ export default function MaintenanceCalendarPage() {
   const [loadingAsset, setLoadingAsset] = useState<string | null>(null);
   const [assetError, setAssetError] = useState('');
 
+  // Asset edit form state
+  const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+  const [showEditForm, setShowEditForm] = useState(false);
+
   // Build available month options (6 months back, 12 forward from current)
   const monthOptions = useMemo(() => {
     const now = new Date();
@@ -112,16 +116,25 @@ export default function MaintenanceCalendarPage() {
   }, []);
 
   /* ── Fetch ── */
-  const fetchCalendar = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  const fetchCalendar = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = !!options?.silent;
+    if (!silent) {
+      setLoading(true);
+      setError('');
+    }
     try {
       const res = await apiFetch(`/maintenance/calendar?month=${selectedMonth}`);
       setData(res.data);
     } catch (e: any) {
-      setError(e.message || 'Failed to load calendar');
+      if (silent) {
+        setAssetError('Unable to refresh maintenance calendar. Showing previous data.');
+      } else {
+        setError(e.message || 'Failed to load calendar');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [selectedMonth]);
 
@@ -153,7 +166,28 @@ export default function MaintenanceCalendarPage() {
     setShowDetail(false);
     setSelectedAsset(null);
     // Refresh calendar data after closing (maintenance actions may have changed schedules)
-    fetchCalendar();
+    fetchCalendar({ silent: true });
+  };
+
+  const handleEditFromDetail = (asset: Asset) => {
+    setShowDetail(false);
+    setSelectedAsset(null);
+    setEditingAsset(asset);
+    setShowEditForm(true);
+  };
+
+  const handleUpdateAsset = async (data: any) => {
+    if (!editingAsset) return;
+    if (data instanceof FormData) await assetsApi.updateWithImage(editingAsset.id, data);
+    else await assetsApi.update(editingAsset.id, data);
+    setShowEditForm(false);
+    setEditingAsset(null);
+    fetchCalendar({ silent: true });
+  };
+
+  const handleCloseEditForm = () => {
+    setShowEditForm(false);
+    setEditingAsset(null);
   };
 
   /* ── Filter & Group ── */
@@ -381,8 +415,18 @@ export default function MaintenanceCalendarPage() {
         <AssetDetailModal
           asset={selectedAsset}
           onClose={handleCloseDetail}
-          onEdit={(_asset) => { /* Could open edit form if needed */ }}
+          onEdit={handleEditFromDetail}
           initialTab="overview"
+        />
+      )}
+
+      {/* ═══ ASSET EDIT FORM ══════════════════════════════════ */}
+      {showEditForm && editingAsset && (
+        <AssetFormModal
+          asset={editingAsset}
+          onSubmit={handleUpdateAsset}
+          onClose={handleCloseEditForm}
+          onImageUpload={assetsApi.uploadImage}
         />
       )}
     </div>
