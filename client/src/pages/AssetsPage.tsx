@@ -443,16 +443,16 @@ export default function AssetsPage() {
 
       {/* ═══ KPI TILES ═══════════════════════════════════════ */}
       <section className="px-4 sm:px-6 pt-3 sm:pt-4 shrink-0">
-        <div className="grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           {KPI_CARDS.map(({ key, label, icon: Icon, value }) => (
-            <div key={key} className="flex items-center gap-2 sm:gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 sm:px-4 py-2 sm:py-3">
-              <div className="flex h-7 w-7 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-md sm:rounded-lg bg-[#f8931f]/10">
-                <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-[#f8931f]" />
+            <div key={key} className="flex flex-col items-center text-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 sm:p-4">
+              <div className="flex items-center justify-center gap-2 mb-1.5 sm:mb-2">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
+                  <Icon className="h-5 w-5 text-[#f8931f]" />
+                </div>
+                <p className="text-xl sm:text-2xl font-bold leading-tight text-[#f8931f]">{value}</p>
               </div>
-              <div className="min-w-0">
-                <p className="text-base sm:text-xl font-bold leading-tight text-[#f8931f]">{value}</p>
-                <p className="text-[9px] sm:text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">{label}</p>
-              </div>
+              <p className="text-[10px] tracking-widest text-slate-500 dark:text-slate-400 uppercase">{label}</p>
             </div>
           ))}
         </div>
