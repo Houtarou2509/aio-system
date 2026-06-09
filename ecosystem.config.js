@@ -3,7 +3,7 @@ module.exports = {
     {
       name: 'aio-system',
       script: './server/dist/index.js',
-      cwd: '/home/gieselle/.hermes/workspace/aio-system',
+      cwd: '/home/reggie/.hermes/workspace/aio-system',
       instances: 1,
       exec_mode: 'fork',
       max_restarts: 10,

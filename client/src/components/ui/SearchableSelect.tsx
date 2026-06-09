@@ -148,68 +148,79 @@ export function SearchableSelect({
     }
   };
 
+  // When open: the outer wrapper owns the border + ring; the trigger has no
+  // rounded corners on the bottom; the dropdown has no rounded corners on top.
+  // When closed: the trigger button is a normal rounded-lg button.
+
+  const closedClass = 'rounded-lg border border-slate-200 bg-white hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-slate-400';
+  const openClass = 'rounded-lg border border-[#f8931f] ring-2 ring-[#f8931f]/20 overflow-hidden';
+  const disabledClass = 'rounded-lg border border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-500';
+
   return (
     <div className={`relative ${className}`} ref={refEl} onKeyDown={handleKeyDown}>
-      <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-300 mb-1">{label}</label>
-      {/* Trigger button */}
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => { if (isOpen) closeMenu(); else openMenu(); }}
-        className={`w-full flex items-center justify-between rounded-lg border px-3 py-2 text-sm text-left transition-colors ${
-          disabled
-            ? 'border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-500'
-            : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-slate-400'
-        } ${isOpen ? 'border-[#f8931f] ring-2 ring-[#f8931f]/20' : ''}`}
-      >
-        <span className={selectedOption ? 'text-slate-700 dark:text-slate-100' : 'text-slate-400 dark:text-slate-400'}>
-          {selectedOption ? (selectedOption.label || selectedOption.value) : placeholder}
-        </span>
-        {!disabled && (
-          <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-        )}
-      </button>
-      {/* Dropdown menu */}
-      {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-lg border border-[#f8931f] bg-white shadow-lg dark:bg-slate-900 dark:shadow-black/40">
-          <input
-            ref={inputRef}
-            value={filter}
-            onChange={e => { setFilter(e.target.value); }}
-            placeholder={`Search ${label.toLowerCase()}...`}
-            className="w-full rounded-t-lg border-0 bg-white px-3 py-2 text-sm text-slate-700 outline-none placeholder:text-slate-400 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
-          />
-          <div className="max-h-36 overflow-y-auto border-t border-slate-200 dark:border-slate-700">
-            {allItems.map((item, idx) => (
-              <button
-                key={item.isNone ? '__none__' : item.value}
-                type="button"
-                onClick={() => selectItem(item.value)}
-                className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                  item.isNone
-                    ? 'text-slate-400 hover:bg-slate-50 dark:text-slate-500 dark:hover:bg-slate-800'
-                    : item.value === value
-                      ? 'bg-[#f8931f]/10 text-[#f8931f] font-medium hover:bg-[#f8931f]/15 dark:bg-[#f8931f]/15 dark:text-[#ffb45c]'
-                      : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800'
-                } ${highlightIndex === idx ? 'bg-slate-100 dark:bg-slate-800' : ''}`}
-              >
-                {item.isNone ? noneLabel : (item.label || item.value)}
-              </button>
-            ))}
-            {filtered.length === 0 && !allowNone && (
-              <p className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500">No results</p>
+      {label && <label className="block text-[10px] font-medium text-slate-500 dark:text-slate-300 mb-1">{label}</label>}
+      {/* Wrapper owns border + ring when open so everything is one connected shape */}
+      <div className={disabled ? disabledClass : isOpen ? openClass : closedClass}>
+        {/* Trigger button — when open, no border/radius of its own */}
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => { if (isOpen) closeMenu(); else openMenu(); }}
+          className={`w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white dark:bg-slate-800 transition-colors ${
+            disabled ? 'text-slate-400 dark:text-slate-500' : ''
+          } ${isOpen ? 'rounded-t-lg' : ''}`}
+        >
+          <span className={selectedOption ? 'text-slate-700 dark:text-slate-100' : 'text-slate-400 dark:text-slate-400'}>
+            {selectedOption ? (selectedOption.label || selectedOption.value) : placeholder}
+          </span>
+          {!disabled && (
+            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          )}
+        </button>
+        {/* Dropdown menu — inside the wrapper, no separate border */}
+        {isOpen && (
+          <div className="bg-white dark:bg-slate-900">
+            <div className="border-t border-slate-200 dark:border-slate-700">
+              <input
+                ref={inputRef}
+                value={filter}
+                onChange={e => { setFilter(e.target.value); }}
+                placeholder={`Search ${label.toLowerCase()}...`}
+                className="w-full border-0 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-700 dark:text-slate-100 outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              />
+            </div>
+            <div className="max-h-36 overflow-y-auto">
+              {allItems.map((item, idx) => (
+                <button
+                  key={item.isNone ? '__none__' : item.value}
+                  type="button"
+                  onClick={() => selectItem(item.value)}
+                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                    item.isNone
+                      ? 'text-slate-400 hover:bg-slate-50 dark:text-slate-500 dark:hover:bg-slate-800'
+                      : item.value === value
+                        ? 'bg-[#f8931f]/10 text-[#f8931f] font-medium hover:bg-[#f8931f]/15 dark:bg-[#f8931f]/15 dark:text-[#ffb45c]'
+                        : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800'
+                  } ${highlightIndex === idx ? 'bg-slate-100 dark:bg-slate-800' : ''}`}
+                >
+                  {item.isNone ? noneLabel : (item.label || item.value)}
+                </button>
+              ))}
+              {filtered.length === 0 && !allowNone && (
+                <p className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500">No results</p>
+              )}
+            </div>
+            {extraOptions && (
+              <div className="border-t border-slate-200 dark:border-slate-700">
+                {extraOptions}
+              </div>
+            )}
+            {loading && (
+              <div className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500">Loading...</div>
             )}
           </div>
-          {extraOptions && (
-            <div className="border-t border-slate-200 dark:border-slate-700">
-              {extraOptions}
-            </div>
-          )}
-          {loading && (
-            <div className="px-3 py-2 text-xs text-slate-400 dark:text-slate-500">Loading...</div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

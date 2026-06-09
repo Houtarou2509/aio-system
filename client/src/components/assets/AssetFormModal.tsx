@@ -3,19 +3,34 @@ import { Asset } from '../../lib/api';
 
 import { useLookupOptions } from '@/hooks/useLookupOptions';
 import { SupplierFormModal } from '../suppliers/SupplierFormModal';
-import { Sparkles, X, Upload, Pencil, Plus, Camera, CameraOff, Check, RotateCcw, AlertTriangle } from 'lucide-react';
+import { Sparkles, X, Upload, Pencil, Plus, Camera, CameraOff, Check, RotateCcw, AlertTriangle, History } from 'lucide-react';
 import { CameraCaptureModal } from '@/components/ui/CameraCaptureModal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 
 const ASSET_STATUSES = ['AVAILABLE', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST'];
 const CREATE_STATUSES = ['AVAILABLE', 'MAINTENANCE', 'RETIRED', 'LOST'];
 
-/** Resolve asset image URL — prepend base path if relative */
+// Fields that should NEVER be suggested or auto-applied by AI.
+// Includes unique identifiers (always unique per asset) and manual-entry fields
+// (should be consciously set per asset, not bulk-applied).
+const BLOCKED_SUGGESTION_FIELDS = new Set([
+  // Unique identifiers — always different per asset
+  'serialNumber',
+  'propertyNumber',
+  'assetTag',
+  'barcode',
+  'qrCode',
+  // Manual-entry / per-asset fields — should be consciously set
+  'usefulLifeYears',   // depreciation setting, not reusable per-asset
+  'warrantyYears',      // computes warrantyExpiry; varies per purchase
+  'warrantyExpiry',     // each asset may have a different warranty date
+  'status',             // should be consciously chosen per asset
+]);
+
+/** Resolve asset image url — prepend base path if relative */
 function getImageUrl(url: string | null | undefined): string {
   if (!url) return '';
   if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) return url;
-  // In dev: Vite proxy handles /uploads → :3001
-  // In production: images served at /aio-system/uploads/xxx
   if (url.startsWith('/uploads')) {
     if (import.meta.env.DEV) return url;
     const base = import.meta.env.BASE_URL?.replace(/\/+$/, '') || '/aio-system';
@@ -29,13 +44,41 @@ interface Supplier {
   name: string;
 }
 
+// Extended SuggestionResult to support historical asset fields
+// Only includes safe reusable fields (no unique IDs, no manual-entry fields)
 interface SuggestionResult {
+  // Safe reusable fields
   type?: string;
   manufacturer?: string;
+  purchasePrice?: number | null;
+  purchaseDate?: string | null;
+  owner?: string | null;
+  location?: string | null;
+  supplierId?: string | null;
+  supplierName?: string | null;
+  remarks?: string | null;
+  // Metadata
+  confidence?: 'high' | 'medium' | 'low';
+  source?: 'history' | 'ai' | 'local';
+  exactMatch?: boolean;
+  matchCount?: number;
+  // Internal fields still received from server but NOT shown in UI
   usefulLifeYears?: number;
   warrantyYears?: number;
-  confidence?: 'high' | 'medium' | 'low';
+  status?: string | null;
 }
+
+// Label mapping for safe suggestion fields only
+const SUGGESTION_FIELD_LABELS: Record<string, string> = {
+  type: 'Type',
+  manufacturer: 'Manufacturer',
+  purchasePrice: 'Price',
+  purchaseDate: 'Purchase Date',
+  owner: 'Owner',
+  location: 'Location',
+  supplierId: 'Supplier',
+  remarks: 'Remarks',
+};
 
 interface Props {
   asset?: Asset | null;
@@ -75,7 +118,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
   // AI suggestion review state
   const [suggestions, setSuggestions] = useState<SuggestionResult | null>(null);
-  const [suggestionNotes, setSuggestionNotes] = useState<{ type?: string; manufacturer?: string }>({});
+  const [suggestionNotes, setSuggestionNotes] = useState<Record<string, string>>({});
 
   const [aiSuggestedFields, setAiSuggestedFields] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -169,12 +212,12 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       });
       const d = await res.json();
       if (d.success && d.data.suggestions?.length > 0) {
-        const best = d.data.suggestions[0];
-        const notes: { type?: string; manufacturer?: string } = {};
+        const best = d.data.suggestions[0] as SuggestionResult;
+        const notes: Record<string, string> = {};
 
         // Validate type against lookup options
         if (best.type) {
-          const typeMatch = typeOptions.find(o => o.value.toLowerCase() === best.type.toLowerCase());
+          const typeMatch = typeOptions.find(o => o.value.toLowerCase() === best.type!.toLowerCase());
           if (typeMatch) {
             best.type = typeMatch.value; // use exact casing from lookup
           } else {
@@ -185,7 +228,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
         // Validate manufacturer against lookup options
         if (best.manufacturer) {
-          const mfgMatch = manufacturerOptions.find(o => o.value.toLowerCase() === best.manufacturer.toLowerCase());
+          const mfgMatch = manufacturerOptions.find(o => o.value.toLowerCase() === best.manufacturer!.toLowerCase());
           if (mfgMatch) {
             best.manufacturer = mfgMatch.value; // use exact casing from lookup
           } else {
@@ -194,8 +237,43 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
           }
         }
 
-        // Check confidence
-        if (best.confidence === 'low' && !best.type && !best.manufacturer && best.usefulLifeYears == null) {
+        // Validate owner against lookup options
+        if (best.owner) {
+          const ownerMatch = ownerOptions.find(o => o.value.toLowerCase() === best.owner!.toLowerCase());
+          if (ownerMatch) {
+            best.owner = ownerMatch.value;
+          } else {
+            notes.owner = 'No matching lookup value';
+            delete best.owner;
+          }
+        }
+
+        // Validate location against lookup options
+        if (best.location) {
+          const locMatch = locationOptions.find(o => o.value.toLowerCase() === best.location!.toLowerCase());
+          if (locMatch) {
+            best.location = locMatch.value;
+          } else {
+            notes.location = 'No matching lookup value';
+            delete best.location;
+          }
+        }
+
+        // Validate supplierId
+        if (best.supplierId) {
+          const supplierMatch = suppliers.find(s => s.id === best.supplierId);
+          if (!supplierMatch) {
+            delete best.supplierId;
+          } else {
+            best.supplierName = supplierMatch.name;
+          }
+        }
+
+        // Check if there are any usable suggestions at all (only safe reusable fields)
+        const usableFields = (['type', 'manufacturer', 'purchasePrice', 'purchaseDate', 'owner', 'location', 'supplierId', 'remarks'] as const)
+          .filter(k => best[k] != null && best[k] !== '');
+
+        if (best.confidence === 'low' && usableFields.length === 0) {
           setSuggestionNotes({ type: 'No confident suggestion' });
           setSuggesting(false);
           return;
@@ -219,28 +297,29 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     setAiSuggestedFields(prev => new Set(prev).add(field));
   };
 
-  // Apply all valid suggestions at once
+  // Apply all safe (non-unique) suggestions at once
   const applyAllSuggestions = () => {
     if (!suggestions) return;
     const newSuggested = new Set(aiSuggestedFields);
-    if (suggestions.type != null) {
-      setForm(prev => ({ ...prev, type: suggestions.type! }));
-      newSuggested.add('type');
-    }
-    if (suggestions.manufacturer != null) {
-      setForm(prev => ({ ...prev, manufacturer: suggestions.manufacturer! }));
-      newSuggested.add('manufacturer');
-    }
-    if (suggestions.usefulLifeYears != null) {
-      setForm(prev => ({ ...prev, usefulLifeYears: suggestions.usefulLifeYears! }));
-      newSuggested.add('usefulLifeYears');
-    }
-    if (suggestions.warrantyYears != null && !form.warrantyExpiry && form.purchaseDate) {
-      const purchaseDate = new Date(form.purchaseDate);
-      purchaseDate.setFullYear(purchaseDate.getFullYear() + suggestions.warrantyYears);
-      setForm(prev => ({ ...prev, warrantyExpiry: purchaseDate.toISOString().split('T')[0] }));
-      newSuggested.add('warrantyExpiry');
-    }
+
+    // Helper to apply if the field has a value and isn't a manual/blocked field
+    const applyIf = (field: string, value: any) => {
+      if (value != null && value !== '' && !BLOCKED_SUGGESTION_FIELDS.has(field)) {
+        setForm(prev => ({ ...prev, [field]: value }));
+        newSuggested.add(field);
+      }
+    };
+
+    // Only apply safe reusable fields — never unique IDs or manual-entry fields
+    applyIf('type', suggestions.type);
+    applyIf('manufacturer', suggestions.manufacturer);
+    applyIf('owner', suggestions.owner);
+    applyIf('location', suggestions.location);
+    applyIf('purchasePrice', suggestions.purchasePrice != null ? String(suggestions.purchasePrice) : null);
+    applyIf('purchaseDate', suggestions.purchaseDate);
+    applyIf('remarks', suggestions.remarks);
+    applyIf('supplierId', suggestions.supplierId);
+
     setAiSuggestedFields(newSuggested);
     setSuggestions(null);
     setSuggestionNotes({});
@@ -326,6 +405,29 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
     return [{ id: -1, value: currentValue }, ...options];
   }
 
+  // Build the list of suggestion chips to display
+  const getSuggestionChips = (): { field: string; label: string; value: string; rawValue: any; note?: string }[] => {
+    if (!suggestions) return [];
+    const chips: { field: string; label: string; value: string; rawValue: any; note?: string }[] = [];
+
+    const add = (field: string, rawVal: any, displayVal: string) => {
+      if (rawVal != null && rawVal !== '' && !BLOCKED_SUGGESTION_FIELDS.has(field)) {
+        chips.push({ field, label: SUGGESTION_FIELD_LABELS[field] || field, value: displayVal, rawValue: rawVal, note: suggestionNotes[field] });
+      }
+    };
+
+    add('type', suggestions.type, suggestions.type || '');
+    add('manufacturer', suggestions.manufacturer, suggestions.manufacturer || '');
+    add('purchasePrice', suggestions.purchasePrice, suggestions.purchasePrice != null ? `₱${Number(suggestions.purchasePrice).toLocaleString()}` : '');
+    add('purchaseDate', suggestions.purchaseDate, suggestions.purchaseDate || '');
+    add('owner', suggestions.owner, suggestions.owner || '');
+    add('location', suggestions.location, suggestions.location || '');
+    add('supplierId', suggestions.supplierId, suggestions.supplierName || suggestions.supplierId || '');
+    add('remarks', suggestions.remarks, suggestions.remarks || '');
+
+    return chips;
+  };
+
   const inputClass = "w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent transition";
   const labelClass = "text-xs font-medium text-slate-700 dark:text-slate-300 mb-1 block";
 
@@ -346,7 +448,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg border border-white/20 bg-white dark:bg-slate-800/10 p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-700 dark:text-white/60 hover:text-white hover:bg-white/20 transition-colors"
+            className="rounded-lg border border-white/20 bg-white/10 p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-white/70 hover:text-white hover:bg-white/20 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -434,7 +536,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                     type="button"
                     onClick={handleSuggest}
                     disabled={suggesting || !form.name.trim()}
-                    title="Suggest type, manufacturer, and useful life based on asset name"
+                    title="Suggest fields based on asset name and previous records"
                     className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-medium text-[#f8931f] hover:bg-[#f8931f]/10 disabled:opacity-40 transition-colors whitespace-nowrap"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
@@ -443,59 +545,58 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                 </div>
               </div>
 
-              {/* Suggestion review panel */}
+              {/* Suggestion review panel — enriched with historical data */}
               {suggestions && (
                 <div className="md:col-span-2 rounded-lg border border-[#f8931f]/30 bg-[#f8931f]/5 dark:bg-[#f8931f]/10 px-4 py-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold text-[#f8931f]">AI Suggestions</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-[#f8931f]">AI Suggestions</span>
+                      {suggestions.source === 'history' && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                          <History className="w-2.5 h-2.5" />
+                          {suggestions.exactMatch ? 'Exact match' : 'Similar'}
+                          {suggestions.matchCount != null ? ` · ${suggestions.matchCount} record${suggestions.matchCount !== 1 ? 's' : ''}` : ''}
+                        </span>
+                      )}
+                      {suggestions.confidence && (
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                          suggestions.confidence === 'high' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
+                          suggestions.confidence === 'medium' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' :
+                          'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                        }`}>
+                          {suggestions.confidence} confidence
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[10px] text-slate-400">Review before applying</span>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {suggestions.type != null && (
+                    {getSuggestionChips().map(chip => (
                       <SuggestionChip
-                        label="Type"
-                        value={suggestions.type}
-                        note={suggestionNotes.type}
-                        applied={aiSuggestedFields.has('type')}
-                        onApply={() => applySuggestion('type', suggestions.type!)}
-                      />
-                    )}
-                    {suggestions.manufacturer != null && (
-                      <SuggestionChip
-                        label="Manufacturer"
-                        value={suggestions.manufacturer}
-                        note={suggestionNotes.manufacturer}
-                        applied={aiSuggestedFields.has('manufacturer')}
-                        onApply={() => applySuggestion('manufacturer', suggestions.manufacturer!)}
-                      />
-                    )}
-                    {suggestions.usefulLifeYears != null && (
-                      <SuggestionChip
-                        label="Useful Life"
-                        value={`${suggestions.usefulLifeYears} years`}
-                        onApply={() => applySuggestion('usefulLifeYears', suggestions.usefulLifeYears!)}
-                        applied={aiSuggestedFields.has('usefulLifeYears')}
-                      />
-                    )}
-                    {suggestions.warrantyYears != null && form.purchaseDate && !form.warrantyExpiry && (
-                      <SuggestionChip
-                        label="Warranty Expiry"
-                        value={`${suggestions.warrantyYears} years from purchase`}
+                        key={chip.field}
+                        label={chip.label}
+                        value={chip.value}
+                        note={chip.note}
+                        applied={aiSuggestedFields.has(chip.field)}
                         onApply={() => {
-                          const purchaseDate = new Date(form.purchaseDate);
-                          purchaseDate.setFullYear(purchaseDate.getFullYear() + suggestions.warrantyYears!);
-                          applySuggestion('warrantyExpiry', purchaseDate.toISOString().split('T')[0]);
+                          if (chip.field === 'purchasePrice' && chip.rawValue != null) {
+                            applySuggestion('purchasePrice', String(chip.rawValue));
+                          } else {
+                            applySuggestion(chip.field, chip.rawValue);
+                          }
                         }}
-                        applied={aiSuggestedFields.has('warrantyExpiry')}
                       />
-                    )}
+                    ))}
                   </div>
                   {/* No matches message */}
-                  {(suggestionNotes.type === 'No matching lookup value' || suggestionNotes.type === 'No confident suggestion') && (
+                  {getSuggestionChips().length === 0 && (
                     <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                      {suggestionNotes.type === 'No confident suggestion'
-                        ? 'No confident suggestion found for this asset name.'
-                        : 'Some suggestions did not match existing lookup values and were excluded.'}
+                      No reusable fields to suggest for this asset name.
+                    </p>
+                  )}
+                  {(Object.values(suggestionNotes).some(n => n === 'No matching lookup value')) && (
+                    <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                      Some suggestions did not match existing lookup values and were excluded.
                     </p>
                   )}
                   <div className="flex items-center gap-2 mt-3 pt-2 border-t border-[#f8931f]/20">
@@ -505,7 +606,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                       className="inline-flex items-center gap-1 rounded-md bg-[#f8931f] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#e0841a] transition-colors"
                     >
                       <Check className="w-3 h-3" />
-                      Apply all
+                      Apply all safe fields
                     </button>
                     <button
                       type="button"
@@ -574,7 +675,9 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 6. Owner */}
               <div className="relative">
-                <label className={labelClass}>Owner <span className="normal-case tracking-normal font-normal text-slate-400">(optional)</span></label>
+                <label className={labelClass}>Owner <span className="normal-case tracking-normal font-normal text-slate-400">(optional)</span>
+                  {aiSuggestedFields.has('owner') && <span className="ml-1 text-[#f8931f] text-[10px]">AI suggested</span>}
+                </label>
                 <SearchableSelect
                   label=""
                   value={form.owner || ''}
@@ -603,7 +706,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 7. Price */}
               <div>
-                <label className={labelClass}>Price *</label>
+                <label className={labelClass}>Price *{aiSuggestedFields.has('purchasePrice') && <span className="ml-1 text-[#f8931f] text-[10px]">AI suggested</span>}</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">₱</span>
                   <input type="number" step="0.01" value={form.purchasePrice} onChange={e => set('purchasePrice', e.target.value)} required className={`${inputClass} pl-8`} />
@@ -612,13 +715,15 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 8. Purchase Date */}
               <div>
-                <label className={labelClass}>Purchase Date{isEdit ? '' : ' *'}</label>
+                <label className={labelClass}>Purchase Date{isEdit ? '' : ' *'}{aiSuggestedFields.has('purchaseDate') && <span className="ml-1 text-[#f8931f] text-[10px]">AI suggested</span>}</label>
                 <input type="date" value={form.purchaseDate} onChange={e => set('purchaseDate', e.target.value)} {...(isEdit ? {} : { required: true })} className={inputClass} />
               </div>
 
               {/* 9. Supplier */}
               <div>
-                <label className={labelClass}>Supplier <span className="normal-case tracking-normal font-normal text-slate-400">(optional)</span></label>
+                <label className={labelClass}>Supplier <span className="normal-case tracking-normal font-normal text-slate-400">(optional)</span>
+                  {aiSuggestedFields.has('supplierId') && <span className="ml-1 text-[#f8931f] text-[10px]">AI suggested</span>}
+                </label>
                 {suppliers.length === 0 && !suppliersLoading ? (
                   <div className="space-y-1.5">
                     <p className="text-xs text-slate-400 dark:text-slate-500 italic">No suppliers yet.</p>
@@ -657,7 +762,9 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 10. Location */}
               <div className="relative">
-                <label className={labelClass}>Location</label>
+                <label className={labelClass}>Location
+                  {aiSuggestedFields.has('location') && <span className="ml-1 text-[#f8931f] text-[10px]">AI suggested</span>}
+                </label>
                 <SearchableSelect
                   label=""
                   value={form.location || ''}
@@ -697,7 +804,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
 
               {/* 12. Remarks */}
               <div className="md:col-span-2">
-                <label className={labelClass}>Remarks</label>
+                <label className={labelClass}>Remarks{aiSuggestedFields.has('remarks') && <span className="ml-1 text-[#f8931f] text-[10px]">AI suggested</span>}</label>
                 <textarea rows={3} value={form.remarks} onChange={e => set('remarks', e.target.value)} placeholder="Any additional notes..." className={`${inputClass} resize-none`} />
               </div>
 
@@ -707,7 +814,6 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                   <div>
                     <label className="text-[10px] text-slate-400 block mb-1">
                       Warranty expiry date
-                      {aiSuggestedFields.has('warrantyExpiry') && <span className="ml-1 text-[#f8931f]">AI suggested</span>}
                     </label>
                     <input type="date" value={form.warrantyExpiry} onChange={e => set('warrantyExpiry', e.target.value)} className={inputClass} />
                   </div>
@@ -741,7 +847,6 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
                   <div>
                     <label className={labelClass}>
                       Useful Life (Years)
-                      {aiSuggestedFields.has('usefulLifeYears') && <span className="ml-1 text-[#f8931f]">AI suggested</span>}
                     </label>
                     <input type="number" min={1} max={50} value={form.usefulLifeYears} onChange={e => setForm(prev => ({ ...prev, usefulLifeYears: Number(e.target.value) || 5 }))} className={inputClass} />
                     <p className="text-[10px] text-slate-400 mt-0.5">How many years is this asset expected to last?</p>

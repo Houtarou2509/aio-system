@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, Link } from 'react-router-dom';
-import { BookOpen, Settings2, LayoutDashboard, Package, Wrench, Users, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, ScanLine, FileBarChart, AlertCircle, HelpCircle } from 'lucide-react';
+import { BookOpen, Settings2, LayoutDashboard, Package, Wrench, Users, LogOut, Menu, X, FileSignature, Database, FileText, Sun, Moon, BarChart3, ScanLine, FileBarChart, AlertCircle, HelpCircle, PackageCheck } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/notifications/NotificationBell';
@@ -140,6 +140,13 @@ export default function AppLayout() {
           <div className="relative z-50">
             <NotificationBell />
           </div>
+          <button
+            onClick={toggleTheme}
+            className="p-1.5 rounded-md text-slate-400 hover:text-[#f8931f] hover:bg-white/10 transition-colors shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </button>
           <button onClick={() => setMobileOpen(!mobileOpen)} className="text-white/70 hover:text-white p-2 -mr-2 min-w-[44px] min-h-[44px] flex items-center justify-center">
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -150,8 +157,30 @@ export default function AppLayout() {
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-50 bg-black/50" onMouseDown={(e) => { if (e.target === e.currentTarget) setMobileOpen(false); }}>
           <div className="w-56 h-full bg-[#012061] border-r border-[#001a4d] flex flex-col" onClick={e => e.stopPropagation()}>
-            {/* Mobile Nav Links — fills remaining space, scrolls if needed */}
-            <nav className="flex-1 px-3 py-2 space-y-0.5 pt-20 overflow-y-auto">
+
+            {/* ── Mobile Drawer Header ── */}
+            <div className="shrink-0 px-4 py-3 border-b border-[#001a4d] flex items-center justify-between" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#f8931f] text-white">
+                  <PackageCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold tracking-tight text-[#f8931f] leading-tight">AIO Inventory</h2>
+                  <p className="text-[10px] text-slate-400 leading-tight">Inventory Management</p>
+                </div>
+              </div>
+              <button
+                onClick={toggleTheme}
+                className="p-1.5 rounded-md text-slate-400 hover:text-[#f8931f] hover:bg-white/10 transition-colors shrink-0"
+                title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </button>
+            </div>
+
+            {/* ── Mobile Nav Links — single scrollable column ── */}
+            <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
+              {/* Inventory */}
               <div className="px-3 pt-2 pb-1">
                 <span className="text-[10px] tracking-widest font-semibold text-slate-500 dark:text-slate-400 uppercase">Inventory</span>
               </div>
@@ -162,6 +191,7 @@ export default function AppLayout() {
                 </NavLink>
               ))}
 
+              {/* Accountability */}
               <div className="px-3 pt-4 pb-1 border-t border-[#001a4d] mt-2">
                 <span className="text-[10px] tracking-widest font-semibold text-slate-500 dark:text-slate-400 uppercase">Accountability</span>
               </div>
@@ -172,6 +202,7 @@ export default function AppLayout() {
                 </NavLink>
               ))}
 
+              {/* System */}
               <div className="px-3 pt-4 pb-1 border-t border-[#001a4d] mt-2">
                 <span className="text-[10px] tracking-widest font-semibold text-slate-500 dark:text-slate-400 uppercase">System</span>
               </div>
@@ -181,11 +212,12 @@ export default function AppLayout() {
                   <span>{item.label}</span>
                 </NavLink>
               ))}
-            </nav>
 
-            {/* Mobile Profile & Logout — pinned to bottom */}
-            <div className="shrink-0 bg-black/20 px-3 py-3 border-t border-[#001a4d]">
-              <div className="mb-2">
+              {/* ── User section inside scroll flow ── */}
+              <div className="px-3 pt-4 pb-1 border-t border-[#001a4d] mt-2">
+                <span className="text-[10px] tracking-widest font-semibold text-slate-500 dark:text-slate-400 uppercase">Account</span>
+              </div>
+              <div className="px-3 py-2">
                 <p className="text-sm font-semibold text-white leading-tight">{user?.fullName}</p>
                 <p className="text-[10px] tracking-widest font-medium text-[#f8931f] uppercase">{user?.role?.replace('_', '-')}</p>
               </div>
@@ -211,7 +243,7 @@ export default function AppLayout() {
                 <LogOut className="h-4 w-4" />
                 <span>Logout</span>
               </button>
-            </div>
+            </nav>
           </div>
         </div>
       )}

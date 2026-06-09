@@ -218,7 +218,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose, initialTab
                 )}
                 <button
                   onClick={onClose}
-                  className="rounded-lg border border-white/20 bg-white/10 p-1.5 text-white/70 hover:text-white hover:bg-white/20 transition-colors shrink-0 min-w-[44px] min-h-[44px]"
+                  className="inline-flex items-center justify-center rounded-lg border border-white/20 bg-white/10 p-1.5 text-white/70 hover:text-white hover:bg-white/20 transition-colors shrink-0 min-w-[44px] min-h-[44px]"
                 >
                   <X className="w-4 h-4" />
                 </button>
