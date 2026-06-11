@@ -149,9 +149,9 @@ export default function AgreementVerificationPage() {
             <StatusIcon color="slate">
               <SearchX className="h-8 w-8" />
             </StatusIcon>
-            <h2 className="mt-4 text-lg font-bold text-slate-900">Agreement not found</h2>
+            <h2 className="mt-4 text-lg font-bold text-slate-900">Document Not Verified</h2>
             <p className="mt-2 text-sm text-slate-500 leading-relaxed">
-              No agreement document was found for this number.
+              We could not verify this agreement document number.
             </p>
             {documentNumber && (
               <p className="mt-2 text-xs text-slate-400 font-mono break-all">
@@ -166,9 +166,9 @@ export default function AgreementVerificationPage() {
             <StatusIcon color="red">
               <WifiOff className="h-8 w-8" />
             </StatusIcon>
-            <h2 className="mt-4 text-lg font-bold text-slate-900">Unable to verify agreement</h2>
+            <h2 className="mt-4 text-lg font-bold text-slate-900">Unable to Verify</h2>
             <p className="mt-2 text-sm text-slate-500 leading-relaxed">
-              Please check the agreement number or try again later.
+              Please try again or contact an administrator.
             </p>
             {errorMsg && (
               <p className="mt-2 text-xs text-red-400 break-all">{errorMsg}</p>
@@ -181,9 +181,9 @@ export default function AgreementVerificationPage() {
             <StatusIcon color="green">
               <ShieldCheck className="h-8 w-8" />
             </StatusIcon>
-            <h2 className="mt-4 text-lg font-bold text-emerald-800">Document verified</h2>
+            <h2 className="mt-4 text-lg font-bold text-emerald-800">Digital sign-off verified</h2>
             <p className="mt-1 text-sm text-emerald-600">
-              The agreement document signature has been successfully verified.
+              This agreement document was digitally signed and verified by AIO System.
             </p>
 
             <div className="mt-6 w-full rounded-lg border border-slate-200 bg-white divide-y divide-slate-100">
@@ -232,8 +232,8 @@ export default function AgreementVerificationPage() {
             </StatusIcon>
             <h2 className="mt-4 text-lg font-bold text-amber-800">Document not signed yet</h2>
             <p className="mt-2 text-sm text-slate-500 leading-relaxed">
-              This agreement exists, but it has not been signed yet.
-              Authenticity verification will be available after signing.
+              This agreement exists, but it has not been digitally signed yet.
+              Digital sign-off verification will be available after signing.
             </p>
 
             <div className="mt-5 w-full rounded-lg border border-slate-200 bg-white divide-y divide-slate-100">
@@ -276,7 +276,7 @@ export default function AgreementVerificationPage() {
             </StatusIcon>
             <h2 className="mt-4 text-lg font-bold text-red-800">Verification failed</h2>
             <p className="mt-2 text-sm text-slate-500 leading-relaxed">
-              The document signature could not be verified. The document may be unsigned, altered, or invalid.
+              The digital sign-off could not be verified. The document may be unsigned, altered, or invalid.
             </p>
 
             <div className="mt-5 w-full rounded-lg border border-slate-200 bg-white divide-y divide-slate-100">
@@ -323,7 +323,7 @@ function LoadingState() {
   return (
     <div className="text-center">
       <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-[#012061] border-t-transparent mb-4" />
-      <p className="text-sm font-medium text-slate-600">Verifying agreement document...</p>
+      <p className="text-sm font-medium text-slate-600">Verifying document...</p>
       <p className="mt-1 text-xs text-slate-400">Checking document signature integrity</p>
     </div>
   );
@@ -483,7 +483,7 @@ function Footer() {
   return (
     <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[10px] text-slate-400 uppercase tracking-wider">
       <FileText className="h-3 w-3" />
-      AIO System — Document Verification
+      This page verifies the digital sign-off record stored in AIO System.
     </div>
   );
 }

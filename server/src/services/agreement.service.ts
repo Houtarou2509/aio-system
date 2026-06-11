@@ -16,6 +16,7 @@ interface TemplateCreateData {
   name: string;
   title?: string;
   content: string;
+  contentJson?: unknown;
   isDefault?: boolean;
   defaultPropertyOfficer?: string;
   defaultAuthorizedRep?: string;
@@ -27,6 +28,7 @@ interface TemplateUpdateData {
   name?: string;
   title?: string;
   content?: string;
+  contentJson?: unknown;
   isDefault?: boolean;
   defaultPropertyOfficer?: string;
   defaultAuthorizedRep?: string;
@@ -123,6 +125,7 @@ export async function createTemplate(
         name: data.name,
         title: data.title ?? "ISSUANCE & ACCOUNTABILITY AGREEMENT",
         content: data.content,
+        contentJson: data.contentJson ?? undefined,
         isDefault: data.isDefault ?? false,
         defaultPropertyOfficer: data.defaultPropertyOfficer ?? null,
         defaultAuthorizedRep: data.defaultAuthorizedRep ?? null,
@@ -139,6 +142,7 @@ export async function createTemplate(
         name: template.name,
         title: template.title,
         content: template.content,
+        contentJson: template.contentJson as any,
         headerLogo: template.headerLogo,
         letterheadPath: template.letterheadPath,
         defaultPropertyOfficer: template.defaultPropertyOfficer,
@@ -165,6 +169,7 @@ export async function updateTemplate(
   if (data.name !== undefined) updateData.name = data.name;
   if (data.title !== undefined) updateData.title = data.title ?? "ISSUANCE & ACCOUNTABILITY AGREEMENT";
   if (data.content !== undefined) updateData.content = data.content;
+  if (data.contentJson !== undefined) updateData.contentJson = data.contentJson;
   if (data.isDefault !== undefined) updateData.isDefault = data.isDefault;
   if (data.defaultPropertyOfficer !== undefined) updateData.defaultPropertyOfficer = data.defaultPropertyOfficer || null;
   if (data.defaultAuthorizedRep !== undefined) updateData.defaultAuthorizedRep = data.defaultAuthorizedRep || null;
@@ -180,6 +185,7 @@ export async function updateTemplate(
     name: updateData.name ?? existing.name,
     title: updateData.title ?? existing.title,
     content: updateData.content ?? existing.content,
+    contentJson: updateData.contentJson !== undefined ? updateData.contentJson : existing.contentJson,
     headerLogo: updateData.headerLogo !== undefined ? updateData.headerLogo : existing.headerLogo,
     letterheadPath: updateData.letterheadPath !== undefined ? updateData.letterheadPath : existing.letterheadPath,
     defaultPropertyOfficer: updateData.defaultPropertyOfficer ?? existing.defaultPropertyOfficer,
@@ -193,7 +199,8 @@ export async function updateTemplate(
     nextSnapshot.headerLogo !== existing.headerLogo ||
     nextSnapshot.letterheadPath !== existing.letterheadPath ||
     nextSnapshot.defaultPropertyOfficer !== existing.defaultPropertyOfficer ||
-    nextSnapshot.defaultAuthorizedRep !== existing.defaultAuthorizedRep;
+    nextSnapshot.defaultAuthorizedRep !== existing.defaultAuthorizedRep ||
+    JSON.stringify(nextSnapshot.contentJson) !== JSON.stringify(existing.contentJson);
 
   return prisma.$transaction(async (tx) => {
     // Unset old default if this one becomes the new default
@@ -217,6 +224,7 @@ export async function updateTemplate(
           name: nextSnapshot.name,
           title: nextSnapshot.title,
           content: nextSnapshot.content,
+          contentJson: nextSnapshot.contentJson as any,
           headerLogo: nextSnapshot.headerLogo,
           letterheadPath: nextSnapshot.letterheadPath,
           defaultPropertyOfficer: nextSnapshot.defaultPropertyOfficer,
@@ -247,6 +255,67 @@ export async function deleteTemplate(id: string) {
   }
 
   return prisma.agreementTemplate.delete({ where: { id } });
+}
+
+/** Duplicate an existing template. Copies all content fields but forces
+ *  isDefault=false and generates a unique name with "(Copy)" suffix. */
+export async function duplicateTemplate(id: string) {
+  const source = await prisma.agreementTemplate.findUnique({
+    where: { id },
+    include: { versions: { orderBy: { versionNumber: 'desc' }, take: 1 } },
+  });
+  if (!source) {
+    const err: any = new Error('Template not found');
+    err.status = 404;
+    throw err;
+  }
+
+  // Generate a unique copy name
+  let copyName = `${source.name} (Copy)`;
+  let suffix = 2;
+  while (await prisma.agreementTemplate.findFirst({ where: { name: copyName } })) {
+    copyName = `${source.name} (Copy ${suffix})`;
+    suffix++;
+  }
+
+  // Use the latest version snapshot if available, otherwise fall back to template fields
+  const latestVersion = source.versions[0];
+  const contentSource = latestVersion ?? source;
+
+  return prisma.$transaction(async (tx) => {
+    const template = await tx.agreementTemplate.create({
+      data: {
+        name: copyName,
+        title: contentSource.title,
+        content: contentSource.content,
+        contentJson: contentSource.contentJson as any ?? undefined,
+        isDefault: false,
+        defaultPropertyOfficer: contentSource.defaultPropertyOfficer,
+        defaultAuthorizedRep: contentSource.defaultAuthorizedRep,
+        headerLogo: contentSource.headerLogo,
+        letterheadPath: contentSource.letterheadPath,
+        currentVersion: 1,
+      },
+    });
+
+    await tx.agreementTemplateVersion.create({
+      data: {
+        templateId: template.id,
+        versionNumber: 1,
+        name: template.name,
+        title: template.title,
+        content: template.content,
+        contentJson: template.contentJson as any,
+        headerLogo: template.headerLogo,
+        letterheadPath: template.letterheadPath,
+        defaultPropertyOfficer: template.defaultPropertyOfficer,
+        defaultAuthorizedRep: template.defaultAuthorizedRep,
+        changeSummary: 'Duplicated from template: ' + source.name,
+      },
+    });
+
+    return template;
+  });
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -617,12 +686,130 @@ interface TextSegment {
   text: string;
   fontSize: number;
   bold: boolean;
+  italic?: boolean;
   color: string;
   indent: number;
   align: 'left' | 'justify';
   kind?: 'text' | 'divider' | 'assetHeader';
-  /** Structured runs for underline rendering. When present, use these instead of flat text. */
+  /** Structured runs for variable-emphasis rendering. When present, render
+   *  each run individually so resolved variables (underline=true) get bold. */
   runs?: TextRun[];
+}
+
+type TextRunStyle = Pick<TextRun, 'fontSize' | 'color' | 'bold' | 'italic'>;
+
+function cloneRunWithText(run: TextRun, text: string): TextRun {
+  return { ...run, text };
+}
+
+function parseFontSize(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return clampPdfFontSize(value);
+  if (typeof value !== 'string') return undefined;
+  const parsed = Number.parseFloat(value.replace('px', '').trim());
+  return Number.isFinite(parsed) ? clampPdfFontSize(parsed) : undefined;
+}
+
+function clampPdfFontSize(value: number): number {
+  return Math.max(6, Math.min(28, value));
+}
+
+function normalizePdfColor(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  // Hex format: #b91c1c
+  if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed;
+  // RGB format: rgb(185, 28, 28) or rgb(185,28,28)
+  const rgbMatch = trimmed.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i);
+  if (rgbMatch) {
+    const r = parseInt(rgbMatch[1], 10).toString(16).padStart(2, '0');
+    const g = parseInt(rgbMatch[2], 10).toString(16).padStart(2, '0');
+    const b = parseInt(rgbMatch[3], 10).toString(16).padStart(2, '0');
+    return `#${r}${g}${b}`;
+  }
+  return undefined;
+}
+
+function styleFromMarks(marks: any[] | undefined, inherited: TextRunStyle = {}): TextRunStyle {
+  const style: TextRunStyle = { ...inherited };
+  for (const mark of Array.isArray(marks) ? marks : []) {
+    if (!mark || typeof mark !== 'object') continue;
+    if (mark.type === 'bold') style.bold = true;
+    if (mark.type === 'italic') style.italic = true;
+    if (mark.type === 'textStyle') {
+      const fontSize = parseFontSize(mark.attrs?.fontSize);
+      const color = normalizePdfColor(mark.attrs?.color);
+      if (fontSize) style.fontSize = fontSize;
+      if (color) style.color = color;
+    }
+  }
+  return style;
+}
+
+function appendRunsFromTemplateText(text: string, data: any, style: TextRunStyle, runs: TextRun[]) {
+  const templateRuns = parseTemplateWithRuns(text, data);
+  for (const run of templateRuns) {
+    runs.push({ ...run, ...style });
+  }
+}
+
+function appendTiptapNodeRuns(node: any, data: any, inherited: TextRunStyle, runs: TextRun[]) {
+  if (!node || typeof node !== 'object') return;
+  const style = styleFromMarks(node.marks, inherited);
+
+  if (node.type === 'text') {
+    appendRunsFromTemplateText(String(node.text || ''), data, style, runs);
+    return;
+  }
+
+  if (node.type === 'variable') {
+    const name = String(node.attrs?.name || '').trim();
+    if (!name) return;
+    appendRunsFromTemplateText(`{{${name}}}`, data, style, runs);
+    return;
+  }
+
+  const children = Array.isArray(node.content) ? node.content : [];
+  for (const child of children) appendTiptapNodeRuns(child, data, style, runs);
+
+  if (['paragraph', 'heading', 'listItem'].includes(node.type)) {
+    runs.push({ text: '\n', underline: false, ...style });
+  } else if (node.type === 'hardBreak') {
+    runs.push({ text: '\n', underline: false, ...style });
+  } else if (['tableCell', 'tableHeader'].includes(node.type)) {
+    runs.push({ text: '\t', underline: false, ...style });
+  } else if (node.type === 'tableRow') {
+    runs.push({ text: '\n', underline: false, ...style });
+  }
+}
+
+function parseTiptapJsonWithRuns(contentJson: unknown, data: any): TextRun[] | null {
+  if (!contentJson || typeof contentJson !== 'object') return null;
+  const root = contentJson as any;
+  if (root.type !== 'doc' || !Array.isArray(root.content)) return null;
+
+  const runs: TextRun[] = [];
+  for (const child of root.content) appendTiptapNodeRuns(child, data, {}, runs);
+
+  while (runs.length > 0 && runs[runs.length - 1].text === '\n') runs.pop();
+  return runs.length > 0 ? runs : null;
+}
+
+function getSegmentFont(seg: Pick<TextSegment, 'bold' | 'italic'>): string {
+  if (seg.bold && seg.italic) return 'Helvetica-BoldOblique';
+  if (seg.bold) return 'Helvetica-Bold';
+  if (seg.italic) return 'Helvetica-Oblique';
+  return 'Helvetica';
+}
+
+function getLineRunStyle(lineRuns: TextRun[]): TextRunStyle | null {
+  const styledRun = lineRuns.find(r => r.fontSize || r.color || r.bold || r.italic);
+  if (!styledRun) return null;
+  return {
+    fontSize: styledRun.fontSize,
+    color: styledRun.color,
+    bold: styledRun.bold,
+    italic: styledRun.italic,
+  };
 }
 
 function parseBodySegments(filled: string): TextSegment[] {
@@ -657,7 +844,7 @@ function parseBodySegments(filled: string): TextSegment[] {
     let align: 'left' | 'justify' = 'left';
     let kind: TextSegment['kind'] = 'text';
 
-    if (/^No\.\s+Asset Name\s+Serial Number\s+Property Number\s+Condition/i.test(ln)) {
+    if (/^No\.\s+Asset Name\s+(Serial Number\s+)?Property Number\s+Condition/i.test(ln)) {
       fontSize = 7.6;
       bold = true;
       color = '#111111';
@@ -694,7 +881,7 @@ function splitRunsByLines(runs: TextRun[]): TextRun[][] {
     const parts = run.text.split('\n');
     for (let i = 0; i < parts.length; i++) {
       if (i > 0) lines.push([]); // newline → new line group
-      if (parts[i]) lines[lines.length - 1].push({ text: parts[i], underline: run.underline });
+      if (parts[i]) lines[lines.length - 1].push(cloneRunWithText(run, parts[i]));
     }
   }
   return lines;
@@ -732,7 +919,7 @@ function sanitizeRuns(runs: TextRun[]): TextRun[] {
     const cleanedRuns: TextRun[] = [];
     for (const run of lineRuns) {
       const cleaned = run.text.replace(/[ \t]*%[%\s\-–—_]{4,}%[%\s\-–—_]*/g, ' ');
-      if (cleaned) cleanedRuns.push({ text: cleaned, underline: run.underline });
+      if (cleaned) cleanedRuns.push(cloneRunWithText(run, cleaned));
     }
     if (cleanedRuns.length > 0) keptLines.push(cleanedRuns);
   }
@@ -755,7 +942,7 @@ function normalizeRunsNewlines(runs: TextRun[]): TextRun[] {
       continue;
     }
     const cleaned = run.text.replace(/\r\n?/g, '\n');
-    if (cleaned) result.push({ text: cleaned, underline: run.underline });
+    if (cleaned) result.push(cloneRunWithText(run, cleaned));
   }
   return result;
 }
@@ -906,10 +1093,10 @@ function processRunsForBody(runs: TextRun[]): {
     if (lineRuns.length === 0) return lineRuns;
     // Trim leading whitespace from first run
     const first = lineRuns[0];
-    const trimmedFirst = { text: first.text.replace(/^\s+/, ''), underline: first.underline };
+    const trimmedFirst = cloneRunWithText(first, first.text.replace(/^\s+/, ''));
     // Trim trailing whitespace from last run
     const last = lineRuns[lineRuns.length - 1];
-    const trimmedLast = { text: last.text.replace(/\s+$/, ''), underline: last.underline };
+    const trimmedLast = cloneRunWithText(last, last.text.replace(/\s+$/, ''));
     const result = [...lineRuns];
     result[0] = trimmedFirst;
     result[result.length - 1] = trimmedLast;
@@ -959,12 +1146,13 @@ function parseBodySegmentsFromRuns(lineGroups: TextRun[][]): TextSegment[] {
 
     let fontSize = 8.2;
     let bold = false;
+    let italic = false;
     let color = '#333333';
     let indent = 38;
     let align: 'left' | 'justify' = 'left';
     let kind: TextSegment['kind'] = 'text';
 
-    if (/^No\.\s+Asset Name\s+Serial Number\s+Property Number\s+Condition/i.test(ln)) {
+    if (/^No\.\s+Asset Name\s+(Serial Number\s+)?Property Number\s+Condition/i.test(ln)) {
       fontSize = 7.6; bold = true; color = '#111111'; indent = 38; kind = 'assetHeader';
     } else if (ln.startsWith('Terms and Conditions:')) {
       fontSize = 8.8; bold = true; color = '#012061';
@@ -973,12 +1161,18 @@ function parseBodySegmentsFromRuns(lineGroups: TextRun[][]): TextSegment[] {
     } else if (ln.startsWith('Asset:') || ln.startsWith('Serial') || ln.startsWith('Property') || ln.startsWith('Condition')) {
       fontSize = 7.8; indent = 50;
     }
+    const runStyle = getLineRunStyle(lineRuns);
+    if (runStyle?.fontSize) fontSize = runStyle.fontSize;
+    if (runStyle?.color) color = runStyle.color;
+    if (runStyle?.bold) bold = true;
+    if (runStyle?.italic) italic = true;
 
-    // Only include runs if there are underlined values
-    const hasUnderline = lineRuns.some(r => r.underline);
+    // Include runs if there are resolved variables or per-run style differences
+    const hasVariable = lineRuns.some(r => r.underline);
+    const hasRunStyles = lineRuns.some(r => r.fontSize || r.color || r.bold || r.italic);
     segments.push({
-      text: raw, fontSize, bold, color, indent, align, kind,
-      runs: hasUnderline ? lineRuns : undefined,
+      text: raw, fontSize, bold, italic, color, indent, align, kind,
+      runs: (hasVariable || hasRunStyles) ? lineRuns : undefined,
     });
   }
 
@@ -1020,14 +1214,13 @@ function renderAssetTableToPdf(
   const paddingX = 3;
   const paddingY = 4;
   const headerHeight = 18;
-  const fontSize = 6.8;
-  const headerFontSize = 6.5;
+  const fontSize = 8.0;
+  const headerFontSize = 7.5;
   const minRowHeight = 20;
   const columns = [
     { key: 'no', label: 'No.', width: 24, align: 'center' as const },
-    { key: 'name', label: 'Asset Name', width: Math.floor(contentWidth * 0.34), align: 'left' as const },
-    { key: 'serialNumber', label: 'Serial Number', width: Math.floor(contentWidth * 0.20), align: 'left' as const },
-    { key: 'propertyNumber', label: 'Property Number', width: Math.floor(contentWidth * 0.21), align: 'left' as const },
+    { key: 'name', label: 'Asset Name', width: Math.floor(contentWidth * 0.40), align: 'left' as const },
+    { key: 'propertyNumber', label: 'Property Number', width: Math.floor(contentWidth * 0.30), align: 'left' as const },
     { key: 'condition', label: 'Condition', width: 0, align: 'left' as const },
   ];
   const usedWidth = columns.slice(0, -1).reduce((sum, col) => sum + col.width, 0);
@@ -1068,7 +1261,6 @@ function renderAssetTableToPdf(
     const values: Record<string, string> = {
       no: String(asset.no),
       name: asset.name,
-      serialNumber: asset.serialNumber,
       propertyNumber: asset.propertyNumber,
       condition: asset.condition,
     };
@@ -1108,7 +1300,7 @@ function renderAssetTableToPdf(
   return y + 8;
 }
 
-const LEGACY_ASSET_HEADER_PATTERN = /\bNo\.\s+Asset Name\s+Serial Number\s+Property Number\s+Condition\b/i;
+const LEGACY_ASSET_HEADER_PATTERN = /\bNo\.\s+Asset Name\s+(Serial Number\s+)?Property Number\s+Condition\b/i;
 
 function stripLegacyAssetTableLines(text: string): string {
   const kept: string[] = [];
@@ -1205,6 +1397,11 @@ export interface AgreementPdfParams {
    * boundaries for underlining saved agreement text.
    */
   templateContentForRuns?: string | null;
+  /**
+   * Internal: template/version Tiptap content used to preserve editor formatting
+   * such as body font size/color while recovering {{variable}} boundaries.
+   */
+  templateContentJsonForRuns?: unknown | null;
 }
 
 function assetSnapshotArray(snapshot: unknown): Array<{ name: string; serialNumber?: string | null; propertyNumber?: string | null; condition?: string | null }> {
@@ -1254,7 +1451,7 @@ export async function resolveAgreementPdfParams(p: AgreementPdfParams): Promise<
         },
       },
       templateVersionRecord: {
-        select: { content: true },
+        select: { content: true, contentJson: true },
       },
     },
   });
@@ -1316,6 +1513,7 @@ export async function resolveAgreementPdfParams(p: AgreementPdfParams): Promise<
     documentNumber: document.documentNumber || p.documentNumber || null,
     letterheadPath: document.letterheadPath ?? p.letterheadPath ?? null,
     templateContentForRuns: document.templateVersionRecord?.content || p.templateContentForRuns || null,
+    templateContentJsonForRuns: document.templateVersionRecord?.contentJson ?? p.templateContentJsonForRuns ?? null,
   };
 }
 
@@ -1333,6 +1531,7 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
     ? (await prisma.agreementTemplate.findUnique({ where: { id: templateId } })) || (await getDefaultTemplate())
     : await getDefaultTemplate();
   const templateContent = tmpl?.content?.trim() ? tmpl.content : FALLBACK_AGREEMENT_TEMPLATE;
+  const templateContentJson = p.templateContentJsonForRuns ?? (tmpl as any)?.contentJson ?? null;
 
   const titleText = p.title || tmpl?.title || FALLBACK_AGREEMENT_TITLE;
   const templateData = {
@@ -1360,9 +1559,14 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
   const underlineTemplateContent = p.templateContentForRuns?.trim()
     ? p.templateContentForRuns
     : templateContent;
-  const filledRuns: TextRun[] | null = (!hasSavedAgreementText || p.templateContentForRuns || templateId)
-    ? parseTemplateWithRuns(underlineTemplateContent, templateData)
+  const styledRuns = (!hasSavedAgreementText || p.templateContentJsonForRuns || templateId)
+    ? parseTiptapJsonWithRuns(templateContentJson, templateData)
     : null;
+  const filledRuns: TextRun[] | null = styledRuns || (
+    (!hasSavedAgreementText || p.templateContentForRuns || templateId)
+      ? parseTemplateWithRuns(underlineTemplateContent, templateData)
+      : null
+  );
 
   const filled = agreementText && agreementText.trim().length > 0
     ? sanitizeAgreementText(agreementText)
@@ -1567,65 +1771,150 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
         if (seg.kind === 'divider') continue;
 
         const width = PW - M - seg.indent;
-        const font = seg.bold ? 'Helvetica-Bold' : 'Helvetica';
+        const font = getSegmentFont(seg);
         const h = doc.font(font).fontSize(seg.fontSize).heightOfString(seg.text, { width, align: seg.align as any, lineBreak: true });
         const lh = h + 1;
         if (y + lh > CONTENT_BOTTOM_Y) y = addContinuationPage(false);
 
-        // Render the segment text first (always via textAbs for consistent positioning)
-        textAbs(seg.text, seg.indent, y, { width, fontSize: seg.fontSize, font, color: seg.color, align: seg.align, lineBreak: true });
-
-        // If the segment has underlined runs, draw manual underline lines
-        // beneath each underlined variable value. We compute x-positions by
-        // measuring each run's width with the same font/size.
+        // If the segment has structured runs (variables or per-run styles),
+        // render word-by-word with correct per-run font/color and wrapping.
         if (seg.runs && seg.runs.length > 0) {
-          const textX = seg.indent;
-
-          // Measure font metrics for underline positioning
-          const fontAscent = doc.font(font).fontSize(seg.fontSize).currentLineHeight(true);
-          const ulOffset = fontAscent * 0.15; // underline sits just below baseline
-
-          // Track x position across runs, wrapping at the right margin.
-          // PDFKit word-wraps the text; we mirror that for underline positions.
-          let curX = textX;
-          const maxX = seg.indent + width;
-          let curLineY = y;
-          const lineH = doc.font(font).fontSize(seg.fontSize).heightOfString('Ay', { width: Infinity });
-
+          // Build token list: each token is a word or whitespace with its source run style
+          interface Token { text: string; isVar: boolean; bold: boolean; italic: boolean; font: string; fontSize: number; color: string }
+          const tokens: Token[] = [];
           for (const run of seg.runs) {
             if (!run.text) continue;
-            const runW = doc.font(font).fontSize(seg.fontSize).widthOfString(run.text);
-            // Wrap to next line if this run overflows
-            if (curX + runW > maxX && curX > textX) {
-              curX = textX;
-              curLineY += lineH;
+            const isVar = !!run.underline;
+            const rBold = isVar || run.bold || seg.bold;
+            const rItalic = run.italic || seg.italic;
+            const rFont = rBold && rItalic ? 'Helvetica-BoldOblique'
+              : rBold ? 'Helvetica-Bold'
+              : rItalic ? 'Helvetica-Oblique'
+              : 'Helvetica';
+            const rFontSize = run.fontSize || seg.fontSize;
+            const rColor = run.color || seg.color || '#000000';
+            // Split into words on whitespace, keeping whitespace as tokens
+            const parts = run.text.split(/(\s+)/);
+            for (const part of parts) {
+              if (!part) continue;
+              tokens.push({ text: part, isVar, bold: !!rBold, italic: !!rItalic, font: rFont, fontSize: rFontSize, color: rColor });
             }
-            // Draw underline strokes for underlined runs
-            if (run.underline && run.text.trim()) {
-              // For long values that wrap across lines, draw per-word underlines
-              const words = run.text.split(/(\s+)/);
-              let wordX = curX;
-              for (const word of words) {
-                if (!word) continue;
-                const wordW = doc.font(font).fontSize(seg.fontSize).widthOfString(word);
-                if (wordX + wordW > maxX && wordX > textX) {
-                  wordX = textX;
-                  curLineY += lineH;
-                }
-                if (word.trim()) {
-                  const ulY = curLineY + fontAscent + ulOffset;
-                  doc.moveTo(wordX, ulY).lineTo(wordX + wordW, ulY)
-                    .strokeColor(seg.color || '#333333').lineWidth(0.4).stroke();
-                  doc.y = 0;
-                }
-                wordX += wordW;
-              }
-            }
-            curX += runW;
           }
-        }
 
-        y += lh;
+          let curX = seg.indent;
+          const maxX = seg.indent + width;
+          let curLineY = y;
+          let maxLineH = seg.fontSize; // track tallest font on this visual line
+
+          // Helper: break an oversized token into chunks that each fit within availWidth.
+          // Uses PDFKit's widthOfString to measure character-by-character.
+          function chunkOversizedToken(tok: Token, availWidth: number): Token[] {
+            if (availWidth <= 0) return [tok]; // edge case
+            const tokFont = doc.font(tok.font).fontSize(tok.fontSize);
+            // Binary search for the max chars that fit in availWidth
+            let end = tok.text.length;
+            let start = 0;
+            const chunks: Token[] = [];
+            while (start < end) {
+              // Find max chars from start that fit
+              let lo = 1, hi = end - start, best = 1;
+              while (lo <= hi) {
+                const mid = Math.floor((lo + hi) / 2);
+                const w = tokFont.widthOfString(tok.text.substring(start, start + mid));
+                if (w <= availWidth) {
+                  best = mid;
+                  lo = mid + 1;
+                } else {
+                  hi = mid - 1;
+                }
+              }
+              if (best <= 0) best = 1; // at least 1 char to avoid infinite loop
+              chunks.push({ ...tok, text: tok.text.substring(start, start + best) });
+              start += best;
+            }
+            return chunks.length > 0 ? chunks : [tok];
+          }
+
+          // Helper: advance to new line, checking page overflow
+          function advanceLine() {
+            curX = seg.indent;
+            curLineY += maxLineH;
+            maxLineH = seg.fontSize; // reset for new line
+            // Page overflow check
+            if (curLineY + maxLineH > CONTENT_BOTTOM_Y) {
+              curLineY = addContinuationPage(false);
+            }
+          }
+
+          for (const tok of tokens) {
+            const isWhitespace = /^\s+$/.test(tok.text);
+            const tokFont = doc.font(tok.font).fontSize(tok.fontSize);
+            const tokW = tokFont.widthOfString(tok.text);
+            const tokLineH = tokFont.heightOfString('Ay', { width: Infinity });
+
+            if (tokLineH > maxLineH) maxLineH = tokLineH;
+
+            // Wrap: if this token would exceed maxX and we're past left margin
+            if (!isWhitespace && curX + tokW > maxX && curX > seg.indent) {
+              advanceLine();
+              // Skip leading whitespace on new line
+              if (isWhitespace) continue;
+            }
+
+            // Don't draw whitespace but advance x
+            if (isWhitespace) {
+              curX += tokW;
+              continue;
+            }
+
+            // If a single word is wider than the full line width, chunk it
+            const fullLineWidth = maxX - seg.indent;
+            const availW = maxX - curX;
+            let tokensToRender: Token[];
+            if (tokW > fullLineWidth) {
+              // Oversized word: force new line if not at left margin, then chunk
+              if (curX > seg.indent) {
+                advanceLine();
+              }
+              tokensToRender = chunkOversizedToken(tok, fullLineWidth);
+            } else if (curX + tokW > maxX) {
+              // Word fits on a line but not from current x — wrap first
+              advanceLine();
+              tokensToRender = [tok];
+            } else {
+              tokensToRender = [tok];
+            }
+
+            // Render each (sub-)token
+            for (const rt of tokensToRender) {
+              // Check page overflow before drawing
+              if (curLineY + maxLineH > CONTENT_BOTTOM_Y) {
+                curLineY = addContinuationPage(false);
+              }
+              const rtFont = doc.font(rt.font).fontSize(rt.fontSize);
+              const rtW = rtFont.widthOfString(rt.text);
+              // If this sub-token doesn't fit from curX, advance line
+              if (curX + rtW > maxX && curX > seg.indent) {
+                advanceLine();
+              }
+              doc.font(rt.font).fontSize(rt.fontSize).fillColor(rt.color);
+              doc.text(rt.text, curX, curLineY, {
+                width: maxX - curX,
+                align: seg.align as any,
+                lineBreak: false,
+              });
+              doc.y = 0;
+              curX += rtW;
+            }
+          }
+
+          // Advance y by the actual visual lines rendered
+          y = curLineY + maxLineH;
+        } else {
+          // No runs — render the segment as one flat text block
+          textAbs(seg.text, seg.indent, y, { width, fontSize: seg.fontSize, font, color: seg.color, align: seg.align, lineBreak: true });
+          y += lh;
+        }
 
         if (seg.kind === 'assetHeader') {
           const lineY = y + 2;

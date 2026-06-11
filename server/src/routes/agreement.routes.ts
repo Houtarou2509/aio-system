@@ -12,8 +12,11 @@ import { createAgreementTemplateSchema, updateAgreementTemplateSchema, agreement
 import { AUDIT_ACTIONS, logAudit } from '../services/auditLog.service';
 import { prisma } from '../lib/prisma';
 import { convertPdfFirstPageToPng } from '../utils/pdfToImage';
+import { parseContentJsonField } from '../utils/contentJson';
 
 const router = Router();
+
+
 
 // Logo upload storage — store OUTSIDE server/public so vite build doesn't wipe them
 const logoDir = path.resolve(__dirname, '../../uploads/logos');
@@ -167,6 +170,7 @@ router.post(
           name: req.body.name,
           title: req.body.title || undefined,
           content: req.body.content,
+          contentJson: parseContentJsonField(req.body.contentJson),
           isDefault: req.body.isDefault === 'true',
           defaultPropertyOfficer: req.body.defaultPropertyOfficer || undefined,
           defaultAuthorizedRep: req.body.defaultAuthorizedRep || undefined,
@@ -198,6 +202,7 @@ router.patch(
           name: req.body.name,
           title: req.body.title,
           content: req.body.content,
+          contentJson: parseContentJsonField(req.body.contentJson),
           isDefault: req.body.isDefault !== undefined ? req.body.isDefault === 'true' : undefined,
           defaultPropertyOfficer: req.body.defaultPropertyOfficer || undefined,
           defaultAuthorizedRep: req.body.defaultAuthorizedRep || undefined,
@@ -225,6 +230,22 @@ router.delete(
       success(res, { deleted: true });
     } catch (e: any) {
       error(res, e.message, 400);
+    }
+  },
+);
+
+// POST /api/agreement/templates/:id/duplicate
+router.post(
+  '/templates/:id/duplicate',
+  authenticate,
+  hasPermission('settings:view'),
+  async (req: Request, res: Response) => {
+    try {
+      const duplicated = await agreementService.duplicateTemplate(String(req.params.id));
+      success(res, duplicated, 201);
+    } catch (e: any) {
+      const status = e.status || 400;
+      error(res, e.message, status);
     }
   },
 );

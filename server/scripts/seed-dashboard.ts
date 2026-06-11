@@ -29,7 +29,21 @@ async function main() {
 
   const allPersonnel = await prisma.personnel.findMany({ take: 2 });
 
-  // Clean existing test assets
+  // Safety: prevent accidental wipe of production data.
+  // This script is meant for DEMO/DEV only. Confirm before wiping.
+  const existingAssets = await prisma.asset.count();
+  if (existingAssets > 0) {
+    console.error(`\n⚠  ABORTED: ${existingAssets} assets already exist in the database.`);
+    console.error('   This script would DELETE ALL existing assets, assignments, and related data.');
+    console.error('   If you really want to reset, run with: FORCE_SEED=1 npm run seed:dashboard');
+    console.error('');
+    if (!process.env.FORCE_SEED) {
+      process.exit(1);
+    }
+    console.log('[2/5] FORCE_SEED set — wiping existing assets...');
+  }
+
+  // Clean existing test assets (only reached if FORCE_SEED=1 or no existing data)
   console.log('[3/5] Seeding 10 assets...');
   await prisma.asset.deleteMany({});
 

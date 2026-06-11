@@ -69,7 +69,7 @@ function DocStatusBadge({ status }: { status: string | undefined | null }) {
 /* ─── Verified Badge with Popover ─── */
 function VerifiedBadge({ signedAt, signatoryName, documentNumber }: { signedAt: string; signatoryName: string | null; documentNumber: string }) {
   const [open, setOpen] = useState(false);
-  const verifyUrl = `${window.location.origin}/api/agreements/verify/${documentNumber}`;
+  const verifyUrl = `${window.location.origin}/aio-system/agreements/verify/${documentNumber}`;
   return (
     <div className="relative inline-block">
       <button

@@ -7,10 +7,17 @@
  *   {{#ifMultipleAssets}}...{{/ifMultipleAssets}}
  */
 
-/** A text run with optional underline for resolved variable values. */
+/** A text run with optional variable emphasis for resolved variable values.
+ *  The `underline` field is kept for backward compatibility as a semantic
+ *  flag indicating this run is a resolved variable. PDF output renders
+ *  these runs in **bold** rather than drawing underline strokes. */
 export interface TextRun {
   text: string;
-  underline: boolean;
+  underline: boolean;    // true = resolved variable → render bold in PDF
+  fontSize?: number;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
 }
 
 export interface TemplateData {

@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  FileText, Plus, Trash2, Loader2, Check, Copy, Eye, Upload,
+  FileText, Plus, Trash2, Loader2, Check, Eye, Upload,
   X, Image as ImageIcon, Star, StarOff, AlertTriangle,
-  Wand2, Search, ChevronDown,
+  Search, Copy,
 } from 'lucide-react';
 import { apiFetch, ApiError, AUTH_EXPIRED_EVENT } from '../lib/api';
+import AgreementTemplateRichEditor from '../components/agreement/AgreementTemplateRichEditor';
 
 /* ─── Types ─── */
 
@@ -13,6 +14,7 @@ interface AgreementTemplate {
   name: string;
   title: string;
   content: string;
+  contentJson: unknown | null;
   headerLogo: string | null;
   letterheadPath: string | null;
   defaultLogo: string | null;
@@ -33,6 +35,7 @@ interface AgreementTemplateVersion {
   name: string;
   title: string;
   content: string;
+  contentJson: unknown | null;
   headerLogo: string | null;
   letterheadPath: string | null;
   defaultPropertyOfficer: string | null;
@@ -70,9 +73,12 @@ function getToken() {
 }
 
 /** Multipart fetch for template create/update with optional logo file. */
-async function multipartRequest(url: string, method: string, data: Record<string, string>, file?: File | null) {
+async function multipartRequest(url: string, method: string, data: Record<string, any>, file?: File | null) {
   const form = new FormData();
-  Object.entries(data).forEach(([k, v]) => form.append(k, v));
+  Object.entries(data).forEach(([k, v]) => {
+    if (v === undefined || v === null) return;
+    form.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+  });
   if (file) form.append('headerLogo', file);
 
   const token = getToken();
@@ -125,12 +131,12 @@ export default function AccountabilityTemplatesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [placeholders, setPlaceholders] = useState<PlaceholderRef[]>([]);
   const [versionHistory, setVersionHistory] = useState<AgreementTemplateVersion[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<PreviewMode>('single');
   const [previewState, setPreviewState] = useState<TemplatePreviewState>({
     resolvedText: '',
@@ -145,6 +151,7 @@ export default function AccountabilityTemplatesPage() {
   const [editName, setEditName] = useState('');
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
+  const [editContentJson, setEditContentJson] = useState<unknown | null>(null);
   const [editIsDefault, setEditIsDefault] = useState(false);
   const [editLogoFile, setEditLogoFile] = useState<File | null>(null);
   const [editLogoPreview, setEditLogoPreview] = useState<string | null>(null);
@@ -159,12 +166,7 @@ export default function AccountabilityTemplatesPage() {
   // Template search (local filter)
   const [templateSearch, setTemplateSearch] = useState('');
 
-  // Insert variable dropdown
-  const [insertDropdownOpen, setInsertDropdownOpen] = useState(false);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const contentInputRef = useRef<HTMLTextAreaElement>(null);
-  const insertDropdownRef = useRef<HTMLDivElement>(null);
 
   /* ─── Toast helper ─── */
 
@@ -235,6 +237,7 @@ export default function AccountabilityTemplatesPage() {
     setEditName(template.name || '');
     setEditTitle(template.title || '');
     setEditContent(template.content || '');
+    setEditContentJson(template.contentJson ?? null);
     setEditIsDefault(template.isDefault || false);
     setEditLogoFile(null);
     setEditLogoPreview(template.headerLogo || null);
@@ -259,6 +262,7 @@ export default function AccountabilityTemplatesPage() {
       name: '',
       title: '',
       content: '',
+      contentJson: null,
       headerLogo: null,
       letterheadPath: null,
       defaultLogo: null,
@@ -339,6 +343,7 @@ export default function AccountabilityTemplatesPage() {
         name: editName.trim(),
         title: editTitle,
         content: editContent,
+        contentJson: editContentJson,
         isDefault: String(editIsDefault),
         defaultPropertyOfficer: editPropertyOfficer,
         defaultAuthorizedRep: editAuthorizedRep,
@@ -389,11 +394,12 @@ export default function AccountabilityTemplatesPage() {
       await apiFetch(`/agreements/templates/${id}`, { method: 'DELETE' });
       setTemplates(prev => prev.filter(t => t.id !== id));
       if (selectedId === id) {
-        setSelectedId(null);
-        setEditName('');
-        setEditContent('');
-        setEditIsDefault(false);
-        setIsNew(false);
+      setSelectedId(null);
+      setEditName('');
+      setEditContent('');
+      setEditContentJson(null);
+      setEditIsDefault(false);
+      setIsNew(false);
       }
       addToast('success', 'Template deleted');
     } catch (err: any) {
@@ -403,34 +409,28 @@ export default function AccountabilityTemplatesPage() {
     }
   }
 
-  /* ─── Visual variable picker ─── */
+  /* ─── Duplicate ─── */
 
-  function insertPlaceholder(key: string) {
-    const textarea = contentInputRef.current;
-    const insert = key;
-    if (!textarea) {
-      setEditContent(prev => `${prev}${insert}`);
-      return;
+  async function handleDuplicate(id: string) {
+    try {
+      setDuplicating(id);
+      const res = await apiFetch(`/agreements/templates/${id}/duplicate`, { method: 'POST' });
+      const data = res.data ?? res;
+      // Refresh template list and select the duplicate
+      const allTemplates = await apiFetch('/agreements/templates');
+      const freshTemplates = allTemplates.data ?? allTemplates;
+      setTemplates(freshTemplates);
+      // Select the newly duplicated template
+      const duplicated = freshTemplates.find((t: any) => t.id === data.id);
+      if (duplicated) {
+        selectTemplate(duplicated);
+      }
+      addToast('success', 'Template duplicated successfully.');
+    } catch (err: any) {
+      addToast('error', err.message || 'Failed to duplicate template');
+    } finally {
+      setDuplicating(null);
     }
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    setEditContent(prev => `${prev.slice(0, start)}${insert}${prev.slice(end)}`);
-    setCopiedKey(key);
-    setTimeout(() => {
-      textarea.focus();
-      const cursor = start + insert.length;
-      textarea.setSelectionRange(cursor, cursor);
-    }, 0);
-    setTimeout(() => setCopiedKey(null), 1200);
-  }
-
-  function placeholdersByGroup() {
-    return placeholders.reduce<Record<string, PlaceholderRef[]>>((acc, ph) => {
-      const group = ph.group || 'General';
-      if (!acc[group]) acc[group] = [];
-      acc[group].push(ph);
-      return acc;
-    }, {});
   }
 
   /* ─── Backend preview/validation — same parser as PDFs ─── */
@@ -545,23 +545,14 @@ export default function AccountabilityTemplatesPage() {
       editName !== (selected.name || '') ||
       editTitle !== (selected.title || '') ||
       editContent !== (selected.content || '') ||
+      JSON.stringify(editContentJson ?? null) !== JSON.stringify(selected.contentJson ?? null) ||
       editIsDefault !== (selected.isDefault || false) ||
       editPropertyOfficer !== (selected.defaultPropertyOfficer || '') ||
       editAuthorizedRep !== (selected.defaultAuthorizedRep || '') ||
-      editLogoFile !== null
+      editLogoFile !== null ||
+      editLetterheadFile !== null
     );
-  }, [isNew, selected, editName, editTitle, editContent, editIsDefault, editPropertyOfficer, editAuthorizedRep, editLogoFile]);
-
-  // Close insert dropdown on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (insertDropdownRef.current && !insertDropdownRef.current.contains(e.target as Node)) {
-        setInsertDropdownOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
+  }, [isNew, selected, editName, editTitle, editContent, editContentJson, editIsDefault, editPropertyOfficer, editAuthorizedRep, editLogoFile, editLetterheadFile]);
 
   /* ─── Filtered templates ─── */
 
@@ -709,6 +700,22 @@ export default function AccountabilityTemplatesPage() {
                           </p>
                         </div>
 
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            handleDuplicate(t.id);
+                          }}
+                          disabled={duplicating === t.id}
+                          className="shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-all disabled:opacity-50"
+                          title="Duplicate template"
+                          aria-label={`Duplicate template ${t.name}`}
+                        >
+                          {duplicating === t.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                        </button>
                         <button
                           onClick={e => {
                             e.stopPropagation();
@@ -970,228 +977,43 @@ export default function AccountabilityTemplatesPage() {
                     Use variables like <code className="text-[11px] bg-slate-100 dark:bg-slate-800 px-1 rounded">{'{{fullName}}'}</code> and smart blocks like <code className="text-[11px] bg-slate-100 dark:bg-slate-800 px-1 rounded">{'{{assetSection}}'}</code>.
                   </p>
 
-                  {/* Desktop: two-column layout with variable picker */}
-                  <div className="hidden md:flex gap-6">
-                    {/* Textarea (left) */}
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                          Letter Body
-                        </label>
-                        {/* Insert variable dropdown */}
-                        <div className="relative" ref={insertDropdownRef}>
-                          <button
-                            onClick={() => setInsertDropdownOpen(!insertDropdownOpen)}
-                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-[#012061] dark:text-slate-200 bg-slate-100 dark:bg-slate-700 rounded hover:bg-orange-100 dark:hover:bg-slate-600 transition-colors"
-                          >
-                            <Wand2 className="h-3 w-3 text-[#f8931f]" />
-                            Insert variable
-                            <ChevronDown className="h-3 w-3" />
-                          </button>
-                          {insertDropdownOpen && (
-                            <div className="absolute right-0 top-full mt-1 w-64 max-h-72 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-20">
-                              {Object.entries(placeholdersByGroup()).map(([group, items]) => (
-                                <div key={group} className="border-b border-slate-100 dark:border-slate-700 last:border-b-0">
-                                  <div className="px-3 pt-2 pb-1">
-                                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#012061] dark:text-slate-200">{group}</span>
-                                  </div>
-                                  {items.map(ph => (
-                                    <button
-                                      key={ph.key}
-                                      onClick={() => { insertPlaceholder(ph.key); setInsertDropdownOpen(false); }}
-                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                                    >
-                                      <code className="text-[11px] font-mono font-semibold text-[#012061] dark:text-slate-200">{ph.key}</code>
-                                      <span className="text-[11px] text-slate-400 truncate">{ph.description}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Letter Body
+                    </label>
+                    <AgreementTemplateRichEditor
+                      valueJson={editContentJson}
+                      fallbackText={editContent}
+                      onChangeJson={setEditContentJson}
+                      onChangeText={setEditContent}
+                      minHeight={340}
+                    />
+                    {variableWarnings.length > 0 && (
+                      <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/30">
+                        <div className="mb-1 flex items-center gap-1.5">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                          <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">Variable warnings</span>
                         </div>
+                        <ul className="space-y-0.5 pl-1">
+                          {variableWarnings.map((w, i) => (
+                            <li key={i} className="text-[11px] text-amber-700 dark:text-amber-300">
+                              {w.type === 'unknown' ? (
+                                <>
+                                  Unknown variable: <code className="font-mono font-semibold">{w.raw}</code>
+                                  {w.suggestion && (
+                                    <span className="text-amber-600 dark:text-amber-400"> — Did you mean <code className="font-mono font-semibold">{w.suggestion}</code>?</span>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  Malformed variable: <code className="font-mono font-semibold">{w.raw}</code>
+                                </>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                      <textarea
-                        ref={contentInputRef}
-                        value={editContent}
-                        onChange={e => setEditContent(e.target.value)}
-                        placeholder={`Dear {{fullName}}{{designationComma}},\n\nThis letter confirms that you have been issued the following asset(s):\n\n{{assetSection}}\n\nIssued on: {{date}}`}
-                        rows={20}
-                        className="w-full px-4 py-3 text-sm font-mono border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow resize-y leading-relaxed"
-                      />
-                      {/* Variable validation warnings */}
-                      {variableWarnings.length > 0 && (
-                        <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-3 py-2">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                            <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">Variable warnings</span>
-                          </div>
-                          <ul className="space-y-0.5 pl-1">
-                            {variableWarnings.map((w, i) => (
-                              <li key={i} className="text-[11px] text-amber-700 dark:text-amber-300">
-                                {w.type === 'unknown' ? (
-                                  <>
-                                    Unknown variable: <code className="font-mono font-semibold">{w.raw}</code>
-                                    {w.suggestion && (
-                                      <span className="text-amber-600 dark:text-amber-400"> — Did you mean <code className="font-mono font-semibold">{w.suggestion}</code>?</span>
-                                    )}
-                                  </>
-                                ) : (
-                                  <>
-                                    Malformed variable: <code className="font-mono font-semibold">{w.raw}</code>
-                                  </>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Variable Picker (right, desktop) */}
-                    <div className="w-64 shrink-0">
-                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                        Variables
-                      </label>
-                      <div className="space-y-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 max-h-[520px] overflow-y-auto">
-                        {Object.entries(placeholdersByGroup()).map(([group, items]) => (
-                          <div key={group}>
-                            <div className="mb-1.5 flex items-center gap-2">
-                              <span className="h-1.5 w-1.5 rounded-full bg-[#f8931f]" />
-                              <span className="text-[10px] font-bold uppercase tracking-widest text-[#012061] dark:text-slate-100">{group}</span>
-                            </div>
-                            <div className="grid grid-cols-1 gap-1">
-                              {items.map(ph => (
-                                <button
-                                  key={ph.key}
-                                  onClick={() => insertPlaceholder(ph.key)}
-                                  className="group/btn flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 transition-colors"
-                                >
-                                  <code className="text-[11px] font-mono font-semibold text-[#012061] dark:text-slate-100 bg-[#012061]/8 px-1.5 py-0.5 rounded select-none truncate max-w-[140px]">
-                                    {ph.key}
-                                  </code>
-                                  <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate flex-1">{ph.description}</span>
-                                  {copiedKey === ph.key ? <Check className="h-3 w-3 text-green-500 shrink-0" /> : <Copy className="h-3 w-3 text-slate-300 opacity-0 group-hover/btn:opacity-100 shrink-0 transition-opacity" />}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="mt-3 flex items-start gap-2 p-3 rounded-md bg-[#f8931f]/5 border border-[#f8931f]/20">
-                        <Wand2 className="h-4 w-4 text-[#f8931f] shrink-0 mt-0.5" />
-                        <p className="text-xs text-slate-600 dark:text-slate-400">
-                          Click a variable to insert it at the cursor. Use <code className="text-[11px] bg-slate-200 dark:bg-slate-700 px-1 rounded">{'{{assetSection}}'}</code> for automatic 1-asset paragraph vs multi-asset table rendering, or wrap custom copy in the single/multiple conditional blocks.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Mobile: textarea + collapsible variable picker */}
-                  <div className="md:hidden space-y-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                          Letter Body
-                        </label>
-                        {/* Insert variable dropdown (mobile) */}
-                        <div className="relative">
-                          <button
-                            onClick={() => setInsertDropdownOpen(!insertDropdownOpen)}
-                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-[#012061] dark:text-slate-200 bg-slate-100 dark:bg-slate-700 rounded hover:bg-orange-100 dark:hover:bg-slate-600 transition-colors"
-                          >
-                            <Wand2 className="h-3 w-3 text-[#f8931f]" />
-                            Insert
-                            <ChevronDown className="h-3 w-3" />
-                          </button>
-                          {insertDropdownOpen && (
-                            <div className="absolute right-0 top-full mt-1 w-64 max-h-72 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-20">
-                              {Object.entries(placeholdersByGroup()).map(([group, items]) => (
-                                <div key={group} className="border-b border-slate-100 dark:border-slate-700 last:border-b-0">
-                                  <div className="px-3 pt-2 pb-1">
-                                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#012061] dark:text-slate-200">{group}</span>
-                                  </div>
-                                  {items.map(ph => (
-                                    <button
-                                      key={ph.key}
-                                      onClick={() => { insertPlaceholder(ph.key); setInsertDropdownOpen(false); }}
-                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                                    >
-                                      <code className="text-[11px] font-mono font-semibold text-[#012061] dark:text-slate-200">{ph.key}</code>
-                                      <span className="text-[11px] text-slate-400 truncate">{ph.description}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <textarea
-                        value={editContent}
-                        onChange={e => setEditContent(e.target.value)}
-                        placeholder={`Dear {{fullName}}{{designationComma}},\n\nThis letter confirms that you have been issued the following asset(s):\n\n{{assetSection}}\n\nIssued on: {{date}}`}
-                        rows={20}
-                        className="w-full px-4 py-3 text-sm font-mono border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow resize-y leading-relaxed"
-                      />
-                      {/* Variable validation warnings (mobile) */}
-                      {variableWarnings.length > 0 && (
-                        <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-3 py-2">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                            <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">Variable warnings</span>
-                          </div>
-                          <ul className="space-y-0.5 pl-1">
-                            {variableWarnings.map((w, i) => (
-                              <li key={i} className="text-[11px] text-amber-700 dark:text-amber-300">
-                                {w.type === 'unknown' ? (
-                                  <>
-                                    Unknown: <code className="font-mono font-semibold">{w.raw}</code>
-                                    {w.suggestion && (
-                                      <span className="text-amber-600 dark:text-amber-400"> — Did you mean <code className="font-mono font-semibold">{w.suggestion}</code>?</span>
-                                    )}
-                                  </>
-                                ) : (
-                                  <>
-                                    Malformed: <code className="font-mono font-semibold">{w.raw}</code>
-                                  </>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Collapsible Variable Picker (mobile) */}
-                    <details className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-                      <summary className="px-3 py-2 cursor-pointer text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider select-none">
-                        📋 Variables & Placeholders
-                      </summary>
-                      <div className="px-3 pb-3 space-y-3 max-h-[400px] overflow-y-auto">
-                        {Object.entries(placeholdersByGroup()).map(([group, items]) => (
-                          <div key={group}>
-                            <div className="mb-1.5 flex items-center gap-2">
-                              <span className="h-1.5 w-1.5 rounded-full bg-[#f8931f]" />
-                              <span className="text-[10px] font-bold uppercase tracking-widest text-[#012061] dark:text-slate-100">{group}</span>
-                            </div>
-                            <div className="space-y-0.5">
-                              {items.map(ph => (
-                                <button
-                                  key={ph.key}
-                                  onClick={() => insertPlaceholder(ph.key)}
-                                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 transition-colors"
-                                >
-                                  <code className="text-[11px] font-mono font-semibold text-[#012061] dark:text-slate-100 bg-[#012061]/8 px-1.5 py-0.5 rounded select-none">{ph.key}</code>
-                                  <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate flex-1">{ph.description}</span>
-                                  {copiedKey === ph.key ? <Check className="h-3 w-3 text-green-500 shrink-0" /> : <Copy className="h-3 w-3 text-slate-300 shrink-0" />}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </details>
+                    )}
                   </div>
                 </div>
 
@@ -1339,6 +1161,7 @@ export default function AccountabilityTemplatesPage() {
                         else {
                           setEditName('');
                           setEditContent('');
+                          setEditContentJson(null);
                           setEditIsDefault(false);
                         }
                       }}

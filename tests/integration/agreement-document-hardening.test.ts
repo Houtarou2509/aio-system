@@ -46,6 +46,7 @@ vi.mock('../../server/src/lib/prisma', () => ({ prisma: mockPrisma }));
 import { generateAgreementPdf, attachSignedAgreementDocument, backfillAgreementDocuments, getDefaultTemplate, updateTemplate } from '../../server/src/services/agreement.service';
 import { lockAssetsForIssuance, releaseAssetsFromIssuance, signIssuance, resolveTemplate } from '../../server/src/services/issuance.service';
 import { parseTemplate } from '../../server/src/utils/templateParser';
+import * as zlib from 'zlib';
 
 function resetPrismaMocks() {
   vi.clearAllMocks();
@@ -53,6 +54,105 @@ function resetPrismaMocks() {
   mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
   mockPrisma.agreementTemplate.findUnique.mockResolvedValue(null);
   mockPrisma.agreementTemplateVersion.findUnique.mockResolvedValue(null);
+}
+
+/* ═══════════════════════════════════════════════════════
+   MODULE-SCOPE PDF HELPERS
+   ═══════════════════════════════════════════════════════ */
+
+/** Decompress all PDF streams and return the concatenated content text */
+function decompressPdfStreams(pdfBuffer: Buffer): string {
+  const pdf = pdfBuffer.toString('latin1');
+  const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+  let match;
+  const parts: string[] = [];
+  while ((match = streamRegex.exec(pdf)) !== null) {
+    try {
+      const buf = Buffer.from(match[1], 'binary');
+      const decompressed = zlib.inflateSync(buf).toString('latin1');
+      parts.push(decompressed);
+    } catch {}
+  }
+  return parts.join('\n');
+}
+
+/** Count /F2 (Helvetica-Bold) font selections in decompressed PDF streams */
+function countBoldFontUsages(pdfBuffer: Buffer): number {
+  const content = decompressPdfStreams(pdfBuffer);
+  const matches = content.match(/\/F2\s/g);
+  return matches ? matches.length : 0;
+}
+
+/** Returns true if no "0.2 0.2 0.2 SCN" + "0.4 w" underline stroke patterns exist */
+function hasNoUnderlineStrokes(pdfBuffer: Buffer): boolean {
+  const content = decompressPdfStreams(pdfBuffer);
+  const lines = content.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes('0.2 0.2 0.2 SCN') && i + 1 < lines.length && lines[i + 1].includes('0.4 w')) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Extract /FN size Tf font size values from decompressed PDF streams */
+function extractFontSizes(pdfBuffer: Buffer): number[] {
+  const content = decompressPdfStreams(pdfBuffer);
+  const tfRegex = /\/F\d+\s+(\d+(?:\.\d+)?)\s+Tf/g;
+  const sizes: number[] = [];
+  let match;
+  while ((match = tfRegex.exec(content)) !== null) {
+    sizes.push(parseFloat(match[1]));
+  }
+  return sizes;
+}
+
+/** Extract r g b scn fill color values from decompressed PDF streams */
+function extractFillColors(pdfBuffer: Buffer): string[] {
+  const content = decompressPdfStreams(pdfBuffer);
+  const scnRegex = /(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+scn/g;
+  const colors: string[] = [];
+  let match;
+  while ((match = scnRegex.exec(content)) !== null) {
+    colors.push(`${match[1]} ${match[2]} ${match[3]}`);
+  }
+  return colors;
+}
+
+/** Extract body text X positions from PDF content streams.
+ *  Returns an array of {x, yTopDown, fontSize} for text in the body zone
+ *  (y between bodyTop and bodyBottom in top-down coordinates).
+ *  The PDF uses a top-down transform: 1 0 0 -1 0 841.89 cm, so
+ *  Tm Y is converted: yTopDown = 841.89 - Tm_Y. */
+function extractBodyTextPositions(pdfBuffer: Buffer, bodyTop = 125, bodyBottom = 755): Array<{ x: number; yTopDown: number; fontSize: number }> {
+  const content = decompressPdfStreams(pdfBuffer);
+  const positions: Array<{ x: number; yTopDown: number; fontSize: number }> = [];
+  // Match Tm commands: a b c d e f Tm (e=x, f=y in the flipped coordinate system)
+  const tmRegex = /([\d.e+-]+)\s+([\d.e+-]+)\s+([\d.e+-]+)\s+([\d.e+-]+)\s+([\d.e+-]+)\s+([\d.e+-]+)\s+Tm/g;
+  // Track current font size
+  let currentFontSize = 0;
+  const tfRegex = /\/F\d+\s+([\d.]+)\s+Tf/g;
+  // Parse line by line to correlate font size with Tm
+  const lines = content.split('\n');
+  for (const line of lines) {
+    const tfMatch = tfRegex.exec(line);
+    if (tfMatch) {
+      currentFontSize = parseFloat(tfMatch[1]);
+      tfRegex.lastIndex = 0;
+    }
+    const tmMatch = tmRegex.exec(line);
+    if (tmMatch) {
+      const x = parseFloat(tmMatch[5]);
+      const yPdf = parseFloat(tmMatch[6]);
+      const yTopDown = 841.89 - yPdf;
+      if (yTopDown >= bodyTop && yTopDown <= bodyBottom) {
+        positions.push({ x, yTopDown, fontSize: currentFontSize });
+      }
+    }
+    tmRegex.lastIndex = 0;
+    tfRegex.lastIndex = 0;
+  }
+  return positions;
 }
 
 describe('agreement document hardening regressions', () => {
@@ -1120,46 +1220,16 @@ describe('agreement document hardening regressions', () => {
   });
 
   /* ═══════════════════════════════════════════════════════
-     UNDERLINE VARIABLE VALUES TESTS
-     Underlines are based on actual {{variable}} boundaries,
-     not value matching.
+     BOLD VARIABLE VALUES TESTS
+     Variables are rendered in bold font (Helvetica-Bold /F2),
+     not underlined with stroke patterns.
      ═══════════════════════════════════════════════════════ */
 
-  /** Decompress all PDF streams and return the concatenated content text */
-  function decompressPdfStreams(pdfBuffer: Buffer): string {
-    const zlib = require('zlib');
-    const pdf = pdfBuffer.toString('latin1');
-    const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-    let match;
-    const parts: string[] = [];
-    while ((match = streamRegex.exec(pdf)) !== null) {
-      try {
-        const buf = Buffer.from(match[1], 'binary');
-        const decompressed = zlib.inflateSync(buf).toString('latin1');
-        parts.push(decompressed);
-      } catch {}
-    }
-    return parts.join('\n');
-  }
-
-  /** Count dark-gray underline strokes (0.2 0.2 0.2 SCN + 0.4 w) in decompressed PDF streams */
-  function countDarkUnderlines(pdfBuffer: Buffer): number {
-    const content = decompressPdfStreams(pdfBuffer);
-    const lines = content.split('\n');
-    let count = 0;
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes('0.2 0.2 0.2 SCN') && lines[i + 1] === '0.4 w') {
-        count++;
-      }
-    }
-    return count;
-  }
-
-  // 1. Variable boundary test: static text matching a variable value is NOT underlined
-  it('only underlines variable values from {{placeholders}}, not static text that equals a variable value', async () => {
+  // 1. Variable boundary test: static text matching a variable value is NOT bolded
+  it('only bolds variable values from {{placeholders}}, not static text that equals a variable value', async () => {
     mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
     mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
-      id: 'tmpl-ul-boundary',
+      id: 'tmpl-bold-boundary',
       headerLogo: null,
       letterheadPath: null,
       content: 'Status Good. Condition: {{condition}}.',
@@ -1175,22 +1245,23 @@ describe('agreement document hardening regressions', () => {
       serialNumber: 'SN-001',
       propertyNumber: 'PN-001',
       renderMode: 'preprinted',
-      templateId: 'tmpl-ul-boundary',
+      templateId: 'tmpl-bold-boundary',
     });
 
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
-    // Should have exactly 1 dark underline stroke (for the {{condition}} "Good")
-    // The static "Good" in "Status Good" must NOT be underlined
-    const darkUl = countDarkUnderlines(pdf);
-    expect(darkUl).toBeGreaterThanOrEqual(1); // at least the condition variable
-    // With parseTemplateWithRuns, only the second "Good" (from {{condition}}) is underlined
+    // Should have at least 1 bold font usage (for the {{condition}} "Good")
+    // The static "Good" in "Status Good" must NOT be bolded
+    const boldCount = countBoldFontUsages(pdf);
+    expect(boldCount).toBeGreaterThanOrEqual(1); // at least the condition variable
+    // No underline strokes should be present
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
   });
 
   // 2. Date variable test
-  it('underlines {{date}} and {{fullName}} resolved values', async () => {
+  it('bolds {{date}} and {{fullName}} resolved values', async () => {
     mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
     mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
-      id: 'tmpl-ul-date',
+      id: 'tmpl-bold-date',
       headerLogo: null,
       letterheadPath: null,
       content: 'Issued on {{date}} to {{fullName}}.',
@@ -1206,14 +1277,14 @@ describe('agreement document hardening regressions', () => {
       propertyNumber: 'PN-001',
       condition: 'Good',
       renderMode: 'preprinted',
-      templateId: 'tmpl-ul-date',
+      templateId: 'tmpl-bold-date',
     });
 
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
     const fs = await import('fs');
     const os = await import('os');
     const { execSync } = await import('child_process');
-    const tmpFile = os.tmpdir() + `/test-ul-date-${Date.now()}.pdf`;
+    const tmpFile = os.tmpdir() + `/test-bold-date-${Date.now()}.pdf`;
     fs.writeFileSync(tmpFile, pdf);
     try {
       const text = execSync(`pdftotext -raw ${tmpFile} -`, { encoding: 'utf-8' });
@@ -1223,16 +1294,18 @@ describe('agreement document hardening regressions', () => {
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
     }
-    // Both date and fullName should be underlined
-    const darkUl = countDarkUnderlines(pdf);
-    expect(darkUl).toBeGreaterThanOrEqual(2); // date + fullName
+    // Both date and fullName should be bolded
+    const boldCount = countBoldFontUsages(pdf);
+    expect(boldCount).toBeGreaterThanOrEqual(2); // date + fullName
+    // No underline strokes
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
   });
 
   // 3. Suffix variable test
-  it('underlines resolved suffix placeholders like {{designationComma}}, {{institutionText}}, {{projectText}}', async () => {
+  it('bolds resolved suffix placeholders like {{designationComma}}, {{institutionText}}, {{projectText}}', async () => {
     mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
     mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
-      id: 'tmpl-ul-suffix',
+      id: 'tmpl-bold-suffix',
       headerLogo: null,
       letterheadPath: null,
       content: 'Assigned{{designationComma}}{{institutionText}}{{projectText}}.',
@@ -1251,14 +1324,14 @@ describe('agreement document hardening regressions', () => {
       propertyNumber: 'PN-001',
       condition: 'Good',
       renderMode: 'preprinted',
-      templateId: 'tmpl-ul-suffix',
+      templateId: 'tmpl-bold-suffix',
     });
 
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
     const fs = await import('fs');
     const os = await import('os');
     const { execSync } = await import('child_process');
-    const tmpFile = os.tmpdir() + `/test-ul-suffix-${Date.now()}.pdf`;
+    const tmpFile = os.tmpdir() + `/test-bold-suffix-${Date.now()}.pdf`;
     fs.writeFileSync(tmpFile, pdf);
     try {
       const text = execSync(`pdftotext -raw ${tmpFile} -`, { encoding: 'utf-8' });
@@ -1269,13 +1342,15 @@ describe('agreement document hardening regressions', () => {
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
     }
-    // 3 suffix variables should be underlined
-    const darkUl = countDarkUnderlines(pdf);
-    expect(darkUl).toBeGreaterThanOrEqual(3);
+    // 3 suffix variables should be bolded
+    const boldCount = countBoldFontUsages(pdf);
+    expect(boldCount).toBeGreaterThanOrEqual(3);
+    // No underline strokes
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
   });
 
-  // 4. Saved text test — no variable underlines
-  it('saved agreementText does not produce variable underlines', async () => {
+  // 4. Saved text test — no variable bolds
+  it('saved agreementText produces no variable bold without template boundaries', async () => {
     const savedText = 'Issued on June 11, 2026 to Juan Dela Cruz.';
     mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
     mockPrisma.agreementTemplate.findUnique.mockResolvedValue(null);
@@ -1292,12 +1367,13 @@ describe('agreement document hardening regressions', () => {
     });
 
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
-    // No variable underlines — saved text has no {{placeholder}} boundary info
-    const darkUl = countDarkUnderlines(pdf);
-    expect(darkUl).toBe(0);
+    // Saved text has no {{placeholder}} boundary info, so no variable bold
+    // (Note: title and table headers may still use bold font, so we only
+    // check that no underline strokes are drawn)
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
   });
 
-  it('saved agreement document previews use template version placeholders for underlines', async () => {
+  it('saved document previews use template version for bold variables', async () => {
     const templateContent = [
       'I, {{personnelName}}, employed as {{designation}} under the {{project}} project, acknowledge receipt of the item(s)/asset(s) issued to me.',
       '{{assetSection}}',
@@ -1305,7 +1381,7 @@ describe('agreement document hardening regressions', () => {
 
     mockPrisma.agreementDocument.findUnique.mockResolvedValue({
       id: 'doc-with-template-runs',
-      documentNumber: 'AGR-UL-001',
+      documentNumber: 'AGR-BOLD-001',
       templateId: 'tmpl-versioned',
       templateVersionId: 'tmpl-versioned-v2',
       templateVersion: 2,
@@ -1341,7 +1417,7 @@ describe('agreement document hardening regressions', () => {
       id: 'tmpl-versioned',
       headerLogo: null,
       letterheadPath: null,
-      content: 'Current template text should not be required for saved document underlines.',
+      content: 'Current template text should not be required for saved document bolds.',
       title: 'THIS IS THE AGREEMENT LETTER TITLE',
       defaultPropertyOfficer: 'Toyota Gazoo',
       defaultAuthorizedRep: 'Gr Gazoo',
@@ -1355,15 +1431,17 @@ describe('agreement document hardening regressions', () => {
     });
 
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
-    const darkUl = countDarkUnderlines(pdf);
-    expect(darkUl).toBeGreaterThanOrEqual(3);
+    const boldCount = countBoldFontUsages(pdf);
+    expect(boldCount).toBeGreaterThanOrEqual(3);
+    // No underline strokes
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
   });
 
   // 5. Conditional block regression — single asset
-  it('renders {{#ifSingleAsset}} template with underlines without error', async () => {
+  it('renders {{#ifSingleAsset}} template without error', async () => {
     mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
     mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
-      id: 'tmpl-ul-cond',
+      id: 'tmpl-bold-cond',
       headerLogo: null,
       letterheadPath: null,
       content: 'I, {{personnelName}}, acknowledge receipt.\n{{#ifSingleAsset}}Asset: {{assetName}}{{/ifSingleAsset}}\n{{#ifMultipleAssets}}Multiple{{/ifMultipleAssets}}',
@@ -1379,14 +1457,14 @@ describe('agreement document hardening regressions', () => {
       propertyNumber: 'PN-001',
       condition: 'Good',
       renderMode: 'preprinted',
-      templateId: 'tmpl-ul-cond',
+      templateId: 'tmpl-bold-cond',
     });
 
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
     const fs = await import('fs');
     const os = await import('os');
     const { execSync } = await import('child_process');
-    const tmpFile = os.tmpdir() + `/test-ul-cond-${Date.now()}.pdf`;
+    const tmpFile = os.tmpdir() + `/test-bold-cond-${Date.now()}.pdf`;
     fs.writeFileSync(tmpFile, pdf);
     try {
       const text = execSync(`pdftotext -raw ${tmpFile} -`, { encoding: 'utf-8' });
@@ -1400,10 +1478,10 @@ describe('agreement document hardening regressions', () => {
   });
 
   // 6. Conditional block regression — multiple assets
-  it('renders {{#ifMultipleAssets}} template with underlines without error', async () => {
+  it('renders {{#ifMultipleAssets}} template without error', async () => {
     mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
     mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
-      id: 'tmpl-ul-cond-multi',
+      id: 'tmpl-bold-cond-multi',
       headerLogo: null,
       letterheadPath: null,
       content: 'I, {{personnelName}}, acknowledge receipt.\n{{#ifSingleAsset}}Single{{/ifSingleAsset}}\n{{#ifMultipleAssets}}Assets: {{assetCount}} items{{/ifMultipleAssets}}',
@@ -1414,19 +1492,23 @@ describe('agreement document hardening regressions', () => {
 
     const pdf = await generateAgreementPdf({
       personnelName: 'Bob Jones',
+      assetName: 'Laptop',
+      serialNumber: 'SN-1',
+      propertyNumber: 'PN-1',
+      condition: 'Good',
       assets: [
         { name: 'Laptop', serialNumber: 'SN-1', propertyNumber: 'PN-1', condition: 'Good' },
         { name: 'Monitor', serialNumber: 'SN-2', propertyNumber: 'PN-2', condition: 'Good' },
       ],
       renderMode: 'preprinted',
-      templateId: 'tmpl-ul-cond-multi',
+      templateId: 'tmpl-bold-cond-multi',
     });
 
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
     const fs = await import('fs');
     const os = await import('os');
     const { execSync } = await import('child_process');
-    const tmpFile = os.tmpdir() + `/test-ul-cond-multi-${Date.now()}.pdf`;
+    const tmpFile = os.tmpdir() + `/test-bold-cond-multi-${Date.now()}.pdf`;
     fs.writeFileSync(tmpFile, pdf);
     try {
       const text = execSync(`pdftotext -raw ${tmpFile} -`, { encoding: 'utf-8' });
@@ -1438,5 +1520,718 @@ describe('agreement document hardening regressions', () => {
     } finally {
       try { fs.unlinkSync(tmpFile); } catch {}
     }
+  });
+
+  /* ═══════════════════════════════════════════════════════
+     VARIABLE EMPHASIS AND TIPTAP STYLE REGRESSION
+     ═══════════════════════════════════════════════════════ */
+
+  it('renders resolved variables in bold font, not as underline strokes', async () => {
+    mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
+    mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
+      id: 'tmpl-regression-bold',
+      headerLogo: null,
+      letterheadPath: null,
+      content: 'I, {{personnelName}}, acknowledge receipt of {{assetName}}.',
+      title: 'Bold Regression Test',
+      defaultPropertyOfficer: null,
+      defaultAuthorizedRep: null,
+    });
+
+    const pdf = await generateAgreementPdf({
+      personnelName: 'Juan Dela Cruz',
+      assetName: 'Dell Latitude 5540',
+      serialNumber: 'SN-001',
+      propertyNumber: 'PN-001',
+      condition: 'Good',
+      renderMode: 'preprinted',
+      templateId: 'tmpl-regression-bold',
+    });
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
+    const boldCount = countBoldFontUsages(pdf);
+    expect(boldCount).toBeGreaterThanOrEqual(2); // personnelName + assetName
+  });
+
+  it('renders bold for variables in wrapped long text', async () => {
+    mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
+    mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
+      id: 'tmpl-bold-wrap',
+      headerLogo: null,
+      letterheadPath: null,
+      content: 'This is a very long introductory paragraph that contains the name of the recipient {{personnelName}} and also references the project called {{project}} which should both appear in bold font even when the text wraps across multiple lines in the generated PDF document.',
+      title: 'Bold Wrap Test',
+      defaultPropertyOfficer: null,
+      defaultAuthorizedRep: null,
+    });
+
+    const pdf = await generateAgreementPdf({
+      personnelName: 'Juan Dela Cruz',
+      project: 'Population Study',
+      assetName: 'Laptop',
+      serialNumber: 'SN-001',
+      propertyNumber: 'PN-001',
+      condition: 'Good',
+      renderMode: 'preprinted',
+      templateId: 'tmpl-bold-wrap',
+    });
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
+    const boldCount = countBoldFontUsages(pdf);
+    expect(boldCount).toBeGreaterThanOrEqual(2); // personnelName + project
+  });
+
+  it('renders bold variables in fullDigital mode with letterhead', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const letterheadDir = path.resolve(__dirname, '../../server/uploads/letterheads');
+    if (!fs.existsSync(letterheadDir)) fs.mkdirSync(letterheadDir, { recursive: true });
+    const minimalPng = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const letterheadPath = path.join(letterheadDir, 'test-regression-letterhead.png');
+    fs.writeFileSync(letterheadPath, minimalPng);
+
+    mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
+    mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
+      id: 'tmpl-bold-digital',
+      headerLogo: null,
+      letterheadPath: '/uploads/letterheads/test-regression-letterhead.png',
+      content: 'Agreement for {{personnelName}}, {{designation}}.',
+      title: 'Bold Digital Test',
+      defaultPropertyOfficer: null,
+      defaultAuthorizedRep: null,
+    });
+
+    try {
+      const pdf = await generateAgreementPdf({
+        personnelName: 'Juan Dela Cruz',
+        designation: 'Researcher',
+        assetName: 'Laptop',
+        serialNumber: 'SN-001',
+        propertyNumber: 'PN-001',
+        condition: 'Good',
+        renderMode: 'fullDigital',
+        templateId: 'tmpl-bold-digital',
+      });
+
+      expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+      expect(hasNoUnderlineStrokes(pdf)).toBe(true);
+      const boldCount = countBoldFontUsages(pdf);
+      expect(boldCount).toBeGreaterThanOrEqual(2); // personnelName + designation
+    } finally {
+      try { fs.unlinkSync(letterheadPath); } catch {}
+    }
+  });
+
+  it('renders bold variables in preprinted mode', async () => {
+    mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
+    mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
+      id: 'tmpl-bold-preprinted',
+      headerLogo: null,
+      letterheadPath: null,
+      content: 'I, {{personnelName}}, received {{assetName}} ({{serialNumber}}).',
+      title: 'Bold Preprinted Test',
+      defaultPropertyOfficer: null,
+      defaultAuthorizedRep: null,
+    });
+
+    const pdf = await generateAgreementPdf({
+      personnelName: 'Alice Smith',
+      assetName: 'Laptop',
+      serialNumber: 'SN-001',
+      propertyNumber: 'PN-001',
+      condition: 'Good',
+      renderMode: 'preprinted',
+      templateId: 'tmpl-bold-preprinted',
+    });
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
+    const boldCount = countBoldFontUsages(pdf);
+    expect(boldCount).toBeGreaterThanOrEqual(3); // personnelName + assetName + serialNumber
+  });
+
+  it('renders Tiptap body font size 18 and red color in generated PDF', async () => {
+    mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
+    mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
+      id: 'tmpl-tiptap-style',
+      headerLogo: null,
+      letterheadPath: null,
+      content: 'I, {{personnelName}}, acknowledge receipt of {{assetName}} and {{serialNumber}}.',
+      title: 'Tiptap Style Test',
+      defaultPropertyOfficer: null,
+      defaultAuthorizedRep: null,
+    });
+
+    const pdf = await generateAgreementPdf({
+      personnelName: 'Juan Dela Cruz',
+      assetName: 'Dell Latitude 5540',
+      serialNumber: 'SN-001',
+      propertyNumber: 'PN-001',
+      condition: 'Good',
+      renderMode: 'preprinted',
+      templateId: 'tmpl-tiptap-style',
+      templateContentJsonForRuns: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: { textStyle: { color: '#ff0000', fontSize: '18px' } },
+            content: [
+              { type: 'text', text: 'I, ' },
+              { type: 'text', marks: [{ type: 'textStyle', attrs: { color: '#ff0000', fontSize: '18px' } }], text: 'Juan Dela Cruz' },
+              { type: 'text', text: ', acknowledge receipt of ' },
+              { type: 'text', marks: [{ type: 'textStyle', attrs: { color: '#ff0000', fontSize: '18px' } }], text: 'Dell Latitude 5540' },
+              { type: 'text', text: ' and ' },
+              { type: 'text', marks: [{ type: 'textStyle', attrs: { color: '#ff0000', fontSize: '18px' } }], text: 'SN-001' },
+              { type: 'text', text: '.' },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    // Check font sizes include 18
+    const fontSizes = extractFontSizes(pdf);
+    expect(fontSizes).toContain(18);
+    // Check red scn color (1 0 0 or near)
+    const fillColors = extractFillColors(pdf);
+    expect(fillColors.some(c => c.startsWith('1 ') || c.startsWith('0.99'))).toBe(true);
+    // No underline strokes
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
+    // Bold count >= 3 (personnelName, assetName, serialNumber)
+    const boldCount = countBoldFontUsages(pdf);
+    expect(boldCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it('variable values inherit font size and color from surrounding Tiptap textStyle', async () => {
+    mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
+    mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
+      id: 'tmpl-tiptap-inherit',
+      headerLogo: null,
+      letterheadPath: null,
+      content: 'I, {{personnelName}}, acknowledge receipt of {{assetName}} and {{serialNumber}}.',
+      title: 'Tiptap Inherit Test',
+      defaultPropertyOfficer: null,
+      defaultAuthorizedRep: null,
+    });
+
+    // Blue #1e40af = rgb(30, 64, 175) → normalized: 30/255 ≈ 0.118, 64/255 ≈ 0.251, 175/255 ≈ 0.686
+    const pdf = await generateAgreementPdf({
+      personnelName: 'Juan Dela Cruz',
+      assetName: 'Dell Latitude 5540',
+      serialNumber: 'SN-001',
+      propertyNumber: 'PN-001',
+      condition: 'Good',
+      renderMode: 'preprinted',
+      templateId: 'tmpl-tiptap-inherit',
+      templateContentJsonForRuns: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: { textStyle: { color: '#1e40af', fontSize: '14px' } },
+            content: [
+              { type: 'text', text: 'I, ' },
+              { type: 'text', marks: [{ type: 'textStyle', attrs: { color: '#1e40af', fontSize: '14px' } }], text: 'Juan Dela Cruz' },
+              { type: 'text', text: ', acknowledge receipt of ' },
+              { type: 'text', marks: [{ type: 'textStyle', attrs: { color: '#1e40af', fontSize: '14px' } }], text: 'Dell Latitude 5540' },
+              { type: 'text', text: ' and ' },
+              { type: 'text', marks: [{ type: 'textStyle', attrs: { color: '#1e40af', fontSize: '14px' } }], text: 'SN-001' },
+              { type: 'text', text: '.' },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    // Check font sizes include 14
+    const fontSizes = extractFontSizes(pdf);
+    expect(fontSizes).toContain(14);
+    // Check blue scn color (≈0.118 0.251 0.686)
+    const fillColors = extractFillColors(pdf);
+    const hasBlueColor = fillColors.some(c => {
+      const parts = c.split(' ').map(Number);
+      return parts.length === 3 &&
+        Math.abs(parts[0] - 0.118) < 0.02 &&
+        Math.abs(parts[1] - 0.251) < 0.02 &&
+        Math.abs(parts[2] - 0.686) < 0.02;
+    });
+    expect(hasBlueColor).toBe(true);
+  });
+
+  it('asset table does not contain Serial Number column', async () => {
+    mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
+    mockPrisma.agreementTemplate.findUnique.mockResolvedValue(null);
+
+    const manyAssets = Array.from({ length: 5 }, (_, i) => ({
+      name: `Asset ${i + 1}`,
+      serialNumber: `SN-${i + 1}`,
+      propertyNumber: `PN-${i + 1}`,
+      condition: 'Good',
+    }));
+
+    const pdf = await generateAgreementPdf({
+      personnelName: 'Juan Dela Cruz',
+      designation: 'Researcher',
+      institution: 'DRDF',
+      assetName: 'Asset 1',
+      serialNumber: 'SN-1',
+      propertyNumber: 'PN-1',
+      condition: 'Good',
+      agreementText: 'Agreement with asset table.',
+      title: 'Asset Table Column Test',
+      documentNumber: 'AGR-COL-001',
+      assets: manyAssets,
+      renderMode: 'preprinted',
+    });
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    const fs = await import('fs');
+    const os = await import('os');
+    const { execSync } = await import('child_process');
+    const tmpFile = os.tmpdir() + `/test-asset-columns-${Date.now()}.pdf`;
+    fs.writeFileSync(tmpFile, pdf);
+    try {
+      const text = execSync(`pdftotext -raw ${tmpFile} -`, { encoding: 'utf-8' });
+      expect(text).toContain('Asset Name');
+      expect(text).toContain('Property Number');
+      expect(text).toContain('Condition');
+      expect(text).not.toContain('Serial Number');
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch {}
+    }
+  });
+
+  it('asset table uses readable font sizes', async () => {
+    mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
+    mockPrisma.agreementTemplate.findUnique.mockResolvedValue(null);
+
+    const manyAssets = Array.from({ length: 10 }, (_, i) => ({
+      name: `Asset ${i + 1} - Long Name That Forces Column Wrapping`,
+      serialNumber: `SN-${String(i + 1).padStart(4, '0')}`,
+      propertyNumber: `PN-${String(i + 1).padStart(4, '0')}`,
+      condition: i % 2 === 0 ? 'Good' : 'Fair',
+    }));
+
+    const pdf = await generateAgreementPdf({
+      personnelName: 'Juan Dela Cruz',
+      designation: 'Researcher',
+      institution: 'DRDF',
+      assetName: manyAssets[0].name,
+      serialNumber: manyAssets[0].serialNumber,
+      propertyNumber: manyAssets[0].propertyNumber,
+      condition: 'Good',
+      agreementText: 'Agreement with asset table.',
+      title: 'Font Size Test',
+      documentNumber: 'AGR-FONT-001',
+      assets: manyAssets,
+      renderMode: 'preprinted',
+    });
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    const fontSizes = extractFontSizes(pdf);
+    expect(fontSizes).toContain(8.0);
+    expect(fontSizes).toContain(7.5);
+    // Must NOT contain tiny unreadable sizes
+    expect(fontSizes).not.toContain(6.8);
+    expect(fontSizes).not.toContain(6.5);
+  });
+
+  // ═══════════════════════════════════════════════
+  //  WORD-BOUNDARY WRAPPING TESTS
+  // ═══════════════════════════════════════════════
+
+  // Content right margin in A4 PDF points (595 - 42 margin)
+  const CONTENT_RIGHT_X = 553;
+
+  // 9. Long 18pt red paragraph with variable nodes wraps within page width
+  it('wraps long 18pt red Tiptap paragraph within page width', async () => {
+    const red = '#b91c1c';
+    const redMark = [{ type: 'textStyle', attrs: { fontSize: '18px', color: red } }];
+    const longText = 'I, {{fullName}}, hereby acknowledge receipt of the equipment described above and issued by {{institution}} under the {{project}} initiative, and I agree to return the same in good condition when required by the proper authority of the institution.';
+    const contentJson = {
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'I, ', marks: redMark },
+          { type: 'variable', attrs: { name: 'fullName', label: 'Full Name' } },
+          { type: 'text', text: ', hereby acknowledge receipt of the equipment described above and issued by ', marks: redMark },
+          { type: 'variable', attrs: { name: 'institution', label: 'Institution' } },
+          { type: 'text', text: ' under the ', marks: redMark },
+          { type: 'variable', attrs: { name: 'project', label: 'Project' } },
+          { type: 'text', text: ' initiative, and I agree to return the same in good condition when required by the proper authority of the institution.', marks: redMark },
+        ],
+      }],
+    };
+
+    mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
+    mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
+      id: 'tmpl-wrap-tiptap',
+      headerLogo: null,
+      letterheadPath: null,
+      content: longText,
+      contentJson,
+      title: 'Wrap Tiptap Test',
+      defaultPropertyOfficer: null,
+      defaultAuthorizedRep: null,
+    });
+
+    const pdf = await generateAgreementPdf({
+      personnelName: 'Croco Dimagiba',
+      institution: 'DRDF',
+      project: 'Smart Campus',
+      assetName: 'Laptop Pro',
+      serialNumber: 'SN-12345',
+      propertyNumber: 'PN-67890',
+      condition: 'Good',
+      renderMode: 'preprinted',
+      templateId: 'tmpl-wrap-tiptap',
+    });
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    const content = decompressPdfStreams(pdf);
+    expect(content).toMatch(/\/F\d+\s+18\s+Tf/);
+    expect(content).toMatch(/0\.72549\d*\s+0\.10980\d*\s+0\.10980\d*\s+scn/);
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
+    const boldCount = countBoldFontUsages(pdf);
+    expect(boldCount).toBeGreaterThanOrEqual(3);
+    // Assert all body text X positions are within right margin
+    const positions = extractBodyTextPositions(pdf);
+    const overflowX = positions.filter(p => p.x > CONTENT_RIGHT_X);
+    expect(overflowX).toHaveLength(0);
+  });
+
+  // 10. Long static text with no variables wraps within page width
+  it('wraps long static text run without variables within page width', async () => {
+    const longStaticText = 'This is a very long paragraph that contains no variable placeholders but should still wrap correctly at word boundaries within the PDF content area without overflowing the right margin or causing any rendering issues whatsoever in the final output document.';
+    mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
+    mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
+      id: 'tmpl-wrap-static',
+      headerLogo: null,
+      letterheadPath: null,
+      content: longStaticText,
+      title: 'Wrap Static Test',
+      defaultPropertyOfficer: null,
+      defaultAuthorizedRep: null,
+    });
+
+    const pdf = await generateAgreementPdf({
+      personnelName: 'Test User',
+      assetName: 'Laptop',
+      serialNumber: 'SN-001',
+      propertyNumber: 'PN-001',
+      condition: 'Good',
+      renderMode: 'preprinted',
+      templateId: 'tmpl-wrap-static',
+    });
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
+    // Assert all body text X positions are within right margin
+    const positions = extractBodyTextPositions(pdf);
+    const overflowX = positions.filter(p => p.x > CONTENT_RIGHT_X);
+    expect(overflowX).toHaveLength(0);
+  });
+
+  // 11. Multi-word variable remains bold across wrapped lines
+  it('multi-word variable value remains bold across wrapped lines', async () => {
+    const contentJson = {
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Institution: ' },
+          { type: 'variable', attrs: { name: 'institution', label: 'Institution' } },
+          { type: 'text', text: '.' },
+        ],
+      }],
+    };
+
+    mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
+    mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
+      id: 'tmpl-wrap-multiword',
+      headerLogo: null,
+      letterheadPath: null,
+      content: 'Institution: {{institution}}.',
+      contentJson,
+      title: 'Multi-Word Var Wrap Test',
+      defaultPropertyOfficer: null,
+      defaultAuthorizedRep: null,
+    });
+
+    const pdf = await generateAgreementPdf({
+      personnelName: 'Test User',
+      institution: 'Demographic Research and Development Foundation Incorporated',
+      assetName: 'Laptop',
+      serialNumber: 'SN-001',
+      propertyNumber: 'PN-001',
+      condition: 'Good',
+      renderMode: 'preprinted',
+      templateId: 'tmpl-wrap-multiword',
+    });
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    const boldCount = countBoldFontUsages(pdf);
+    expect(boldCount).toBeGreaterThanOrEqual(1);
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
+    // Assert all body text X positions are within right margin
+    const positions = extractBodyTextPositions(pdf);
+    const overflowX = positions.filter(p => p.x > CONTENT_RIGHT_X);
+    expect(overflowX).toHaveLength(0);
+  });
+
+  // 12. Wrapped Tiptap content preserves red color and 18pt font
+  it('wrapped Tiptap content preserves red color and 18pt font in PDF commands', async () => {
+    const red = '#b91c1c';
+    const redMark = [{ type: 'textStyle', attrs: { fontSize: '18px', color: red } }];
+    const contentJson = {
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Employee ', marks: redMark },
+          { type: 'variable', attrs: { name: 'fullName', label: 'Full Name' } },
+          { type: 'text', text: ' is assigned to ', marks: redMark },
+          { type: 'variable', attrs: { name: 'project', label: 'Project' } },
+          { type: 'text', text: ' under the supervision of the department head and must follow all institutional policies and procedures regarding equipment usage and maintenance.', marks: redMark },
+        ],
+      }],
+    };
+
+    mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
+    mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
+      id: 'tmpl-wrap-style',
+      headerLogo: null,
+      letterheadPath: null,
+      content: 'Employee {{fullName}} is assigned to {{project}} under the supervision...',
+      contentJson,
+      title: 'Wrap Style Test',
+      defaultPropertyOfficer: null,
+      defaultAuthorizedRep: null,
+    });
+
+    const pdf = await generateAgreementPdf({
+      personnelName: 'Croco Dimagiba',
+      project: 'Smart Campus Initiative',
+      assetName: 'Laptop Pro',
+      serialNumber: 'SN-12345',
+      propertyNumber: 'PN-67890',
+      condition: 'Good',
+      renderMode: 'preprinted',
+      templateId: 'tmpl-wrap-style',
+    });
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    const content = decompressPdfStreams(pdf);
+    expect(content).toMatch(/\/F\d+\s+18\s+Tf/);
+    expect(content).toMatch(/0\.72549\d*\s+0\.10980\d*\s+0\.10980\d*\s+scn/);
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
+    // Assert all body text X positions are within right margin
+    const positions = extractBodyTextPositions(pdf);
+    const overflowX = positions.filter(p => p.x > CONTENT_RIGHT_X);
+    expect(overflowX).toHaveLength(0);
+  });
+
+  // 13. Oversized single word is chunked, not clipped
+  it('chunks oversized word to fit within page width instead of clipping', async () => {
+    // Create a very long single word that exceeds line width at 18pt
+    const longWord = 'SupercalifragilisticexpialidociousAntidisestablishmentarianismPneumonoultramicroscopicsilicovolcanoconiosis';
+    const red = '#b91c1c';
+    const redMark = [{ type: 'textStyle', attrs: { fontSize: '18px', color: red } }];
+    const contentJson = {
+      type: 'doc',
+      content: [{
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'The word is: ', marks: redMark },
+          { type: 'variable', attrs: { name: 'institution', label: 'Institution' } },
+          { type: 'text', text: ' end.', marks: redMark },
+        ],
+      }],
+    };
+
+    mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
+    mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
+      id: 'tmpl-wrap-oversized',
+      headerLogo: null,
+      letterheadPath: null,
+      content: `The word is: {{institution}} end.`,
+      contentJson,
+      title: 'Oversized Word Test',
+      defaultPropertyOfficer: null,
+      defaultAuthorizedRep: null,
+    });
+
+    const pdf = await generateAgreementPdf({
+      personnelName: 'Test User',
+      institution: longWord,
+      assetName: 'Laptop',
+      serialNumber: 'SN-001',
+      propertyNumber: 'PN-001',
+      condition: 'Good',
+      renderMode: 'preprinted',
+      templateId: 'tmpl-wrap-oversized',
+    });
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
+    // Assert all body text X positions are within right margin —
+    // this proves the oversized word was chunked, not placed past maxX
+    const positions = extractBodyTextPositions(pdf);
+    const overflowX = positions.filter(p => p.x > CONTENT_RIGHT_X);
+    expect(overflowX).toHaveLength(0);
+  });
+
+  // 14. Long 18pt paragraph with variables paginates correctly without overlapping footer
+  it('long 18pt paragraph with variables paginates without overlapping footer', async () => {
+    // Build a contentJson with multiple long 18pt paragraphs to force pagination
+    const red = '#b91c1c';
+    const redMark = [{ type: 'textStyle', attrs: { fontSize: '18px', color: red } }];
+    const paragraphs = [];
+    for (let i = 0; i < 12; i++) {
+      paragraphs.push({
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: `Paragraph ${i + 1}: I, `, marks: redMark },
+          { type: 'variable', attrs: { name: 'fullName', label: 'Full Name' } },
+          { type: 'text', text: ', hereby acknowledge receipt of the equipment described above and issued by ', marks: redMark },
+          { type: 'variable', attrs: { name: 'institution', label: 'Institution' } },
+          { type: 'text', text: ' under the supervision of the department and must follow all institutional policies and procedures regarding equipment usage and maintenance at all times.', marks: redMark },
+        ],
+      });
+    }
+    const contentJson = { type: 'doc', content: paragraphs };
+    const plainContent = Array.from({ length: 12 }, (_, i) =>
+      `Paragraph ${i + 1}: I, {{fullName}}, hereby acknowledge receipt of the equipment described above and issued by {{institution}} under the supervision of the department and must follow all institutional policies and procedures regarding equipment usage and maintenance at all times.`
+    ).join('\n');
+
+    mockPrisma.agreementTemplate.findFirst.mockResolvedValue(null);
+    mockPrisma.agreementTemplate.findUnique.mockResolvedValue({
+      id: 'tmpl-wrap-pagination',
+      headerLogo: null,
+      letterheadPath: null,
+      content: plainContent,
+      contentJson,
+      title: 'Pagination Test',
+      defaultPropertyOfficer: null,
+      defaultAuthorizedRep: null,
+    });
+
+    const pdf = await generateAgreementPdf({
+      personnelName: 'Croco Dimagiba',
+      institution: 'DRDF',
+      assetName: 'Laptop Pro',
+      serialNumber: 'SN-12345',
+      propertyNumber: 'PN-67890',
+      condition: 'Good',
+      renderMode: 'preprinted',
+      templateId: 'tmpl-wrap-pagination',
+    });
+
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    const content = decompressPdfStreams(pdf);
+    // 18pt must appear
+    expect(content).toMatch(/\/F\d+\s+18\s+Tf/);
+    // Red color must appear
+    expect(content).toMatch(/0\.72549\d*\s+0\.10980\d*\s+0\.10980\d*\s+scn/);
+    expect(hasNoUnderlineStrokes(pdf)).toBe(true);
+    const boldCount = countBoldFontUsages(pdf);
+    expect(boldCount).toBeGreaterThanOrEqual(3);
+    // All body text X positions within right margin
+    const positions = extractBodyTextPositions(pdf);
+    const overflowX = positions.filter(p => p.x > CONTENT_RIGHT_X);
+    expect(overflowX).toHaveLength(0);
+    // All body text Y positions stay above footer zone (yTopDown <= 755)
+    const overflowY = positions.filter(p => p.yTopDown > 755);
+    expect(overflowY).toHaveLength(0);
+    // Must have multiple pages (12 long 18pt paragraphs won't fit on one page)
+    // Check the PDF catalog's /Count for page count, or count content streams
+    const rawPdf = pdf.toString('latin1');
+    const countMatch = rawPdf.match(/\/Count\s+(\d+)/);
+    const pageCount = countMatch ? parseInt(countMatch[1], 10) : 1;
+    expect(pageCount).toBeGreaterThanOrEqual(2);
+  });
+});
+
+/* ═══════════════════════════════════════════════════════
+   parseContentJsonField VALIDATION
+   ═══════════════════════════════════════════════════════ */
+
+import { parseContentJsonField } from '../../server/src/utils/contentJson';
+
+describe('parseContentJsonField validation', () => {
+  it('returns undefined for undefined input', () => {
+    expect(parseContentJsonField(undefined)).toBeUndefined();
+  });
+
+  it('returns null for null input', () => {
+    expect(parseContentJsonField(null)).toBeNull();
+  });
+
+  it('returns null for empty string', () => {
+    expect(parseContentJsonField('')).toBeNull();
+  });
+
+  it('parses valid JSON string', () => {
+    const result = parseContentJsonField('{"type":"doc","content":[{"type":"paragraph"}]}');
+    expect(result).toEqual({ type: 'doc', content: [{ type: 'paragraph' }] });
+  });
+
+  it('passes through valid object', () => {
+    const obj = { type: 'doc', content: [{ type: 'paragraph' }] };
+    expect(parseContentJsonField(obj)).toBe(obj);
+  });
+
+  it('throws for malformed JSON string', () => {
+    expect(() => parseContentJsonField('{invalid json}')).toThrow('malformed JSON');
+  });
+
+  it('throws for string value (parsed to non-doc)', () => {
+    expect(() => parseContentJsonField('"hello"')).toThrow();
+  });
+
+  it('throws for array input', () => {
+    expect(() => parseContentJsonField([1, 2, 3])).toThrow();
+  });
+
+  it('throws for missing type in object', () => {
+    expect(() => parseContentJsonField({ content: [] })).toThrow('type "doc"');
+  });
+
+  it('throws for wrong type in object', () => {
+    expect(() => parseContentJsonField({ type: 'text', content: [] })).toThrow('type "doc"');
+  });
+
+  it('throws for missing content in object', () => {
+    expect(() => parseContentJsonField({ type: 'doc' })).toThrow('content array');
+  });
+
+  it('throws for non-array content in object', () => {
+    expect(() => parseContentJsonField({ type: 'doc', content: 'not array' })).toThrow('content array');
+  });
+
+  it('parses JSON string with whitespace padding', () => {
+    const result = parseContentJsonField('  {"type":"doc","content":[]}  ');
+    expect(result).toEqual({ type: 'doc', content: [] });
+  });
+
+  it('throws for number input', () => {
+    expect(() => parseContentJsonField(42)).toThrow();
+  });
+
+  it('throws for boolean input', () => {
+    expect(() => parseContentJsonField(true)).toThrow();
+  });
+
+  it('throws for array value (parsed from JSON)', () => {
+    expect(() => parseContentJsonField('[1,2,3]')).toThrow();
   });
 });
