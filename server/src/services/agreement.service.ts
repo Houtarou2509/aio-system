@@ -3,7 +3,7 @@ import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
 import { prisma } from '../lib/prisma';
-import { parseTemplate } from '../utils/templateParser';
+import { parseTemplate, parseTemplateWithRuns, TextRun } from '../utils/templateParser';
 import { buildAgreementDocumentView, type AgreementDocumentView } from './agreementDocumentRenderer.service';
 
 
@@ -19,6 +19,8 @@ interface TemplateCreateData {
   isDefault?: boolean;
   defaultPropertyOfficer?: string;
   defaultAuthorizedRep?: string;
+  headerLogo?: string;
+  letterheadPath?: string;
 }
 
 interface TemplateUpdateData {
@@ -28,6 +30,8 @@ interface TemplateUpdateData {
   isDefault?: boolean;
   defaultPropertyOfficer?: string;
   defaultAuthorizedRep?: string;
+  headerLogo?: string;
+  letterheadPath?: string;
 }
 
 export const FALLBACK_AGREEMENT_TITLE = 'ISSUANCE & ACCOUNTABILITY AGREEMENT';
@@ -103,6 +107,7 @@ export function listTemplateVersions(templateId: string) {
 export async function createTemplate(
   data: TemplateCreateData,
   logoPath?: string,
+  letterheadFilePath?: string,
 ) {
   return prisma.$transaction(async (tx) => {
     // Only one default template allowed at a time
@@ -123,6 +128,7 @@ export async function createTemplate(
         defaultAuthorizedRep: data.defaultAuthorizedRep ?? null,
         currentVersion: 1,
         ...(logoPath ? { headerLogo: logoPath } : {}),
+        ...(letterheadFilePath || data.letterheadPath ? { letterheadPath: letterheadFilePath || data.letterheadPath } : {}),
       },
     });
 
@@ -134,6 +140,7 @@ export async function createTemplate(
         title: template.title,
         content: template.content,
         headerLogo: template.headerLogo,
+        letterheadPath: template.letterheadPath,
         defaultPropertyOfficer: template.defaultPropertyOfficer,
         defaultAuthorizedRep: template.defaultAuthorizedRep,
         changeSummary: 'Initial version',
@@ -149,6 +156,7 @@ export async function updateTemplate(
   id: string,
   data: TemplateUpdateData,
   logoPath?: string,
+  letterheadFilePath?: string,
 ) {
   const existing = await prisma.agreementTemplate.findUnique({ where: { id } });
   if (!existing) throw new Error('Template not found');
@@ -161,12 +169,19 @@ export async function updateTemplate(
   if (data.defaultPropertyOfficer !== undefined) updateData.defaultPropertyOfficer = data.defaultPropertyOfficer || null;
   if (data.defaultAuthorizedRep !== undefined) updateData.defaultAuthorizedRep = data.defaultAuthorizedRep || null;
   if (logoPath && logoPath !== '') updateData.headerLogo = logoPath;
+  else if (data.headerLogo === '') updateData.headerLogo = null;
+  else if (typeof data.headerLogo === 'string' && data.headerLogo !== '') updateData.headerLogo = data.headerLogo;
+  if (letterheadFilePath) updateData.letterheadPath = letterheadFilePath;
+  else if (typeof data.letterheadPath === 'string') {
+    updateData.letterheadPath = data.letterheadPath.trim() === '' ? null : data.letterheadPath;
+  }
 
   const nextSnapshot = {
     name: updateData.name ?? existing.name,
     title: updateData.title ?? existing.title,
     content: updateData.content ?? existing.content,
-    headerLogo: updateData.headerLogo ?? existing.headerLogo,
+    headerLogo: updateData.headerLogo !== undefined ? updateData.headerLogo : existing.headerLogo,
+    letterheadPath: updateData.letterheadPath !== undefined ? updateData.letterheadPath : existing.letterheadPath,
     defaultPropertyOfficer: updateData.defaultPropertyOfficer ?? existing.defaultPropertyOfficer,
     defaultAuthorizedRep: updateData.defaultAuthorizedRep ?? existing.defaultAuthorizedRep,
   };
@@ -176,6 +191,7 @@ export async function updateTemplate(
     nextSnapshot.title !== existing.title ||
     nextSnapshot.content !== existing.content ||
     nextSnapshot.headerLogo !== existing.headerLogo ||
+    nextSnapshot.letterheadPath !== existing.letterheadPath ||
     nextSnapshot.defaultPropertyOfficer !== existing.defaultPropertyOfficer ||
     nextSnapshot.defaultAuthorizedRep !== existing.defaultAuthorizedRep;
 
@@ -202,6 +218,7 @@ export async function updateTemplate(
           title: nextSnapshot.title,
           content: nextSnapshot.content,
           headerLogo: nextSnapshot.headerLogo,
+          letterheadPath: nextSnapshot.letterheadPath,
           defaultPropertyOfficer: nextSnapshot.defaultPropertyOfficer,
           defaultAuthorizedRep: nextSnapshot.defaultAuthorizedRep,
           changeSummary: 'Template edited',
@@ -218,15 +235,12 @@ export async function deleteTemplate(id: string) {
   const template = await prisma.agreementTemplate.findUnique({ where: { id } });
   if (!template) throw new Error('Template not found');
 
-  // Remove logo file from disk if it exists
-  if (template.headerLogo) {
-    const logoFullPath = path.resolve(
-      __dirname,
-      '../..',
-      template.headerLogo.replace(/^\/+/, ''), // strip leading slash
-    );
+  // Remove uploaded files from disk
+  const filesToClean = [template.headerLogo, template.letterheadPath].filter(Boolean) as string[];
+  for (const filePath of filesToClean) {
+    const fullPath = path.resolve(__dirname, '../..', filePath.replace(/^\/+/, ''));
     try {
-      if (fs.existsSync(logoFullPath)) fs.unlinkSync(logoFullPath);
+      if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
     } catch {
       // best-effort cleanup — don't fail the delete if file is gone
     }
@@ -376,7 +390,7 @@ export async function backfillAgreementDocuments(params: { performedById: string
           institution: { select: { name: true } },
         },
       },
-      agreement: { select: { id: true, name: true, title: true, headerLogo: true, defaultPropertyOfficer: true, defaultAuthorizedRep: true, currentVersion: true, versions: { orderBy: { versionNumber: 'desc' }, take: 1, select: { id: true, versionNumber: true } } } },
+      agreement: { select: { id: true, name: true, title: true, headerLogo: true, letterheadPath: true, defaultPropertyOfficer: true, defaultAuthorizedRep: true, currentVersion: true, versions: { orderBy: { versionNumber: 'desc' }, take: 1, select: { id: true, versionNumber: true } } } },
     },
   });
 
@@ -442,6 +456,7 @@ export async function backfillAgreementDocuments(params: { performedById: string
           title: first.agreement?.title || 'ISSUANCE & ACCOUNTABILITY AGREEMENT',
           resolvedText: buildHistoricalAgreementText(first, assets),
           headerLogo: first.agreement?.headerLogo || null,
+          letterheadPath: first.agreement?.letterheadPath || null,
           bulkBatchId: first.bulkBatchId || null,
           personnelId: first.personnelId || null,
           personnelNameSnapshot: first.personnel?.fullName || first.assignedTo || 'Unknown recipient',
@@ -606,6 +621,8 @@ interface TextSegment {
   indent: number;
   align: 'left' | 'justify';
   kind?: 'text' | 'divider' | 'assetHeader';
+  /** Structured runs for underline rendering. When present, use these instead of flat text. */
+  runs?: TextRun[];
 }
 
 function parseBodySegments(filled: string): TextSegment[] {
@@ -666,6 +683,308 @@ function parseBodySegments(filled: string): TextSegment[] {
   return segments;
 }
 
+/**
+ * Split TextRun[] at newline boundaries, producing per-line run groups.
+ * Newlines inside a run cause a split; the newline character itself is dropped.
+ */
+function splitRunsByLines(runs: TextRun[]): TextRun[][] {
+  const lines: TextRun[][] = [[]];
+  for (const run of runs) {
+    if (!run.text) continue;
+    const parts = run.text.split('\n');
+    for (let i = 0; i < parts.length; i++) {
+      if (i > 0) lines.push([]); // newline → new line group
+      if (parts[i]) lines[lines.length - 1].push({ text: parts[i], underline: run.underline });
+    }
+  }
+  return lines;
+}
+
+/**
+ * Join TextRun[] into a flat string (all underlines dropped).
+ */
+function runsToFlatText(runs: TextRun[]): string {
+  return runs.map(r => r.text).join('');
+}
+
+/**
+ * Mirrors sanitizeAgreementText() but preserves TextRun underline flags.
+ * Strips percent-divider lines, inline dividers, CRLF normalisation.
+ */
+function sanitizeRuns(runs: TextRun[]): TextRun[] {
+  // 1. Normalize CRLF → LF by splitting and rejoining runs
+  const normalized = normalizeRunsNewlines(runs);
+
+  // 2. Process line-by-line: remove divider lines, strip inline dividers
+  const lineGroups = splitRunsByLines(normalized);
+  const keptLines: TextRun[][] = [];
+
+  for (const lineRuns of lineGroups) {
+    const flat = lineRuns.map(r => r.text).join('').trim();
+    const percentCount = (flat.match(/%/g) || []).length;
+
+    // Remove divider rows (same logic as sanitizeAgreementText)
+    if ((percentCount >= 5 && /^[%\s\-–—_]+$/.test(flat)) || /^[\s\-–—_─━═=]{5,}$/.test(flat)) {
+      continue; // skip this line entirely
+    }
+
+    // Remove inline percent divider runs from each run's text
+    const cleanedRuns: TextRun[] = [];
+    for (const run of lineRuns) {
+      const cleaned = run.text.replace(/[ \t]*%[%\s\-–—_]{4,}%[%\s\-–—_]*/g, ' ');
+      if (cleaned) cleanedRuns.push({ text: cleaned, underline: run.underline });
+    }
+    if (cleanedRuns.length > 0) keptLines.push(cleanedRuns);
+  }
+
+  // 3. Rejoin with newlines, add newline runs between lines
+  const result: TextRun[] = [];
+  for (let i = 0; i < keptLines.length; i++) {
+    if (i > 0) result.push({ text: '\n', underline: false });
+    result.push(...keptLines[i]);
+  }
+  return result;
+}
+
+/** Normalize CRLF/CR to LF within TextRun[] */
+function normalizeRunsNewlines(runs: TextRun[]): TextRun[] {
+  const result: TextRun[] = [];
+  for (const run of runs) {
+    if (!run.text.includes('\r')) {
+      result.push(run);
+      continue;
+    }
+    const cleaned = run.text.replace(/\r\n?/g, '\n');
+    if (cleaned) result.push({ text: cleaned, underline: run.underline });
+  }
+  return result;
+}
+
+/**
+ * Mirrors stripLegacyAssetTableLines() but preserves TextRun underline flags.
+ * Removes lines that are legacy asset table headers/rows.
+ */
+function stripLegacyAssetTableFromRuns(runs: TextRun[]): TextRun[] {
+  const lineGroups = splitRunsByLines(runs);
+  const keptLines: TextRun[][] = [];
+  let skippingAssetTable = false;
+
+  for (const lineRuns of lineGroups) {
+    const flat = lineRuns.map(r => r.text).join('');
+    const trimmed = flat.trim();
+
+    const headerMatch = trimmed.match(LEGACY_ASSET_HEADER_PATTERN);
+    if (headerMatch?.index !== undefined) {
+      const beforeHeader = trimmed.slice(0, headerMatch.index).trim();
+      if (beforeHeader) {
+        // Keep any text before the header as a separate line
+        keptLines.push([{ text: beforeHeader, underline: false }]);
+      }
+      skippingAssetTable = true;
+      continue;
+    }
+
+    if (skippingAssetTable) {
+      if (!trimmed) continue;
+      if (/^\d+\s+/.test(trimmed) && /\s{2,}/.test(trimmed)) continue;
+      skippingAssetTable = false;
+    }
+
+    keptLines.push(lineRuns);
+  }
+
+  // Rejoin
+  const result: TextRun[] = [];
+  for (let i = 0; i < keptLines.length; i++) {
+    if (i > 0) result.push({ text: '\n', underline: false });
+    result.push(...keptLines[i]);
+  }
+  return result;
+}
+
+/**
+ * Mirrors stripSignatureAndLegacyTable() but preserves TextRun underline flags.
+ * Stops at signature lines (_____ or "By signing below").
+ */
+function stripSignatureFromRuns(runs: TextRun[]): TextRun[] {
+  const lineGroups = splitRunsByLines(runs);
+  const keptLines: TextRun[][] = [];
+  let skippingAssetTable = false;
+
+  for (const lineRuns of lineGroups) {
+    const flat = lineRuns.map(r => r.text).join('');
+    const trimmed = flat.trim();
+
+    if (!trimmed) {
+      if (!skippingAssetTable) keptLines.push(lineRuns);
+      continue;
+    }
+
+    // Stop at signature markers
+    if (/^_{5,}/.test(trimmed) || trimmed.includes('By signing below')) break;
+
+    const headerMatch = trimmed.match(LEGACY_ASSET_HEADER_PATTERN);
+    if (headerMatch?.index !== undefined) {
+      const beforeHeader = trimmed.slice(0, headerMatch.index).trim();
+      if (beforeHeader) keptLines.push([{ text: beforeHeader, underline: false }]);
+      skippingAssetTable = true;
+      continue;
+    }
+
+    if (skippingAssetTable) {
+      if (/^\d+\s+/.test(trimmed) && /\s{2,}/.test(trimmed)) continue;
+      skippingAssetTable = false;
+    }
+
+    keptLines.push(lineRuns);
+  }
+
+  // Rejoin
+  const result: TextRun[] = [];
+  for (let i = 0; i < keptLines.length; i++) {
+    if (i > 0) result.push({ text: '\n', underline: false });
+    result.push(...keptLines[i]);
+  }
+  return result;
+}
+
+/**
+ * Given a set of line groups and a section text, extract the runs that
+ * correspond to that section. This works by matching the section text
+ * against the concatenated line group text.
+ */
+function splitRunsForSection(lineGroups: TextRun[][], sectionText: string): TextRun[] {
+  if (!sectionText.trim()) return [];
+  const sectionLines = sectionText.split('\n').map(l => l.trim());
+  const result: TextRun[] = [];
+  let lineIdx = 0;
+
+  for (const lineRuns of lineGroups) {
+    const flat = lineRuns.map(r => r.text).join('').trim();
+    if (!flat) continue;
+    if (lineIdx < sectionLines.length && flat === sectionLines[lineIdx]) {
+      if (lineIdx > 0) result.push({ text: '\n', underline: false });
+      result.push(...lineRuns);
+      lineIdx++;
+    } else if (lineIdx < sectionLines.length) {
+      // Fuzzy match: check if the line starts with the section line
+      // (handles trimming differences)
+      if (sectionLines[lineIdx].startsWith(flat) || flat.startsWith(sectionLines[lineIdx])) {
+        if (lineIdx > 0) result.push({ text: '\n', underline: false });
+        result.push(...lineRuns);
+        lineIdx++;
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Process TextRun[] through the same pipeline as the flat text path:
+ * 1. sanitize (strip dividers, normalize CRLF)
+ * 2. strip signature section
+ * 3. strip legacy asset table lines
+ * 4. trim each line
+ * 5. collapse multiple blank lines
+ *
+ * Returns both the flat body text and the per-line run groups with underline info.
+ */
+function processRunsForBody(runs: TextRun[]): {
+  bodyText: string;
+  lineGroups: TextRun[][];
+} {
+  let processed = sanitizeRuns(runs);
+  processed = stripSignatureFromRuns(processed);
+  processed = stripLegacyAssetTableFromRuns(processed);
+
+  // Normalize: strip trailing whitespace per line, trim each line,
+  // collapse multiple blank lines
+  let lineGroups = splitRunsByLines(processed);
+
+  // Trim each line's runs (leading/trailing whitespace)
+  lineGroups = lineGroups.map(lineRuns => {
+    if (lineRuns.length === 0) return lineRuns;
+    // Trim leading whitespace from first run
+    const first = lineRuns[0];
+    const trimmedFirst = { text: first.text.replace(/^\s+/, ''), underline: first.underline };
+    // Trim trailing whitespace from last run
+    const last = lineRuns[lineRuns.length - 1];
+    const trimmedLast = { text: last.text.replace(/\s+$/, ''), underline: last.underline };
+    const result = [...lineRuns];
+    result[0] = trimmedFirst;
+    result[result.length - 1] = trimmedLast;
+    return result.filter(r => r.text);
+  });
+
+  // Remove consecutive blank lines (collapse to single blank)
+  const filtered: TextRun[][] = [];
+  let prevBlank = false;
+  for (const lineRuns of lineGroups) {
+    const flat = lineRuns.map(r => r.text).join('').trim();
+    if (!flat) {
+      if (!prevBlank) filtered.push(lineRuns);
+      prevBlank = true;
+    } else {
+      filtered.push(lineRuns);
+      prevBlank = false;
+    }
+  }
+
+  const bodyText = filtered.map(lg => lg.map(r => r.text).join('')).join('\n').trim();
+  return { bodyText, lineGroups: filtered.filter(lg => lg.some(r => r.text.trim())) };
+}
+
+/**
+ * Like parseBodySegments(), but uses pre-computed TextRun[] from template parsing
+ * so underlines are based on actual {{variable}} boundaries, not value matching.
+ */
+function parseBodySegmentsFromRuns(lineGroups: TextRun[][]): TextSegment[] {
+  const segments: TextSegment[] = [];
+
+  for (const lineRuns of lineGroups) {
+    const raw = lineRuns.map(r => r.text).join('');
+    const ln = raw.trim();
+    if (ln === '' || ln.startsWith('ISSUANCE AND ACCOUNTABILITY AGREEMENT')) continue;
+    if (/^_{5,}/.test(ln) || ln.startsWith('____')) break;
+    if (ln.includes('By signing below')) break;
+
+    const percentCount = (ln.match(/%/g) || []).length;
+    if (percentCount >= 5 && /^[%\s\-–—_]+$/.test(ln)) {
+      segments.push({
+        text: '', fontSize: 0, bold: false, color: '#000000',
+        indent: 0, align: 'left', kind: 'divider',
+      });
+      continue;
+    }
+
+    let fontSize = 8.2;
+    let bold = false;
+    let color = '#333333';
+    let indent = 38;
+    let align: 'left' | 'justify' = 'left';
+    let kind: TextSegment['kind'] = 'text';
+
+    if (/^No\.\s+Asset Name\s+Serial Number\s+Property Number\s+Condition/i.test(ln)) {
+      fontSize = 7.6; bold = true; color = '#111111'; indent = 38; kind = 'assetHeader';
+    } else if (ln.startsWith('Terms and Conditions:')) {
+      fontSize = 8.8; bold = true; color = '#012061';
+    } else if (/^\d+\./.test(ln)) {
+      fontSize = 7.65; color = '#444444'; indent = 46; align = 'justify';
+    } else if (ln.startsWith('Asset:') || ln.startsWith('Serial') || ln.startsWith('Property') || ln.startsWith('Condition')) {
+      fontSize = 7.8; indent = 50;
+    }
+
+    // Only include runs if there are underlined values
+    const hasUnderline = lineRuns.some(r => r.underline);
+    segments.push({
+      text: raw, fontSize, bold, color, indent, align, kind,
+      runs: hasUnderline ? lineRuns : undefined,
+    });
+  }
+
+  return segments;
+}
+
 type PdfAsset = AgreementDocumentView['assets'][number];
 
 function splitBodyAndTerms(text: string): { bodyText: string; termsText: string } {
@@ -683,17 +1002,21 @@ function splitBodyAndTerms(text: string): { bodyText: string; termsText: string 
 }
 
 // Asset table is rendered directly via PDFKit. Do NOT pipe assets through sanitizeAgreementText().
+// contentBottomY and newPageStartY are explicit so the table respects letterhead-safe zones.
+// onNewPage callback redraws the letterhead/header on continuation pages.
 function renderAssetTableToPdf(
   doc: PDFKit.PDFDocument,
   assets: PdfAsset[],
   x: number,
   startY: number,
   contentWidth: number,
+  contentBottomY: number = 755,
+  newPageStartY: number = 130,
+  onNewPage?: () => number,
 ): number {
   if (!assets.length) return startY;
 
-  const pageBottomY = doc.page.height - 96;
-  const newPageStartY = 124;
+  const pageBottomY = contentBottomY;
   const paddingX = 3;
   const paddingY = 4;
   const headerHeight = 18;
@@ -712,6 +1035,9 @@ function renderAssetTableToPdf(
 
   const ensureSpace = (y: number, height: number) => {
     if (y + height <= pageBottomY) return y;
+    // Use the callback to add a continuation page (which redraws letterhead/header)
+    if (onNewPage) return onNewPage();
+    // Fallback: plain new page without header (preprinted mode without content zones)
     doc.addPage();
     doc.y = 0;
     return newPageStartY;
@@ -871,6 +1197,14 @@ export interface AgreementPdfParams {
   recipientSignatureName?: string | null;
   documentNumber?: string | null;
   agreementDocumentId?: string | null;
+  renderMode?: 'preprinted' | 'fullDigital';
+  /** Snapshot letterhead path from AgreementDocument — takes priority over current template */
+  letterheadPath?: string | null;
+  /**
+   * Internal: template/version content used only to recover {{variable}}
+   * boundaries for underlining saved agreement text.
+   */
+  templateContentForRuns?: string | null;
 }
 
 function assetSnapshotArray(snapshot: unknown): Array<{ name: string; serialNumber?: string | null; propertyNumber?: string | null; condition?: string | null }> {
@@ -918,6 +1252,9 @@ export async function resolveAgreementPdfParams(p: AgreementPdfParams): Promise<
           projectLookup: { select: { name: true } },
           institution: { select: { name: true } },
         },
+      },
+      templateVersionRecord: {
+        select: { content: true },
       },
     },
   });
@@ -977,6 +1314,8 @@ export async function resolveAgreementPdfParams(p: AgreementPdfParams): Promise<
     recipientSignedAt: document.recipientSignedAt || p.recipientSignedAt || null,
     recipientSignatureName: document.recipientSignatureName || p.recipientSignatureName || null,
     documentNumber: document.documentNumber || p.documentNumber || null,
+    letterheadPath: document.letterheadPath ?? p.letterheadPath ?? null,
+    templateContentForRuns: document.templateVersionRecord?.content || p.templateContentForRuns || null,
   };
 }
 
@@ -988,30 +1327,48 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
     propertyOfficerName, authorizedRepName, assets, recipientSignedAt, recipientSignatureName, documentNumber,
   } = p;
 
+  const renderMode: 'preprinted' | 'fullDigital' = input.renderMode ?? 'preprinted';
+
   const tmpl = templateId
     ? (await prisma.agreementTemplate.findUnique({ where: { id: templateId } })) || (await getDefaultTemplate())
     : await getDefaultTemplate();
   const templateContent = tmpl?.content?.trim() ? tmpl.content : FALLBACK_AGREEMENT_TEMPLATE;
 
   const titleText = p.title || tmpl?.title || FALLBACK_AGREEMENT_TITLE;
+  const templateData = {
+    personnelName,
+    designation: designation || position || undefined,
+    project: project || undefined,
+    institution: institution || undefined,
+    assetName,
+    serialNumber: serialNumber || undefined,
+    propertyNumber: propertyNumber || undefined,
+    condition: condition || undefined,
+    assets: assets?.map(a => ({
+      name: a.name,
+      serialNumber: a.serialNumber || undefined,
+      propertyNumber: a.propertyNumber || undefined,
+      condition: a.condition || condition || undefined,
+    })) || undefined,
+  };
+
+  // Compute structured TextRun[] from real {{variable}} boundaries whenever
+  // template/version content is available. Saved agreementText remains the
+  // source of flat text, while templateContentForRuns recovers underline
+  // boundaries for historical document previews.
+  const hasSavedAgreementText = Boolean(agreementText && agreementText.trim().length > 0);
+  const underlineTemplateContent = p.templateContentForRuns?.trim()
+    ? p.templateContentForRuns
+    : templateContent;
+  const filledRuns: TextRun[] | null = (!hasSavedAgreementText || p.templateContentForRuns || templateId)
+    ? parseTemplateWithRuns(underlineTemplateContent, templateData)
+    : null;
+
   const filled = agreementText && agreementText.trim().length > 0
     ? sanitizeAgreementText(agreementText)
-    : sanitizeAgreementText(parseTemplate(templateContent, {
-        personnelName,
-        designation: designation || position || undefined,
-        project: project || undefined,
-        institution: institution || undefined,
-        assetName,
-        serialNumber: serialNumber || undefined,
-        propertyNumber: propertyNumber || undefined,
-        condition: condition || undefined,
-        assets: assets?.map(a => ({
-          name: a.name,
-          serialNumber: a.serialNumber || undefined,
-          propertyNumber: a.propertyNumber || undefined,
-          condition: a.condition || condition || undefined,
-        })) || undefined,
-      }));
+    : filledRuns
+      ? runsToFlatText(sanitizeRuns(filledRuns))
+      : sanitizeAgreementText(parseTemplate(templateContent, templateData));
 
   const documentView = buildAgreementDocumentView({
     title: titleText,
@@ -1045,24 +1402,69 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
     .join('\n')
     .replace(/\n{3,}/g, '\n\n');
   const { bodyText, termsText } = splitBodyAndTerms(cleanBodyText);
-  const bodySegments = parseBodySegments(bodyText);
-  const termsSegments = parseBodySegments(termsText);
+
+  // Build segments: when we have structured runs from template parsing,
+  // process them through the same pipeline and use parseBodySegmentsFromRuns
+  // for accurate variable-boundary underlines. Otherwise, fall back to
+  // flat-text parsing with no underlines.
+  let bodySegments: TextSegment[];
+  let termsSegments: TextSegment[];
+  if (filledRuns) {
+    const processed = processRunsForBody(filledRuns);
+    const { bodyText: runsBody, termsText: runsTerms } = splitBodyAndTerms(processed.bodyText);
+    const bodyLineGroups = splitRunsByLines(
+      // Re-derive line groups matching the body/terms split
+      splitRunsForSection(processed.lineGroups, runsBody)
+    );
+    const termsLineGroups = runsTerms
+      ? splitRunsByLines(splitRunsForSection(processed.lineGroups, runsTerms))
+      : [];
+    bodySegments = parseBodySegmentsFromRuns(bodyLineGroups);
+    termsSegments = termsLineGroups.length > 0
+      ? parseBodySegmentsFromRuns(termsLineGroups)
+      : parseBodySegments(termsText);
+  } else {
+    bodySegments = parseBodySegments(bodyText);
+    termsSegments = parseBodySegments(termsText);
+  }
+
+  // Resolve letterhead: prefer document snapshot, then template
+  // PDF letterheads are converted to PNG at upload time, so letterheadPath always
+  // points to a renderable image (PNG/JPG). If a stale .pdf path slips through,
+  // we skip it rather than silently producing a blank header.
+  const resolvedLetterheadPath = p.letterheadPath || tmpl?.letterheadPath || null;
+  let letterheadBuffer: Buffer | null = null;
+  if (renderMode === 'fullDigital' && resolvedLetterheadPath) {
+    const fullPath = path.resolve(__dirname, '../..', resolvedLetterheadPath.replace(/^\/+/, ''));
+    try {
+      if (fs.existsSync(fullPath)) {
+        const ext = path.extname(fullPath).toLowerCase();
+        if (ext === '.pdf') {
+          // PDF letterheads should have been converted to PNG at upload time.
+          // If a raw .pdf path reaches here, skip it — PDFKit cannot render PDFs.
+        } else {
+          letterheadBuffer = fs.readFileSync(fullPath);
+        }
+      }
+    } catch { /* best-effort, don't crash PDF generation */ }
+  }
   const logoData = loadLogoImage(tmpl?.headerLogo ?? null);
 
+  // A4 dimensions in PDF points
   const PW = 595.28;
   const PH = 841.89;
-  const M = 32;
+  const M = 32; // base margin
   const CW = PW - (M * 2);
-  const LETTERHEAD_TOP = 42;
-  const HEADER_Y = LETTERHEAD_TOP;
-  const TITLE_Y = 82;
-  const LOGO_W = 78;
-  const BODY_START_Y = 124;
-  // Keep footer above PDFKit's bottom margin. If y is below the writable area,
-  // PDFKit silently creates trailing blank pages while adding footer text.
-  const FOOTER_Y = PH - 70;
-  const PAGE_BODY_MAX_Y = PH - 96;
+
+  // Safe content zones based on letterhead analysis
+  const HEADER_ZONE_BOTTOM = 115;       // letterhead header area ends here
+  const TITLE_Y = 148;                  // document title center line
+  const CONTENT_TOP_Y = 185;           // body/table starts below title
+  const CONTENT_BOTTOM_Y = 755;        // content must not overlap footer
+  const CONTENT_LEFT = M + 6;
+  const CONTENT_WIDTH = CW - 12;
   const SIG_BLOCK_HEIGHT = 58;
+  const FOOTER_TEXT_Y = PH - 70;
 
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -1084,34 +1486,81 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
       doc.y = 0;
     }
 
+    /** Draw the letterhead background image on the current page (fullDigital only) */
+    function drawLetterheadBackground() {
+      if (!letterheadBuffer) return;
+      try {
+        doc.image(letterheadBuffer, 0, 0, { width: PW, height: PH });
+      } catch { /* best-effort, don't crash PDF generation */ }
+    }
+
+    /** Draw header area: letterhead background or fallback logo.
+     *  Does NOT draw the document title — that is separate. */
     function renderHeader() {
-      if (logoData) {
-        try { doc.image(logoData, M, HEADER_Y, { width: LOGO_W }); doc.y = 0; } catch {}
+      if (renderMode === 'preprinted') {
+        // Preprinted: no letterhead background, no logo — the physical paper has them.
+        return;
       }
+      // fullDigital mode
+      if (letterheadBuffer) {
+        drawLetterheadBackground();
+        return;
+      }
+      // No full letterhead: fall back to logo only (title is drawn separately)
+      if (logoData) {
+        try { doc.image(logoData, M, 42, { width: 78 }); doc.y = 0; } catch {}
+      }
+    }
+
+    /** Draw the document title centered below the header area.
+     *  Only drawn on the first page. */
+    function renderTitle() {
+      if (!titleText || !titleText.trim()) return; // skip empty titles
       let titleFontSize = 16;
       let titleWidth = doc.font('Helvetica-Bold').fontSize(titleFontSize).widthOfString(titleText);
       while (titleWidth > CW && titleFontSize > 10) {
         titleFontSize -= 0.5;
         titleWidth = doc.font('Helvetica-Bold').fontSize(titleFontSize).widthOfString(titleText);
       }
-      textAbs(titleText, M, TITLE_Y, { width: CW, align: 'center', fontSize: titleFontSize, font: 'Helvetica-Bold', color: '#222222' });
+      const titleColor = renderMode === 'preprinted' ? '#222222' : (letterheadBuffer ? '#222222' : '#1a1a1a');
+      textAbs(titleText, M, TITLE_Y, { width: CW, align: 'center', fontSize: titleFontSize, font: 'Helvetica-Bold', color: titleColor });
     }
 
+    /** Footer: page number and document number. In preprinted mode, skip the
+     *  decorative footer to avoid colliding with the pre-printed letterhead footer. */
     function addFooter(page: number, total: number) {
+      if (renderMode === 'preprinted') {
+        // In preprinted mode, only place a small page number inside the safe
+        // content area (above CONTENT_BOTTOM_Y) to avoid the printed footer.
+        doc.font('Helvetica').fontSize(6).fillColor('#b0b0b0');
+        doc.text(`${page}`, M, CONTENT_BOTTOM_Y + 2, { width: CW, align: 'right', lineBreak: false });
+        doc.y = 0;
+        return;
+      }
+      // Full digital mode: standard footer in the letterhead footer area
       doc.font('Helvetica').fontSize(7).fillColor('#94a3b8');
-      doc.text(`Page ${page} of ${total}`, M, FOOTER_Y, { width: CW, height: 8, align: 'center', lineBreak: false });
-      if (documentView.documentNumber) doc.text(documentView.documentNumber, M, FOOTER_Y, { width: CW, height: 8, align: 'right', lineBreak: false });
+      doc.text(`Page ${page} of ${total}`, M, FOOTER_TEXT_Y, { width: CW, height: 8, align: 'center', lineBreak: false });
+      if (documentView.documentNumber) doc.text(documentView.documentNumber, M, FOOTER_TEXT_Y, { width: CW, height: 8, align: 'right', lineBreak: false });
       doc.y = 0;
     }
 
-    function addContinuationPage() {
+    /** Add a continuation page. Redraws letterhead/background on every page
+     *  but only draws the title on the first page. */
+    function addContinuationPage(isFirstPage: boolean): number {
       doc.addPage();
       renderHeader();
-      return BODY_START_Y;
+      if (isFirstPage) {
+        renderTitle();
+        return CONTENT_TOP_Y;
+      }
+      // Continuation pages: body starts right below header zone, no title
+      return HEADER_ZONE_BOTTOM + 15; // y ≈ 130
     }
 
+    // --- Begin rendering ---
     renderHeader();
-    let y = BODY_START_Y;
+    renderTitle();
+    let y = CONTENT_TOP_Y;
 
     function renderSegments(segmentsToRender: TextSegment[]) {
       for (const seg of segmentsToRender) {
@@ -1121,8 +1570,61 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
         const font = seg.bold ? 'Helvetica-Bold' : 'Helvetica';
         const h = doc.font(font).fontSize(seg.fontSize).heightOfString(seg.text, { width, align: seg.align as any, lineBreak: true });
         const lh = h + 1;
-        if (y + lh > PAGE_BODY_MAX_Y) y = addContinuationPage();
+        if (y + lh > CONTENT_BOTTOM_Y) y = addContinuationPage(false);
+
+        // Render the segment text first (always via textAbs for consistent positioning)
         textAbs(seg.text, seg.indent, y, { width, fontSize: seg.fontSize, font, color: seg.color, align: seg.align, lineBreak: true });
+
+        // If the segment has underlined runs, draw manual underline lines
+        // beneath each underlined variable value. We compute x-positions by
+        // measuring each run's width with the same font/size.
+        if (seg.runs && seg.runs.length > 0) {
+          const textX = seg.indent;
+
+          // Measure font metrics for underline positioning
+          const fontAscent = doc.font(font).fontSize(seg.fontSize).currentLineHeight(true);
+          const ulOffset = fontAscent * 0.15; // underline sits just below baseline
+
+          // Track x position across runs, wrapping at the right margin.
+          // PDFKit word-wraps the text; we mirror that for underline positions.
+          let curX = textX;
+          const maxX = seg.indent + width;
+          let curLineY = y;
+          const lineH = doc.font(font).fontSize(seg.fontSize).heightOfString('Ay', { width: Infinity });
+
+          for (const run of seg.runs) {
+            if (!run.text) continue;
+            const runW = doc.font(font).fontSize(seg.fontSize).widthOfString(run.text);
+            // Wrap to next line if this run overflows
+            if (curX + runW > maxX && curX > textX) {
+              curX = textX;
+              curLineY += lineH;
+            }
+            // Draw underline strokes for underlined runs
+            if (run.underline && run.text.trim()) {
+              // For long values that wrap across lines, draw per-word underlines
+              const words = run.text.split(/(\s+)/);
+              let wordX = curX;
+              for (const word of words) {
+                if (!word) continue;
+                const wordW = doc.font(font).fontSize(seg.fontSize).widthOfString(word);
+                if (wordX + wordW > maxX && wordX > textX) {
+                  wordX = textX;
+                  curLineY += lineH;
+                }
+                if (word.trim()) {
+                  const ulY = curLineY + fontAscent + ulOffset;
+                  doc.moveTo(wordX, ulY).lineTo(wordX + wordW, ulY)
+                    .strokeColor(seg.color || '#333333').lineWidth(0.4).stroke();
+                  doc.y = 0;
+                }
+                wordX += wordW;
+              }
+            }
+            curX += runW;
+          }
+        }
+
         y += lh;
 
         if (seg.kind === 'assetHeader') {
@@ -1137,12 +1639,13 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
 
     renderSegments(bodySegments);
     if (documentView.assets.length) {
-      y = renderAssetTableToPdf(doc, documentView.assets, M + 6, y + 8, CW - 12);
+      y = renderAssetTableToPdf(doc, documentView.assets, CONTENT_LEFT, y + 8, CONTENT_WIDTH, CONTENT_BOTTOM_Y, CONTENT_TOP_Y, () => addContinuationPage(false));
     }
     renderSegments(termsSegments);
 
-    if (y + SIG_BLOCK_HEIGHT > PAGE_BODY_MAX_Y) y = addContinuationPage();
-    const sigLineY = Math.max(y + 14, PH - 96);
+    // Signature block: ensure it fits entirely on one page
+    if (y + SIG_BLOCK_HEIGHT > CONTENT_BOTTOM_Y) y = addContinuationPage(false);
+    const sigLineY = Math.max(y + 14, CONTENT_BOTTOM_Y - SIG_BLOCK_HEIGHT);
     const sigLabelY = sigLineY + 14;
     const colW = (CW - 20) / 3;
     const sigCols = documentView.signatures.map((signature, index) => ({
@@ -1163,9 +1666,11 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
       const baseUrl = process.env.APP_BASE_URL || 'http://localhost:3000';
       const verifyUrl = `${baseUrl}/aio-system/agreements/verify/${documentNumber}`;
       const verifyY = sigLabelY + 14;
-      doc.font('Helvetica').fontSize(7).fillColor('#94a3b8');
-      doc.text(`Document authenticity can be verified at: ${verifyUrl}`, M, verifyY, { width: CW, align: 'center', lineBreak: false });
-      doc.y = 0;
+      if (verifyY + 10 < CONTENT_BOTTOM_Y) {
+        doc.font('Helvetica').fontSize(7).fillColor('#94a3b8');
+        doc.text(`Document authenticity can be verified at: ${verifyUrl}`, M, verifyY, { width: CW, align: 'center', lineBreak: false });
+        doc.y = 0;
+      }
     }
 
     const range = doc.bufferedPageRange();

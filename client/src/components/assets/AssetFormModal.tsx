@@ -1,4 +1,5 @@
 import { useState, FormEvent, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Asset } from '../../lib/api';
 
 import { useLookupOptions } from '@/hooks/useLookupOptions';
@@ -139,6 +140,77 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const { options: ownerOptions, isLoading: ownerLoading } = useLookupOptions('owners');
 
   // Camera error is set by CameraCaptureModal via onExternalError
+
+  // ── Focus trap: prevent Tab from reaching background elements while modal is open ──
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    // Save the element that had focus before the modal opened
+    previousFocusRef.current = document.activeElement as HTMLElement;
+
+    // Mark the app root as inert so background elements are excluded from tab order.
+    // This is safe because the modal is portaled to document.body (outside #root).
+    const appRoot = document.getElementById('root');
+    if (appRoot) appRoot.inert = true;
+
+    // Focus the first input in the modal on open
+    requestAnimationFrame(() => {
+      if (!modalRef.current) return;
+      const firstInput = modalRef.current.querySelector<HTMLInputElement>('input:not([type="hidden"])');
+      if (firstInput) firstInput.focus();
+      else {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length > 0) focusable[0]?.focus();
+      }
+    });
+
+    return () => {
+      // Restore inert state and focus on unmount
+      if (appRoot) appRoot.inert = false;
+      // Restore focus to the element that opened the modal
+      if (previousFocusRef.current && previousFocusRef.current.focus) {
+        previousFocusRef.current.focus();
+      }
+      previousFocusRef.current = null;
+    };
+  }, []);
+
+  // Focus trap: Tab/Shift+Tab cycle within the modal
+  const handleTrapKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key !== 'Tab' || !modalRef.current) return;
+
+    const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusable = Array.from(modalRef.current.querySelectorAll<HTMLElement>(focusableSelector))
+      .filter(el => {
+        if (el instanceof HTMLButtonElement || el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) {
+          return !el.disabled;
+        }
+        return true;
+      })
+      .filter(el => el.offsetParent !== null); // visible
+
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (e.shiftKey) {
+      // Shift+Tab on first element → wrap to last
+      if (document.activeElement === first || !modalRef.current.contains(document.activeElement)) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      // Tab on last element → wrap to first
+      if (document.activeElement === last || !modalRef.current.contains(document.activeElement)) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  }, []);
 
   // Fetch suppliers on mount
   useEffect(() => {
@@ -431,10 +503,15 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const inputClass = "w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#f8931f] focus:border-transparent transition";
   const labelClass = "text-xs font-medium text-slate-700 dark:text-slate-300 mb-1 block";
 
-  return (
+  return createPortal(
     <>
     <div
+      ref={modalRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={isEdit ? 'Edit Asset' : 'Add Asset'}
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-2 sm:p-4"
+      onKeyDown={handleTrapKeyDown}
       onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowCamera(false); onClose(); } }}>
       <div className="w-full sm:w-[95vw] max-w-5xl max-h-[90vh] flex flex-col rounded-xl bg-white dark:bg-slate-800 shadow-xl" onClick={e => e.stopPropagation()}>
 
@@ -928,7 +1005,8 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       captureMode="full"
       onExternalError={setCameraError}
     />
-    </>
+    </>,
+    document.body
   );
 }
 

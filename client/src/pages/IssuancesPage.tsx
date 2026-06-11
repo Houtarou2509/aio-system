@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiFetch, ApiError } from '../lib/api';
 import { PermissionGate } from '../components/auth';
 import {
@@ -473,6 +473,8 @@ export default function IssuancesPage() {
   const [pdfAgreementDocumentId, setPdfAgreementDocumentId] = useState<string | undefined>(undefined);
   const [pdfSignedPdfPath, setPdfSignedPdfPath] = useState<string | null>(null);
   const [pdfSignedUploadedAt, setPdfSignedUploadedAt] = useState<string | null>(null);
+  const [pdfRenderMode, setPdfRenderMode] = useState<'preprinted' | 'fullDigital'>('preprinted');
+  const lastPdfParamsRef = useRef<Record<string, any> | null>(null);
 
   const toPublicFileUrl = (path?: string | null) => {
     if (!path) return null;
@@ -481,6 +483,8 @@ export default function IssuancesPage() {
   };
 
   const openAgreementPreview = useCallback(async (params: Record<string, any>) => {
+    const paramsWithMode = { ...params, renderMode: pdfRenderMode };
+    lastPdfParamsRef.current = paramsWithMode;
     setPdfPreview({ blobUrl: null, loading: true, filename: 'agreement.pdf' });
     setPdfPersonnelId(params.personnelId || undefined);
     setPdfPersonnelName(params.personnelName || undefined);
@@ -496,7 +500,7 @@ export default function IssuancesPage() {
           Accept: 'application/pdf',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(params),
+        body: JSON.stringify(paramsWithMode),
       });
       if (res.status === 401) {
         const rt = localStorage.getItem('refreshToken');
@@ -517,7 +521,7 @@ export default function IssuancesPage() {
                 Accept: 'application/pdf',
                 Authorization: `Bearer ${refreshData.data.accessToken}`,
               },
-              body: JSON.stringify(params),
+              body: JSON.stringify(paramsWithMode),
             });
           }
         }
@@ -541,7 +545,41 @@ export default function IssuancesPage() {
     setPdfAgreementDocumentId(undefined);
     setPdfSignedPdfPath(null);
     setPdfSignedUploadedAt(null);
+    setPdfRenderMode('preprinted');
+    lastPdfParamsRef.current = null;
   }, []);
+
+  const handleRenderModeChange = useCallback((mode: 'preprinted' | 'fullDigital') => {
+    setPdfRenderMode(mode);
+    const lastParams = lastPdfParamsRef.current;
+    if (lastParams) {
+      // Re-trigger preview with new mode
+      const updatedParams = { ...lastParams, renderMode: mode };
+      lastPdfParamsRef.current = updatedParams;
+      setPdfPreview(prev => ({ ...prev, loading: true }));
+      (async () => {
+        try {
+          const token = localStorage.getItem('accessToken');
+          const res = await fetch('/api/agreements/pdf', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/pdf',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(updatedParams),
+          });
+          if (!res.ok) throw new Error('Failed to generate PDF');
+          const blob = await res.blob();
+          const typedBlob = blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
+          const url = URL.createObjectURL(typedBlob);
+          setPdfPreview({ blobUrl: url, loading: false, filename: pdfPreview.filename });
+        } catch {
+          setPdfPreview({ blobUrl: null, loading: false, filename: 'agreement.pdf' });
+        }
+      })();
+    }
+  }, [pdfPreview.filename]);
 
   const openSignModal = (iss: Issuance) => {
     setSigningTarget(iss);
@@ -1881,6 +1919,8 @@ export default function IssuancesPage() {
         agreementDocumentId={pdfAgreementDocumentId}
         signedPdfPath={pdfSignedPdfPath}
         signedUploadedAt={pdfSignedUploadedAt}
+        renderMode={pdfRenderMode}
+        onRenderModeChange={handleRenderModeChange}
         onSignedCopyUploaded={(document) => {
           setPdfSignedPdfPath(document?.signedPdfPath || null);
           setPdfSignedUploadedAt(document?.signedUploadedAt || null);

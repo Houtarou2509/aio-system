@@ -379,6 +379,7 @@ model AgreementTemplate {
   title                  String   @default("ISSUANCE & ACCOUNTABILITY AGREEMENT")
   content                String   @default("")
   headerLogo             String?  // file path for the project logo (e.g. /uploads/logos/logo-abc123.png)
+  letterheadPath         String?  // full A4 letterhead background (PDF/PNG/JPG) for digital mode
   defaultLogo            String?  // path to a system-wide default logo fallback
   isDefault              Boolean  @default(false)
   defaultPropertyOfficer String?  // default name for Property Officer signatory
@@ -401,6 +402,7 @@ model AgreementTemplateVersion {
   title                  String
   content                String   @db.Text
   headerLogo             String?
+  letterheadPath         String?  // full A4 letterhead background (PDF/PNG/JPG) for digital mode
   defaultPropertyOfficer String?
   defaultAuthorizedRep   String?
   changeSummary          String?
@@ -423,6 +425,7 @@ model AgreementDocument {
   title                      String
   resolvedText               String   @db.Text
   headerLogo                 String?
+  letterheadPath             String?  // full A4 letterhead background (PDF/PNG/JPG) for digital mode
   bulkBatchId                String?
   personnelId                String?
   personnelNameSnapshot      String

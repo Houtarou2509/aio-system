@@ -14,6 +14,7 @@ interface AgreementTemplate {
   title: string;
   content: string;
   headerLogo: string | null;
+  letterheadPath: string | null;
   defaultLogo: string | null;
   isDefault: boolean;
   defaultPropertyOfficer: string | null;
@@ -33,6 +34,7 @@ interface AgreementTemplateVersion {
   title: string;
   content: string;
   headerLogo: string | null;
+  letterheadPath: string | null;
   defaultPropertyOfficer: string | null;
   defaultAuthorizedRep: string | null;
   changeSummary: string | null;
@@ -79,9 +81,20 @@ async function multipartRequest(url: string, method: string, data: Record<string
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: form,
   });
-  const json = await res.json();
+  let json: any;
+  try {
+    json = await res.json();
+  } catch {
+    throw new ApiError(res.ok ? 'Request failed: invalid response' : `Request failed (${res.status})`, res.status);
+  }
   if (!json.success) throw new ApiError(json.error?.message || 'Request failed', res.status);
   return json.data;
+}
+
+function isAllowedLogoFile(file: File) {
+  const typeOk = file.type === 'image/png' || file.type === 'image/jpeg';
+  const extOk = /\.(png|jpe?g)$/i.test(file.name);
+  return typeOk || extOk;
 }
 
 /** Simple Levenshtein distance for "did you mean" suggestions */
@@ -135,6 +148,8 @@ export default function AccountabilityTemplatesPage() {
   const [editIsDefault, setEditIsDefault] = useState(false);
   const [editLogoFile, setEditLogoFile] = useState<File | null>(null);
   const [editLogoPreview, setEditLogoPreview] = useState<string | null>(null);
+  const [editLetterheadFile, setEditLetterheadFile] = useState<File | null>(null);
+  const [editLetterheadPreview, setEditLetterheadPreview] = useState<string | null>(null);
   const [editPropertyOfficer, setEditPropertyOfficer] = useState('');
   const [editAuthorizedRep, setEditAuthorizedRep] = useState('');
 
@@ -223,6 +238,8 @@ export default function AccountabilityTemplatesPage() {
     setEditIsDefault(template.isDefault || false);
     setEditLogoFile(null);
     setEditLogoPreview(template.headerLogo || null);
+    setEditLetterheadFile(null);
+    setEditLetterheadPreview(template.letterheadPath || null);
     setEditPropertyOfficer(template.defaultPropertyOfficer || '');
     setEditAuthorizedRep(template.defaultAuthorizedRep || '');
     setIsNew(newFlag);
@@ -243,6 +260,7 @@ export default function AccountabilityTemplatesPage() {
       title: '',
       content: '',
       headerLogo: null,
+      letterheadPath: null,
       defaultLogo: null,
       isDefault: false,
       defaultPropertyOfficer: null,
@@ -261,6 +279,16 @@ export default function AccountabilityTemplatesPage() {
   function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!isAllowedLogoFile(file)) {
+      addToast('error', 'Logo must be a PNG or JPG file');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      addToast('error', 'Logo must be 5 MB or smaller');
+      e.target.value = '';
+      return;
+    }
     setEditLogoFile(file);
     setEditLogoPreview(URL.createObjectURL(file));
   }
@@ -282,6 +310,31 @@ export default function AccountabilityTemplatesPage() {
     try {
       setSaving(true);
 
+      // Upload letterhead file first if a new one was selected
+      let letterheadPathToSave: string | undefined;
+      if (editLetterheadFile) {
+        const lhForm = new FormData();
+        lhForm.append('letterhead', editLetterheadFile);
+        const token = getToken();
+        const lhRes = await fetch('/api/agreements/upload-letterhead', {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: lhForm,
+        });
+        let lhJson: any;
+        try {
+          lhJson = await lhRes.json();
+        } catch {
+          throw new Error(lhRes.ok ? 'Letterhead upload failed: invalid response' : `Letterhead upload failed (${lhRes.status})`);
+        }
+        if (lhJson.success && lhJson.data?.path) {
+          letterheadPathToSave = lhJson.data.path;
+        } else {
+          const msg = lhJson.error?.message || lhJson.message || 'Letterhead upload failed';
+          throw new Error(typeof msg === 'string' ? msg : 'Letterhead upload failed');
+        }
+      }
+
       const payload = {
         name: editName.trim(),
         title: editTitle,
@@ -289,6 +342,7 @@ export default function AccountabilityTemplatesPage() {
         isDefault: String(editIsDefault),
         defaultPropertyOfficer: editPropertyOfficer,
         defaultAuthorizedRep: editAuthorizedRep,
+        ...(letterheadPathToSave ? { letterheadPath: letterheadPathToSave } : {}),
       };
 
       if (isNew) {
@@ -302,14 +356,22 @@ export default function AccountabilityTemplatesPage() {
         await fetchVersionHistory(created.id);
         addToast('success', 'Template created');
       } else if (selectedId) {
+        const currentTemplate = templates.find(t => t.id === selectedId);
         const updated = await multipartRequest(
           `/agreements/templates/${selectedId}`, 'PATCH', payload, editLogoFile,
         );
-        setTemplates(prev => prev.map(t => t.id === selectedId ? updated : t));
+        // Normalize media paths so they don't disappear if the PATCH response
+        // omits them (e.g. when the path was sent as a string field, not a file upload)
+        const normalizedUpdated = {
+          ...updated,
+          headerLogo: updated.headerLogo ?? (editLogoFile ? undefined : currentTemplate?.headerLogo) ?? null,
+          letterheadPath: updated.letterheadPath ?? letterheadPathToSave ?? currentTemplate?.letterheadPath ?? null,
+        };
+        setTemplates(prev => prev.map(t => t.id === selectedId ? normalizedUpdated : t));
         // If we changed isDefault, refresh all to reflect changes
         if (editIsDefault) await fetchTemplates();
-        populateEditor(updated, false);
-        await fetchVersionHistory(updated.id);
+        populateEditor(normalizedUpdated, false);
+        await fetchVersionHistory(normalizedUpdated.id);
         addToast('success', 'Template updated');
       }
     } catch (err: any) {
@@ -817,6 +879,79 @@ export default function AccountabilityTemplatesPage() {
                           <Upload className="h-3 w-3" />
                           {editLogoPreview ? 'Change logo' : 'Choose file'}
                         </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Letterhead Upload (Full A4) */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                      Full A4 Letterhead
+                    </label>
+                    <div className="flex items-start gap-4">
+                      <div className="shrink-0">
+                        {editLetterheadPreview ? (
+                          <div className="relative group">
+                            <div
+                              className="h-16 w-[120px] rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-1 flex items-center justify-center overflow-hidden"
+                            >
+                              {editLetterheadPreview.endsWith('.pdf') ? (
+                                <div className="text-center">
+                                  <FileText className="h-6 w-6 text-red-500 mx-auto" />
+                                  <span className="text-[9px] text-slate-500 block mt-0.5">PDF letterhead</span>
+                                </div>
+                              ) : (
+                                <img
+                                  src={editLetterheadPreview}
+                                  alt="Letterhead preview"
+                                  className="h-full w-auto max-w-full object-contain"
+                                />
+                              )}
+                            </div>
+                            <button
+                              onClick={() => { setEditLetterheadFile(null); setEditLetterheadPreview(null); }}
+                              className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-50 dark:bg-red-900 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <label
+                            htmlFor="letterhead-upload"
+                            className="h-16 w-[120px] border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-md flex flex-col items-center justify-center cursor-pointer hover:border-[#f8931f] hover:bg-orange-50 transition-colors"
+                          >
+                            <ImageIcon className="h-5 w-5 text-slate-400" />
+                            <span className="text-[10px] text-slate-400 mt-0.5">Upload letterhead</span>
+                          </label>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <input
+                          id="letterhead-upload"
+                          type="file"
+                          accept="image/png, image/jpeg, application/pdf"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            setEditLetterheadFile(file);
+                            if (file.type === 'application/pdf') {
+                              setEditLetterheadPreview(file.name);
+                            } else {
+                              setEditLetterheadPreview(URL.createObjectURL(file));
+                            }
+                          }}
+                          className="hidden"
+                        />
+                        <p className="text-xs text-slate-400">
+                          Upload a PNG, JPG, or PDF of the full A4 letterhead (max 10 MB). Used as background in &quot;Full Digital&quot; PDF mode.
+                        </p>
+                        <label
+                          htmlFor="letterhead-upload"
+                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-[#012061] dark:text-slate-100 hover:text-[#f8931f] transition-colors cursor-pointer"
+                        >
+                          <Upload className="h-3 w-3" />
+                          {editLetterheadPreview ? 'Change letterhead' : 'Choose file'}
+                        </label>
                       </div>
                     </div>
                   </div>

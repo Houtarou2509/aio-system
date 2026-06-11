@@ -7,6 +7,12 @@
  *   {{#ifMultipleAssets}}...{{/ifMultipleAssets}}
  */
 
+/** A text run with optional underline for resolved variable values. */
+export interface TextRun {
+  text: string;
+  underline: boolean;
+}
+
 export interface TemplateData {
   date?: string;
   personnelName?: string;
@@ -98,6 +104,52 @@ export function parseTemplate(template: string, data: TemplateData): string {
   return applyConditionals(template, data).replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
     return vars[key] !== undefined ? vars[key] : `{{${key}}}`;
   });
+}
+
+/**
+ * Like parseTemplate(), but returns structured TextRun[] so the PDF renderer
+ * can underline resolved variable values while leaving static text plain.
+ *
+ * Each TextRun is either:
+ *  - static text  → underline: false
+ *  - resolved var → underline: true  (only when the variable was known and resolved)
+ *
+ * Unknown / unresolved {{tokens}} are kept as-is without underline.
+ * Empty resolved values produce no run (no blank underline line).
+ */
+export function parseTemplateWithRuns(template: string, data: TemplateData): TextRun[] {
+  const vars = computeDerived(data);
+  const processed = applyConditionals(template, data);
+  const runs: TextRun[] = [];
+
+  // Split around {{word}} tokens. With 2 capture groups, split produces:
+  // [static, "{{token}}", "key", static, "{{token}}", "key", ...]
+  const parts = processed.split(/(\{\{(\w+)\}\})/g);
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (!part) continue;
+
+    // Check if this part is a {{token}} (full match from group 1)
+    if (part.startsWith('{{') && part.endsWith('}}')) {
+      const key = parts[i + 1]; // group 2 = the key name
+      if (key && vars[key] !== undefined) {
+        const resolved = vars[key];
+        if (resolved !== '') {
+          runs.push({ text: resolved, underline: true });
+        }
+        i++; // skip the key name part (group 2)
+      } else {
+        // Unknown variable — keep as-is, no underline
+        runs.push({ text: part, underline: false });
+        if (key !== undefined) i++; // skip key group if present
+      }
+    } else {
+      // Static text
+      if (part) runs.push({ text: part, underline: false });
+    }
+  }
+
+  return runs;
 }
 
 /** Return the list of available placeholder keys and their descriptions. */

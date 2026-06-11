@@ -7,6 +7,7 @@ export const createAgreementTemplateSchema = z.object({
   isDefault: z.enum(['true', 'false']).optional(),
   defaultPropertyOfficer: z.string().max(200).optional(),
   defaultAuthorizedRep: z.string().max(200).optional(),
+  letterheadPath: z.string().max(500).optional(),
 });
 
 export const updateAgreementTemplateSchema = z.object({
@@ -16,6 +17,7 @@ export const updateAgreementTemplateSchema = z.object({
   isDefault: z.enum(['true', 'false']).optional(),
   defaultPropertyOfficer: z.string().max(200).optional(),
   defaultAuthorizedRep: z.string().max(200).optional(),
+  letterheadPath: z.string().max(500).optional(),
 }).refine(d => Object.keys(d).length > 0, {
   message: 'Provide at least one field to update',
 });
@@ -47,6 +49,7 @@ export const agreementPdfSchema = z.object({
   recipientSignatureName: z.string().max(200).optional().nullable(),
   documentNumber: z.string().max(100).optional().nullable(),
   agreementDocumentId: z.string().uuid().optional().nullable(),
+  renderMode: z.enum(['preprinted', 'fullDigital']).default('preprinted'),
 });
 
 export const templatePreviewSchema = z.object({

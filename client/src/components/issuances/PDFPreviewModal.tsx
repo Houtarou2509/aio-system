@@ -2,6 +2,8 @@ import { useRef, useEffect, useCallback, useState } from 'react';
 import { X, Printer, Download, Loader2, FileText, CheckCircle2 } from 'lucide-react';
 import { PermissionGate } from '../auth';
 
+type RenderMode = 'preprinted' | 'fullDigital';
+
 interface PDFPreviewModalProps {
   open: boolean;
   onClose: () => void;
@@ -14,6 +16,10 @@ interface PDFPreviewModalProps {
   signedPdfPath?: string | null;
   signedUploadedAt?: string | null;
   onSignedCopyUploaded?: (document: any) => void;
+  /** Callback to regenerate the preview when the mode changes. */
+  onRenderModeChange?: (mode: RenderMode) => void;
+  /** Current render mode, defaults to 'preprinted'. */
+  renderMode?: RenderMode;
 }
 
 function toPublicFileUrl(path?: string | null) {
@@ -43,6 +49,8 @@ export default function PDFPreviewModal({
   signedPdfPath,
   signedUploadedAt,
   onSignedCopyUploaded,
+  onRenderModeChange,
+  renderMode: renderModeProp = 'preprinted',
 }: PDFPreviewModalProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -51,6 +59,12 @@ export default function PDFPreviewModal({
   const [uploadError, setUploadError] = useState('');
   const [currentSignedPdfPath, setCurrentSignedPdfPath] = useState<string | null>(signedPdfPath || null);
   const [currentSignedUploadedAt, setCurrentSignedUploadedAt] = useState<string | null>(signedUploadedAt || null);
+  const [localRenderMode, setLocalRenderMode] = useState<RenderMode>(renderModeProp);
+
+  // Sync render mode from parent
+  useEffect(() => {
+    setLocalRenderMode(renderModeProp);
+  }, [renderModeProp]);
 
   useEffect(() => {
     setCurrentSignedPdfPath(signedPdfPath || null);
@@ -163,7 +177,7 @@ export default function PDFPreviewModal({
         </button>
 
         {/* Action buttons — floating top-left */}
-        <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
+        <div className="absolute top-3 left-3 z-10 flex items-center gap-2 flex-wrap">
           <button
             onClick={handlePrint}
             disabled={!blobUrl}
@@ -180,6 +194,40 @@ export default function PDFPreviewModal({
           >
             <Download className="w-3.5 h-3.5" /> Download
           </button>
+
+          {/* Render mode selector */}
+          {onRenderModeChange && (
+            <div className="inline-flex rounded-lg shadow overflow-hidden bg-white dark:bg-slate-800/80">
+              <button
+                onClick={() => {
+                  setLocalRenderMode('preprinted');
+                  onRenderModeChange('preprinted');
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  localRenderMode === 'preprinted'
+                    ? 'bg-[#012061] text-white'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                }`}
+                title="Preprinted letterhead — content only, for printing on pre-printed A4 paper"
+              >
+                Preprinted
+              </button>
+              <button
+                onClick={() => {
+                  setLocalRenderMode('fullDigital');
+                  onRenderModeChange('fullDigital');
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold transition-colors border-l border-slate-200 dark:border-slate-600 ${
+                  localRenderMode === 'fullDigital'
+                    ? 'bg-[#012061] text-white'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                }`}
+                title="Full digital PDF — includes letterhead background for sharing or printing on blank paper"
+              >
+                Full Digital
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Document-level signed copy manager */}

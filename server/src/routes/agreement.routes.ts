@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
@@ -11,6 +11,7 @@ import { validate } from '../middleware/validate';
 import { createAgreementTemplateSchema, updateAgreementTemplateSchema, agreementPdfSchema, templatePreviewSchema, templateValidationSchema, backfillAgreementDocumentsSchema, sanitizeAgreementDocumentsSchema } from './agreement.schema';
 import { AUDIT_ACTIONS, logAudit } from '../services/auditLog.service';
 import { prisma } from '../lib/prisma';
+import { convertPdfFirstPageToPng } from '../utils/pdfToImage';
 
 const router = Router();
 
@@ -36,7 +37,44 @@ const logoUpload = multer({
     if (allowed.test(ext)) {
       cb(null, true);
     } else {
-      cb(null, false);  // silently reject — avoids unhandled MulterError → 500
+      cb(new Error('Logo must be a PNG or JPG file'));
+    }
+  },
+});
+
+const handleLogoUpload = (req: Request, res: Response, next: NextFunction) => {
+  logoUpload.single('headerLogo')(req, res, (err: any) => {
+    if (!err) return next();
+    const message = err.code === 'LIMIT_FILE_SIZE'
+      ? 'Logo must be 5 MB or smaller'
+      : err.message || 'Logo upload failed';
+    return error(res, message, 400);
+  });
+};
+
+// Letterhead upload storage — accepts PDF, PNG, JPG for full A4 letterhead backgrounds
+// PDFs are converted to PNG at upload time so PDFKit can render them.
+const letterheadDir = path.resolve(__dirname, '../../uploads/letterheads');
+if (!fs.existsSync(letterheadDir)) {
+  fs.mkdirSync(letterheadDir, { recursive: true });
+}
+const letterheadUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, letterheadDir),
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      const ext = path.extname(file.originalname).toLowerCase() || '.png';
+      cb(null, `letterhead-${uniqueSuffix}${ext}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB for full-page letterhead
+  fileFilter: (_req, file, cb) => {
+    const allowed = /\.(png|jpe?g|pdf)$/i;
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.test(ext)) {
+      cb(null, true);
+    } else {
+      cb(null, false);
     }
   },
 });
@@ -113,12 +151,12 @@ router.get(
   },
 );
 
-// POST /api/agreement/templates   (multipart: name, content, isDefault + optional headerLogo file)
+// POST /api/agreement/templates   (multipart: name, content, isDefault + optional headerLogo/letterhead files)
 router.post(
   '/templates',
   authenticate,
   hasPermission('settings:view'),
-  logoUpload.single('headerLogo'),
+  handleLogoUpload,
   validate(createAgreementTemplateSchema),
   async (req: Request, res: Response) => {
     try {
@@ -132,6 +170,7 @@ router.post(
           isDefault: req.body.isDefault === 'true',
           defaultPropertyOfficer: req.body.defaultPropertyOfficer || undefined,
           defaultAuthorizedRep: req.body.defaultAuthorizedRep || undefined,
+          letterheadPath: req.body.letterheadPath || undefined,
         },
         logoPath,
       );
@@ -142,12 +181,12 @@ router.post(
   },
 );
 
-// PATCH /api/agreement/templates/:id   (multipart: name?, content?, isDefault?, headerLogo?)
+// PATCH /api/agreement/templates/:id   (multipart: name?, content?, isDefault?, headerLogo?, letterhead?)
 router.patch(
   '/templates/:id',
   authenticate,
   hasPermission('settings:view'),
-  logoUpload.single('headerLogo'),
+  handleLogoUpload,
   validate(updateAgreementTemplateSchema),
   async (req: Request, res: Response) => {
     try {
@@ -162,6 +201,8 @@ router.patch(
           isDefault: req.body.isDefault !== undefined ? req.body.isDefault === 'true' : undefined,
           defaultPropertyOfficer: req.body.defaultPropertyOfficer || undefined,
           defaultAuthorizedRep: req.body.defaultAuthorizedRep || undefined,
+          headerLogo: req.body.headerLogo,
+          letterheadPath: req.body.letterheadPath,
         },
         logoPath,
       );
@@ -203,6 +244,47 @@ router.post(
       if (!req.file) return error(res, 'No logo file provided', 400);
       const logoPath = `/uploads/logos/${req.file.filename}`;
       success(res, { path: logoPath, filename: req.file.filename }, 201);
+    } catch (e: any) {
+      error(res, e.message, 400);
+    }
+  },
+);
+
+/* ═══════════════════════════════════════════════════════
+   UPLOAD LETTERHEAD (full A4 letterhead background)
+   ═══════════════════════════════════════════════════════ */
+
+// POST /api/agreement/upload-letterhead
+router.post(
+  '/upload-letterhead',
+  authenticate,
+  hasPermission('settings:view'),
+  letterheadUpload.single('letterhead'),
+  async (req: Request, res: Response) => {
+    try {
+      if (!req.file) return error(res, 'No letterhead file provided', 400);
+
+      let letterheadPath = `/uploads/letterheads/${req.file.filename}`;
+      const fullPath = path.resolve(__dirname, '../../uploads/letterheads', req.file.filename);
+      const ext = path.extname(req.file.originalname).toLowerCase();
+
+      // If a PDF was uploaded, convert page 1 to PNG so PDFKit can render it
+      if (ext === '.pdf') {
+        try {
+          const pngBaseName = req.file.filename.replace(/\.pdf$/i, '');
+          const pngAbsolutePath = await convertPdfFirstPageToPng(fullPath, letterheadDir, pngBaseName);
+          // Update letterheadPath to point to the converted PNG
+          letterheadPath = `/uploads/letterheads/${path.basename(pngAbsolutePath)}`;
+          // Optionally remove the original PDF to save disk space
+          try { fs.unlinkSync(fullPath); } catch { /* best-effort */ }
+        } catch (conversionErr: any) {
+          // Clean up the uploaded PDF since conversion failed
+          try { fs.unlinkSync(fullPath); } catch { /* best-effort */ }
+          return error(res, conversionErr.message || 'Failed to convert PDF letterhead to image', 400);
+        }
+      }
+
+      success(res, { path: letterheadPath, filename: req.file.filename }, 201);
     } catch (e: any) {
       error(res, e.message, 400);
     }
@@ -348,7 +430,10 @@ router.post(
   validate(agreementPdfSchema),
   async (req: Request, res: Response) => {
     try {
-      const pdfBuffer = await agreementService.generateAgreementPdf(req.body);
+      const pdfBuffer = await agreementService.generateAgreementPdf({
+        ...req.body,
+        renderMode: req.body.renderMode || 'preprinted',
+      });
       logAudit({
         userId: (req as any).user?.id ?? null,
         action: AUDIT_ACTIONS.AGREEMENT_PDF_VIEWED,
