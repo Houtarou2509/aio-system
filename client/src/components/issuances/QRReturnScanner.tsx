@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, ApiError } from '../../lib/api';
 import { QrCode, X, CheckCircle2, AlertCircle, Loader2, Package, Users } from 'lucide-react';
 
 interface Props {
@@ -16,8 +16,41 @@ interface IssuanceInfo {
   assignedAt: string;
 }
 
+type QRReturnPayload =
+  | { kind: 'assetLookup'; value: string }
+  | { kind: 'assetId'; value: string };
+
+export function parseQRReturnPayload(decodedText: string): QRReturnPayload | null {
+  const value = decodedText.trim();
+  if (!value) return null;
+
+  if (value.startsWith('PROP:') || value.startsWith('ASSET:')) {
+    return { kind: 'assetLookup', value };
+  }
+
+  try {
+    const url = new URL(value, 'http://localhost');
+    const assetPathMatch = url.pathname.match(/\/assets\/([A-Za-z0-9_-]+)$/);
+    if (assetPathMatch) return { kind: 'assetId', value: assetPathMatch[1] };
+    if (url.pathname.match(/\/guest\/[A-Za-z0-9_-]+$/)) return null;
+  } catch {
+    // Fall through to raw UUID parsing.
+  }
+
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+    return { kind: 'assetId', value };
+  }
+
+  return null;
+}
+
 export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const isStoppingRef = useRef(false);
+  const hasStartedRef = useRef(false);
+  const hasHandledScanRef = useRef(false);
+  const isMountedRef = useRef(true);
+
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState('');
   const [issuance, setIssuance] = useState<IssuanceInfo | null>(null);
@@ -25,15 +58,89 @@ export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
   const [returning, setReturning] = useState(false);
   const [success, setSuccess] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [scanSession, setScanSession] = useState(0);
+
+  const safeStopAndClearScanner = useCallback(async () => {
+    if (!scannerRef.current) return;
+    if (isStoppingRef.current) return;
+
+    isStoppingRef.current = true;
+    const scanner = scannerRef.current;
+
+    try {
+      if (hasStartedRef.current) {
+        try {
+          await scanner.stop();
+        } catch (e: any) {
+          const message = String(e?.message || e || '');
+          if (!message.includes('not running') && !message.includes('not paused')) {
+            console.warn('[QRReturnScanner] stop() error:', e);
+          }
+        }
+      }
+      try { scanner.clear(); } catch {}
+    } finally {
+      scannerRef.current = null;
+      hasStartedRef.current = false;
+      isStoppingRef.current = false;
+      if (isMountedRef.current) setScanning(false);
+    }
+  }, []);
+
+  const resolveAssetId = useCallback(async (decodedText: string): Promise<string | null> => {
+    const payload = parseQRReturnPayload(decodedText);
+    if (!payload) return null;
+
+    if (payload.kind === 'assetId') return payload.value;
+
+    const res = await apiFetch(`/assets/lookup?q=${encodeURIComponent(payload.value)}`);
+    return res.data?.id || null;
+  }, []);
+
+  const resolveActiveIssuance = useCallback(async (decodedText: string) => {
+    try {
+      const assetId = await resolveAssetId(decodedText);
+      if (!isMountedRef.current) return;
+
+      if (!assetId) {
+        setNotFound('Asset not found or no active issuance');
+        return;
+      }
+
+      const res = await apiFetch(`/issuances/active/asset/${encodeURIComponent(assetId)}`);
+      if (!isMountedRef.current) return;
+
+      if (res.data) {
+        setIssuance(res.data);
+      } else {
+        setNotFound(res.message || 'No active issuance found for this asset');
+      }
+    } catch (e: any) {
+      if (!isMountedRef.current) return;
+      const message = e instanceof ApiError && e.status !== 404
+        ? e.message
+        : 'Asset not found or no active issuance';
+      setNotFound(message);
+    }
+  }, [resolveAssetId]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
-    // Reset state on open
+
     setIssuance(null);
     setNotFound('');
     setError('');
     setSuccess(false);
     setReturning(false);
+    setScanning(false);
+    setIsClosing(false);
+    hasHandledScanRef.current = false;
+    isStoppingRef.current = false;
 
     let isCancelled = false;
     const scanner = new Html5Qrcode('qr-return-reader');
@@ -44,53 +151,38 @@ export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
         { facingMode: 'environment' },
         { fps: 10, qrbox: { width: 250, height: 250 } },
         async (decodedText) => {
-          if (isCancelled) return;
-          isCancelled = true;
-          // Stop scanning
-          try { await scanner.stop(); scanner.clear(); } catch {}
-          setScanning(false);
+          if (isCancelled || hasHandledScanRef.current) return;
+          hasHandledScanRef.current = true;
 
-          // Extract assetId from QR — supports URLs, paths, or raw IDs
-          let assetId = decodedText;
-          const urlMatch = decodedText.match(/assets\/([a-zA-Z0-9_-]+)/);
-          const guestMatch = decodedText.match(/guest\/([a-zA-Z0-9_-]+)/);
-          if (urlMatch) assetId = urlMatch[1];
-          else if (guestMatch) assetId = guestMatch[1];
-
-          // Look up active issuance for this asset
-          try {
-            const res = await apiFetch(`/api/issuances/active/asset/${assetId}`);
-            if (res.data) {
-              setIssuance(res.data);
-            } else {
-              setNotFound(res.message || 'No active issuance found for this asset');
-            }
-          } catch (e: any) {
-            setNotFound('Asset not found or no active issuance');
-          }
+          await safeStopAndClearScanner();
+          if (!isMountedRef.current || isCancelled) return;
+          resolveActiveIssuance(decodedText);
         },
-        () => {} // ignore scan failures
+        () => {}
       )
-      .then(() => { if (!isCancelled) setScanning(true); })
+      .then(() => {
+        if (isCancelled) {
+          safeStopAndClearScanner();
+          return;
+        }
+        hasStartedRef.current = true;
+        setScanning(true);
+      })
       .catch((err) => {
         if (!isCancelled) setError(typeof err === 'string' ? err : 'Camera access denied or unavailable');
       });
 
     return () => {
       isCancelled = true;
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {});
-        scannerRef.current.clear();
-        scannerRef.current = null;
-      }
+      safeStopAndClearScanner();
     };
-  }, [open]);
+  }, [open, scanSession, safeStopAndClearScanner, resolveActiveIssuance]);
 
   const handleReturn = async () => {
     if (!issuance) return;
     setReturning(true);
     try {
-      await apiFetch(`/api/issuances/${issuance.id}/return`, { method: 'POST', body: { condition: 'Good', viaQR: true } });
+      await apiFetch(`/issuances/${issuance.id}/return`, { method: 'POST', body: { returnCondition: 'Good', viaQR: true } });
       setSuccess(true);
       onReturned();
     } catch (e: any) {
@@ -100,25 +192,23 @@ export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
     }
   };
 
-  const handleClose = () => {
+  const handleClose = useCallback(async () => {
     if (isClosing) return;
     setIsClosing(true);
-    if (scannerRef.current) {
-      scannerRef.current.stop()
-        .then(() => scannerRef.current?.clear())
-        .catch(() => scannerRef.current?.clear())
-        .finally(() => {
-          scannerRef.current = null;
-          setScanning(false);
-          onClose();
-          setIsClosing(false);
-        });
-    } else {
-      setScanning(false);
-      onClose();
-      setIsClosing(false);
-    }
-  };
+    await safeStopAndClearScanner();
+    onClose();
+    if (isMountedRef.current) setIsClosing(false);
+  }, [isClosing, safeStopAndClearScanner, onClose]);
+
+  const handleScanAgain = useCallback(() => {
+    setNotFound('');
+    setError('');
+    setScanning(false);
+    setIssuance(null);
+    setSuccess(false);
+    hasHandledScanRef.current = false;
+    setScanSession((current) => current + 1);
+  }, []);
 
   if (!open) return null;
 
@@ -131,7 +221,7 @@ export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
             <QrCode className="w-5 h-5 text-[#f8931f]" />
             <h3 className="text-sm font-bold text-white">QR Return Scanner</h3>
           </div>
-          <button onClick={handleClose} className="text-white/70 hover:text-white"><X className="w-4 h-4" /></button>
+          <button onClick={handleClose} disabled={isClosing} className="text-white/70 hover:text-white disabled:opacity-50"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-5">
@@ -141,7 +231,7 @@ export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
               <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-emerald-500" />
               <h3 className="text-base font-bold text-emerald-700 mb-1">Asset Returned!</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                {issuance?.asset?.name} has been marked as returned from {issuance?.personnel?.fullName || '—'}
+                {issuance?.asset?.name} has been marked as returned from {issuance?.personnel?.fullName || '-'}
               </p>
               <button onClick={handleClose} className="px-4 py-2 rounded-lg text-xs font-semibold bg-[#012061] text-white hover:bg-[#001a4d]">
                 Done
@@ -163,15 +253,15 @@ export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
                   <div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">Asset</p>
                     <p className="text-sm font-semibold" style={{ color: '#012061' }}>{issuance.asset?.name}</p>
-                    <p className="text-[10px] text-slate-400">S/N: {issuance.asset?.serialNumber || '—'} • P/N: {issuance.asset?.propertyNumber || '—'}</p>
+                    <p className="text-[10px] text-slate-400">S/N: {issuance.asset?.serialNumber || '-'} | P/N: {issuance.asset?.propertyNumber || '-'}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <Users className="w-5 h-5 text-[#f8931f]" />
                   <div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">Currently Held By</p>
-                    <p className="text-sm font-semibold" style={{ color: '#012061' }}>{issuance.personnel?.fullName || '—'}</p>
-                    <p className="text-[10px] text-slate-400">{issuance.personnel?.position || ''} {issuance.personnel?.department ? `• ${issuance.personnel.department}` : ''}</p>
+                    <p className="text-sm font-semibold" style={{ color: '#012061' }}>{issuance.personnel?.fullName || '-'}</p>
+                    <p className="text-[10px] text-slate-400">{issuance.personnel?.position || ''} {issuance.personnel?.department ? `| ${issuance.personnel.department}` : ''}</p>
                   </div>
                 </div>
                 <p className="text-[10px] text-slate-400">Issued: {new Date(issuance.assignedAt).toLocaleDateString()}</p>
@@ -196,7 +286,7 @@ export default function QRReturnScanner({ open, onClose, onReturned }: Props) {
               <AlertCircle className="w-10 h-10 mx-auto mb-3 text-amber-500" />
               <h3 className="text-sm font-bold text-amber-700 mb-1">No Active Issuance</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">{notFound}</p>
-              <button onClick={() => { setNotFound(''); setScanning(false); }} className="px-4 py-2 rounded-lg text-xs font-semibold bg-[#012061] text-white hover:bg-[#001a4d]">
+              <button onClick={handleScanAgain} className="px-4 py-2 rounded-lg text-xs font-semibold bg-[#012061] text-white hover:bg-[#001a4d]">
                 Scan Again
               </button>
             </div>

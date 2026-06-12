@@ -3,18 +3,31 @@ import bwipjs from 'bwip-js';
 import { prisma } from '../lib/prisma';
 
 
+/* ─── 1-inch label constants ───
+   Physical size: 1 inch × 1 inch = 72pt × 72pt
+   A4 sheet layout with margins and grid
+*/
 
-const PAGE_WIDTH = 595;
-const PAGE_HEIGHT = 842;
-const MARGIN_X = 15;
-const MARGIN_Y = 30;
-const COLS = 5;
-const GAP_X = 8;
-const GAP_Y = 10;
-const CARD_WIDTH = (PAGE_WIDTH - (MARGIN_X * 2) - (GAP_X * (COLS - 1))) / COLS; // ~101
-const CARD_HEIGHT = CARD_WIDTH + 22; // extra 22pts for text below QR
-const ROWS = Math.floor((PAGE_HEIGHT - MARGIN_Y - 15) / (CARD_HEIGHT + GAP_Y));
-const CARDS_PER_PAGE = COLS * ROWS;
+const LABEL_W = 72;           // 1 inch in PDF points
+const LABEL_H = 72;           // 1 inch in PDF points
+const PAGE_W = 595;           // A4 width
+const PAGE_H = 842;           // A4 height
+const MARGIN_X = 18;
+const MARGIN_Y = 18;
+const GAP_X = 6;
+const GAP_Y = 6;
+const COLS = Math.floor((PAGE_W - MARGIN_X * 2 + GAP_X) / (LABEL_W + GAP_X)); // ~7
+const ROWS = Math.floor((PAGE_H - MARGIN_Y * 2 + GAP_Y) / (LABEL_H + GAP_Y)); // ~9
+const LABELS_PER_PAGE = COLS * ROWS;
+
+// Label internal layout (all in points, relative to label origin)
+const TOP_TEXT_PT = 5.5;      // "UPPI-DRDF" font size
+const TOP_TEXT_Y = 3;         // Y offset from label top
+const QR_SIZE = 44;           // QR code size (leaves quiet zone)
+const QR_Y_OFFSET = TOP_TEXT_Y + TOP_TEXT_PT + 2; // Y offset for QR top
+const BOTTOM_TEXT_PT = 5;     // Property number font size
+const BOTTOM_TEXT_Y_PAD = 2;  // Padding below QR before bottom text
+
 
 async function generateQRCode(data: string, size: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -36,10 +49,10 @@ async function generateQRCode(data: string, size: number): Promise<Buffer> {
 function truncateText(doc: typeof PDFDocument['prototype'], text: string, maxWidth: number): string {
   if (doc.widthOfString(text) <= maxWidth) return text;
   let truncated = text;
-  while (truncated.length > 0 && doc.widthOfString(truncated + '...') > maxWidth) {
+  while (truncated.length > 0 && doc.widthOfString(truncated + '…') > maxWidth) {
     truncated = truncated.slice(0, -1);
   }
-  return truncated + '...';
+  return truncated + '…';
 }
 
 export async function generateLabelsPdf(
@@ -54,70 +67,64 @@ export async function generateLabelsPdf(
   if (assets.length === 0) throw new Error('No assets found');
 
   // Pre-generate all QR codes
-  const qrPadding = 5;
-  const qrSize = CARD_WIDTH - (qrPadding * 2); // ~91
   const qrPngs: Map<string, Buffer> = new Map();
   for (const asset of assets) {
     const qrValue = (asset as any).propertyNumber
       ? `PROP:${(asset as any).propertyNumber}`
       : `ASSET:${asset.id}`;
-    qrPngs.set(asset.id, await generateQRCode(qrValue, qrSize));
+    qrPngs.set(asset.id, await generateQRCode(qrValue, QR_SIZE));
   }
-
-  // Format date for page header
-  const now = new Date();
-  const dateStr = `${now.getMonth() + 1}/${now.getDate()}/${String(now.getFullYear()).slice(-2)}, ${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
 
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    const doc = new PDFDocument({ size: [PAGE_WIDTH, PAGE_HEIGHT], margin: 0, autoFirstPage: false });
+    const doc = new PDFDocument({ size: [PAGE_W, PAGE_H], margin: 0, autoFirstPage: false });
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
     for (let i = 0; i < assets.length; i++) {
-      const posInPage = i % CARDS_PER_PAGE;
+      const posInPage = i % LABELS_PER_PAGE;
 
       // Add new page if needed
       if (posInPage === 0) {
-        doc.addPage({ size: [PAGE_WIDTH, PAGE_HEIGHT], margin: 0 });
-
-        // Page header
-        doc.fontSize(7).font('Helvetica').fillColor('#9ca3af')
-          .text(dateStr, MARGIN_X, 12, { width: 200 });
-        doc.fontSize(7).font('Helvetica-Bold').fillColor('#9ca3af')
-          .text('Asset Labels', 0, 12, { width: PAGE_WIDTH, align: 'center' });
+        doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0 });
       }
 
       const asset = assets[i];
       const col = posInPage % COLS;
       const row = Math.floor(posInPage / COLS);
-      const x = MARGIN_X + col * (CARD_WIDTH + GAP_X);
-      const y = MARGIN_Y + row * (CARD_HEIGHT + GAP_Y);
+      const x = MARGIN_X + col * (LABEL_W + GAP_X);
+      const y = MARGIN_Y + row * (LABEL_H + GAP_Y);
 
-      const serialNum = asset.serialNumber ?? 'No S/N';
       const propNum = (asset as any).propertyNumber ?? 'N/A';
 
-      // Card border — light gray
-      doc.roundedRect(x, y, CARD_WIDTH, CARD_HEIGHT, 2)
-        .strokeColor('#cccccc').lineWidth(0.5).stroke();
+      // ── Top text: "UPPI-DRDF" ──
+      doc.fontSize(TOP_TEXT_PT)
+        .font('Helvetica-Bold')
+        .fillColor('#000000')
+        .text('UPPI-DRDF', x, y + TOP_TEXT_Y, {
+          width: LABEL_W,
+          align: 'center',
+          lineBreak: false,
+        });
 
-      // QR code
-      const qrX = x + qrPadding;
-      const qrY = y + qrPadding;
+      // ── QR code: centered horizontally ──
+      const qrX = x + (LABEL_W - QR_SIZE) / 2;
+      const qrY = y + QR_Y_OFFSET;
       const qrPng = qrPngs.get(asset.id)!;
-      doc.image(qrPng, qrX, qrY, { width: qrSize, height: qrSize });
+      doc.image(qrPng, qrX, qrY, { width: QR_SIZE, height: QR_SIZE });
 
-      // Serial number — below QR, bold, 6.5pt
-      const snY = qrY + qrSize + 4;
-      doc.fontSize(6.5).font('Helvetica-Bold').fillColor('#000000');
-      const displaySN = truncateText(doc, serialNum, CARD_WIDTH - 6);
-      doc.text(displaySN, x, snY, { width: CARD_WIDTH, align: 'center' });
-
-      // Property # — below serial number, 6pt, gray
-      const propY = snY + 9;
-      doc.fontSize(6).font('Helvetica').fillColor('#555555')
-        .text(propNum, x, propY, { width: CARD_WIDTH, align: 'center' });
+      // ── Bottom text: property number ──
+      const bottomY = qrY + QR_SIZE + BOTTOM_TEXT_Y_PAD;
+      doc.fontSize(BOTTOM_TEXT_PT)
+        .font('Helvetica')
+        .fillColor('#000000');
+      const displayPN = truncateText(doc, propNum, LABEL_W - 4);
+      doc.text(displayPN, x, bottomY, {
+        width: LABEL_W,
+        align: 'center',
+        lineBreak: false,
+      });
     }
 
     doc.end();

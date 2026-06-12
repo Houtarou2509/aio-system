@@ -314,3 +314,88 @@ describe('QR Payload & Lookup', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('Label PDF — Layout & Content', () => {
+  it('Label PDF is valid PDF with correct content type and size', async () => {
+    const asset = await createAsset({ name: 'Layout Test', propertyNumber: 'UPPI-001', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .post('/api/labels/generate-pdf')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ assetIds: [asset.id] });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/pdf');
+    // PDF header
+    expect(res.body.slice(0, 5).toString()).toBe('%PDF-');
+    // Reasonable size (has content)
+    expect(res.body.length).toBeGreaterThan(500);
+  });
+
+  it('Label PDF contains image XObject for QR code', async () => {
+    const asset = await createAsset({ name: 'QR Image Test', propertyNumber: 'QR-IMG-001', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .post('/api/labels/generate-pdf')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ assetIds: [asset.id] });
+
+    expect(res.status).toBe(200);
+    const pdfStr = res.body.toString('latin1');
+    // QR code is embedded as an Image XObject
+    expect(pdfStr).toContain('/Subtype /Image');
+  });
+
+  it('Label PDF does not contain serial number text', async () => {
+    const asset = await createAsset({
+      name: 'No SN Test',
+      propertyNumber: 'UPPI-PROP-XYZ',
+      serialNumber: 'SN-SHOULD-NOT-APPEAR',
+      adminToken: users.ADMIN.accessToken,
+    });
+
+    const res = await request(app)
+      .post('/api/labels/generate-pdf')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ assetIds: [asset.id] });
+
+    expect(res.status).toBe(200);
+    // The serial number should NOT appear in the raw PDF buffer as plaintext
+    // (it's only used for QR payload encoding, not displayed)
+    const pdfStr = res.body.toString('utf8');
+    expect(pdfStr).not.toContain('SN-SHOULD-NOT-APPEAR');
+  });
+
+  it('Multi-asset label PDF still generates correctly', async () => {
+    const a1 = await createAsset({ name: 'Multi 1', propertyNumber: 'MULTI-001', adminToken: users.ADMIN.accessToken });
+    const a2 = await createAsset({ name: 'Multi 2', propertyNumber: 'MULTI-002', adminToken: users.ADMIN.accessToken });
+    const a3 = await createAsset({ name: 'Multi 3', propertyNumber: 'MULTI-003', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .post('/api/labels/generate-pdf')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ assetIds: [a1.id, a2.id, a3.id] });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/pdf');
+    // Multi-asset PDF should be larger than single-asset
+    expect(res.body.length).toBeGreaterThan(1000);
+    // Should have multiple Image XObjects (one per QR code)
+    const pdfStr = res.body.toString('latin1');
+    const imageCount = (pdfStr.match(/\/Subtype \/Image/g) || []).length;
+    expect(imageCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it('Single-asset label PDF generates with professional filename', async () => {
+    const asset = await createAsset({ name: 'Filename Test', propertyNumber: 'FN-LABEL-001', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .post('/api/labels/generate-pdf')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ assetIds: [asset.id] });
+
+    expect(res.status).toBe(200);
+    const disposition = res.headers['content-disposition'];
+    expect(disposition).toContain('1-asset.pdf');
+  });
+});
