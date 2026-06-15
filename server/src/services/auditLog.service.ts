@@ -14,6 +14,9 @@ export const AUDIT_ACTIONS = {
   ASSET_LOCKED: 'asset.locked',
   ASSET_RELEASED: 'asset.released',
   ISSUANCE_TRANSFERRED: 'issuance.transferred',
+  ISSUE_REPORT_CREATED: 'issue_report.created',
+  ISSUE_REPORT_STATUS_UPDATED: 'issue_report.status_updated',
+  ISSUE_REPORT_NOTES_UPDATED: 'issue_report.notes_updated',
 } as const;
 
 export async function logAudit(params: {

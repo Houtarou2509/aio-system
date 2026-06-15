@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import {
   Package, Factory, MapPin, Search, Plus, Pencil,
   PowerOff, Power, AlertTriangle, X, Truck, Briefcase,
+  Download, Upload,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose,
@@ -32,12 +33,6 @@ const GROUPS = [
   { key: 'manufacturers', label: 'Brands', icon: Factory, category: 'manufacturers' },
   { key: 'locations', label: 'Locations', icon: MapPin, category: 'locations' },
   { key: 'owners', label: 'Owners', icon: Briefcase, category: 'owners' },
-  // TODO: Add API support for these categories before enabling:
-  // { key: 'models', label: 'Models', icon: Smartphone, category: 'models' },
-  // { key: 'categories', label: 'Categories', icon: Tag, category: 'categories' },
-  // { key: 'conditions', label: 'Conditions', icon: ClipboardCheck, category: 'conditions' },
-  // { key: 'suppliers', label: 'Suppliers', icon: Truck, category: 'suppliers' },
-  // { key: 'acquisition-types', label: 'Acquisition Types', icon: ArrowDownCircle, category: 'acquisition-types' },
 ];
 
 /* ═══════════════════════════════════════════════════════════
@@ -93,7 +88,6 @@ function AddEditModal({
     const trimmed = value.trim();
     if (!trimmed) { setError('Name is required.'); return; }
     if (trimmed.length > 100) { setError('Name must be 100 characters or fewer.'); return; }
-    // Case-insensitive duplicate check (skip self when editing)
     const normalised = trimmed.toLowerCase();
     const isEditSelf = initialValue.trim().toLowerCase() === normalised;
     if (!isEditSelf && existingNames.some(n => n.toLowerCase() === normalised)) {
@@ -106,7 +100,6 @@ function AddEditModal({
       await onSave(trimmed);
       onClose();
     } catch (e: any) {
-      // Also handle server-side 409
       const msg = e?.message || 'Failed to save.';
       if (msg.includes('already exists')) {
         setError('This value already exists in this lookup group.');
@@ -121,7 +114,6 @@ function AddEditModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
-        {/* Header */}
         <div className="bg-[#012061] px-5 py-3.5 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-white">{title}</h3>
@@ -131,7 +123,6 @@ function AddEditModal({
             <X className="h-4 w-4" />
           </button>
         </div>
-        {/* Body */}
         <div className="px-5 py-4 max-h-[60vh] overflow-y-auto">
           <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
             Name <span className="text-red-500">*</span>
@@ -154,7 +145,6 @@ function AddEditModal({
             </div>
           )}
         </div>
-        {/* Footer */}
         <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-2 bg-slate-50 dark:bg-slate-900/50">
           <button
             className="rounded-lg px-4 py-2 text-xs font-medium text-[#012061] dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
@@ -176,29 +166,120 @@ function AddEditModal({
 }
 
 /* ═══════════════════════════════════════════════════════════
+   BACKUP IMPORT MODAL
+   ═══════════════════════════════════════════════════════════ */
+function BackupImportModal({
+  open,
+  loading,
+  error,
+  result,
+  onClose,
+  onFile,
+}: {
+  open: boolean;
+  loading: boolean;
+  error: string;
+  result: {
+    created: number; updated: number; unchanged: number; skipped: number;
+    groups?: Record<string, { created: number; updated: number; unchanged: number; skipped: number }>;
+    skippedItems?: Array<{ group: string; reason: string }>;
+  } | null;
+  onClose: () => void;
+  onFile: (file: File) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="bg-[#012061] px-5 py-3.5 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Import Lookup Backup</h3>
+            <p className="text-[11px] text-white/50 mt-0.5">JSON file from Export. Merges values without deleting local ones.</p>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-5 py-4">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={e => {
+              const file = e.target.files?.[0];
+              if (file) onFile(file);
+              if (e.target) e.target.value = '';
+            }}
+            className="block w-full text-xs text-slate-700 dark:text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-[#f8931f] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-[#e0841a]"
+          />
+
+          {loading && (
+            <div className="mt-4 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-[#f8931f]" /> Importing…
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30 px-3 py-2 text-xs text-red-600 dark:text-red-400">
+              {error}
+            </div>
+          )}
+
+          {result && (
+            <div className="mt-4 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-200">
+              <p className="font-semibold mb-1">Import summary</p>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                <span>Created:</span> <span>{result.created}</span>
+                <span>Updated:</span> <span>{result.updated}</span>
+                <span>Unchanged:</span> <span>{result.unchanged}</span>
+                <span>Skipped:</span> <span>{result.skipped}</span>
+              </div>
+              {result.skippedItems && result.skippedItems.length > 0 && (
+                <div className="mt-2 max-h-24 overflow-auto text-[10px] text-slate-600 dark:text-slate-400">
+                  {result.skippedItems.map((s, idx) => (
+                    <div key={idx} className="truncate">{`[${s.group}] ${s.reason}`}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
    MAIN PAGE
    ═══════════════════════════════════════════════════════════ */
 export default function InventoryLookupPage() {
   const { user } = useAuth();
   const [activeGroup, setActiveGroup] = useState('asset-types');
 
-  // Data state
   const [items, setItems] = useState<LookupItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Filter state
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
-  // Modal state
   const [showAdd, setShowAdd] = useState(false);
   const [editTarget, setEditTarget] = useState<LookupItem | null>(null);
-
-  // Toggle confirmation
   const [confirmToggle, setConfirmToggle] = useState<LookupItem | null>(null);
 
-  // Counts per group
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupResult, setBackupResult] = useState<{
+    created: number; updated: number; unchanged: number; skipped: number;
+    groups?: Record<string, { created: number; updated: number; unchanged: number; skipped: number }>;
+    skippedItems?: Array<{ group: string; reason: string }>;
+  } | null>(null);
+  const [backupError, setBackupError] = useState('');
+
   const [counts, setCounts] = useState<Record<string, number>>({});
 
   const token = localStorage.getItem('accessToken');
@@ -206,7 +287,6 @@ export default function InventoryLookupPage() {
 
   const activeGroupConfig = GROUPS.find(g => g.key === activeGroup)!;
 
-  // Fetch items for the active group
   const fetchItems = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -224,21 +304,22 @@ export default function InventoryLookupPage() {
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
-  // Reset search when switching groups
   useEffect(() => { setSearch(''); setStatusFilter('all'); }, [activeGroup]);
 
-  // Fetch counts for all groups
-  useEffect(() => {
-    GROUPS.forEach(async (g) => {
-      try {
-        const res = await fetch(`/api/lookups/${g.category}/all`, { headers: authHeaders });
-        const json = await res.json();
-        if (json.success) {
-          setCounts(prev => ({ ...prev, [g.key]: json.data?.length ?? 0 }));
-        }
-      } catch { /* skip */ }
-    });
-  }, [items]);
+  const fetchCounts = useCallback(async () => {
+    try {
+      const results = await Promise.all(
+        GROUPS.map(async (g) => {
+          const res = await fetch(`/api/lookups/${g.category}/all`, { headers: authHeaders });
+          const json = await res.json();
+          return { key: g.key, total: json.success ? json.data?.length ?? 0 : 0 };
+        })
+      );
+      setCounts(Object.fromEntries(results.map(r => [r.key, r.total])));
+    } catch { /* skip */ }
+  }, []);
+
+  useEffect(() => { fetchCounts(); }, [fetchCounts]);
 
   const allowed = user?.role === 'ADMIN' || user?.role === 'STAFF_ADMIN';
   if (!allowed) {
@@ -249,10 +330,55 @@ export default function InventoryLookupPage() {
     );
   }
 
-  // Existing names for duplicate validation
   const existingNames = items.map(i => i.value);
 
-  // Handlers
+  const handleExportBackup = async () => {
+    try {
+      const res = await fetch('/api/lookup-backup/export', { headers: authHeaders });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || 'Export failed');
+
+      const blob = new Blob([JSON.stringify(json.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const date = new Date().toISOString().split('T')[0];
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `aio-lookup-backup-${date}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setBackupError(e.message);
+      setShowBackupModal(true);
+    }
+  };
+
+  const handleImportBackup = async (file: File) => {
+    setBackupLoading(true);
+    setBackupError('');
+    setBackupResult(null);
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const res = await fetch('/api/lookup-backup/import', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || 'Import failed');
+
+      setBackupResult(json.data);
+      await fetchItems();
+      await fetchCounts();
+    } catch (e: any) {
+      setBackupError(e.message);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
   const handleAdd = async (value: string) => {
     const res = await fetch(`/api/lookups/${activeGroup}`, {
       method: 'POST', headers: authHeaders, body: JSON.stringify({ value }),
@@ -260,6 +386,7 @@ export default function InventoryLookupPage() {
     const json = await res.json();
     if (!json.success) throw new Error(json.error?.message || 'Failed to add');
     await fetchItems();
+    await fetchCounts();
   };
 
   const handleEdit = async (value: string) => {
@@ -275,7 +402,6 @@ export default function InventoryLookupPage() {
 
   const handleToggle = async (item: LookupItem) => {
     const newActive = !item.isActive;
-    // Optimistic update
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, isActive: newActive } : i));
     try {
       const res = await fetch(`/api/lookups/${item.id}`, {
@@ -292,7 +418,6 @@ export default function InventoryLookupPage() {
     setConfirmToggle(null);
   };
 
-  // Filtering
   const activeCount = items.filter(i => i.isActive).length;
   const inactiveCount = items.filter(i => !i.isActive).length;
 
@@ -301,14 +426,12 @@ export default function InventoryLookupPage() {
       const matchSearch = !search || i.value.toLowerCase().includes(search.toLowerCase());
       if (statusFilter === 'active') return matchSearch && i.isActive;
       if (statusFilter === 'inactive') return matchSearch && !i.isActive;
-      return matchSearch; // 'all'
+      return matchSearch;
     });
   }, [items, search, statusFilter]);
 
   return (
     <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
-
-      {/* ═══ STICKY NAVY HEADER ═════════════════════════════ */}
       <header className="sticky top-14 md:top-0 z-30 shrink-0 bg-[#012061] px-4 md:px-6 py-4 min-h-[56px]">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -321,20 +444,31 @@ export default function InventoryLookupPage() {
             </div>
           </div>
           {allowed && (
-            <button
-              onClick={() => setShowAdd(true)}
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors shrink-0"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add Value
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportBackup}
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-[#012061] px-3 py-2 text-xs font-semibold text-white hover:bg-[#011845] shadow-sm transition-colors shrink-0"
+              >
+                <Download className="h-3.5 w-3.5" /> Export
+              </button>
+              <button
+                onClick={() => { setShowBackupModal(true); setBackupResult(null); setBackupError(''); }}
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold text-[#012061] dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm transition-colors shrink-0"
+              >
+                <Upload className="h-3.5 w-3.5" /> Import
+              </button>
+              <button
+                onClick={() => setShowAdd(true)}
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors shrink-0"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add Value
+              </button>
+            </div>
           )}
         </div>
       </header>
 
-      {/* ═══ CONTENT AREA ════════════════════════════════════ */}
       <div className="flex-1 flex flex-col overflow-auto bg-slate-50 dark:bg-slate-900">
-
-        {/* ═══ GROUP SELECTOR — horizontal scroll tabs ═══ */}
         <section className="px-4 md:px-6 pt-4 shrink-0">
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
             {GROUPS.map(({ key, label, icon: Icon }) => {
@@ -373,7 +507,6 @@ export default function InventoryLookupPage() {
           </div>
         </section>
 
-        {/* ═══ SUPPLIERS CARD ═════════════════════════════ */}
         <section className="px-4 md:px-6 pt-3 shrink-0">
           <div className="flex items-start gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f8931f]/10">
@@ -392,10 +525,8 @@ export default function InventoryLookupPage() {
           </div>
         </section>
 
-        {/* ═══ FILTER BAR ══════════════════════════════════ */}
         <section className="px-4 md:px-6 pt-3 shrink-0">
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 px-4 py-3">
-            {/* Search */}
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
               <input
@@ -406,7 +537,6 @@ export default function InventoryLookupPage() {
                 className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 pl-9 pr-3 py-2 text-xs text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none transition-colors"
               />
             </div>
-            {/* Status filter pills */}
             <div className="flex items-center gap-1 shrink-0">
               {(['all', 'active', 'inactive'] as StatusFilter[]).map(f => (
                 <button
@@ -422,11 +552,9 @@ export default function InventoryLookupPage() {
                 </button>
               ))}
             </div>
-            {/* Count text */}
             <span className="text-[11px] text-slate-500 dark:text-slate-400 hidden lg:inline shrink-0">
               {activeCount} active · {inactiveCount} inactive
             </span>
-            {/* Mobile add button */}
             {allowed && (
               <button
                 onClick={() => setShowAdd(true)}
@@ -438,7 +566,6 @@ export default function InventoryLookupPage() {
           </div>
         </section>
 
-        {/* ═══ TABLE / CARDS ════════════════════════════════ */}
         <div className="flex-1 overflow-auto px-4 md:px-6 pt-4 pb-6">
           {loading ? (
             <div className="text-center py-12">
@@ -450,7 +577,6 @@ export default function InventoryLookupPage() {
               <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
             </div>
           ) : items.length === 0 && !search ? (
-            /* Group has no values at all */
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f8931f]/10 mb-3">
                 <Package className="h-7 w-7 text-[#f8931f]" />
@@ -467,7 +593,6 @@ export default function InventoryLookupPage() {
               )}
             </div>
           ) : filtered.length === 0 ? (
-            /* Search returned no results */
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 mb-3">
                 <Search className="h-7 w-7 text-slate-400" />
@@ -477,7 +602,6 @@ export default function InventoryLookupPage() {
             </div>
           ) : (
             <>
-              {/* Desktop table */}
               <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
                 <table className="w-full text-sm">
                   <thead>
@@ -490,48 +614,32 @@ export default function InventoryLookupPage() {
                   </thead>
                   <tbody>
                     {filtered.map(item => (
-                      <tr
-                        key={item.id}
-                        className={`group border-b border-slate-100 dark:border-slate-700/50 last:border-b-0 cursor-default transition-colors ${
-                          !item.isActive ? 'opacity-60 bg-slate-50/50 dark:bg-slate-800/30' : 'hover:bg-slate-50/80 dark:hover:bg-slate-700/30'
-                        }`}
-                      >
-                        <td className="px-4 py-2.5">
-                          <span className={`font-semibold whitespace-nowrap ${item.isActive ? 'text-[#012061] dark:text-slate-100' : 'text-slate-400 dark:text-slate-500 line-through'}`}>
-                            {item.value}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5">
+                      <tr key={item.id} className="border-b border-slate-100 dark:border-slate-700 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-200">{item.value}</td>
+                        <td className="px-4 py-3">
                           <StatusBadge active={item.isActive} />
                         </td>
-                        <td className="px-4 py-2.5 text-right text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                          {new Date(item.updatedAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-2.5 text-right">
-                          {allowed ? (
-                            <div className="inline-flex items-center gap-1">
+                        <td className="px-4 py-3 text-right text-xs text-slate-400 dark:text-slate-500">{new Date(item.updatedAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 text-right">
+                          {allowed && (
+                            <div className="flex items-center justify-end gap-1">
                               <button
                                 onClick={() => setEditTarget(item)}
-                                className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-[#012061] dark:text-slate-100 hover:bg-[#012061]/5 dark:hover:bg-slate-700/50 transition-colors whitespace-nowrap"
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-[#012061] dark:text-slate-100 hover:bg-[#012061]/5 dark:hover:bg-slate-700/50 transition-colors"
                               >
                                 <Pencil className="h-3 w-3" /> Edit
                               </button>
                               <button
                                 onClick={() => setConfirmToggle(item)}
-                                className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
                                   item.isActive
                                     ? 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40'
                                     : 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
                                 }`}
                               >
-                                {item.isActive
-                                  ? <><PowerOff className="h-3 w-3" /> Deactivate</>
-                                  : <><Power className="h-3 w-3" /> Reactivate</>
-                                }
+                                {item.isActive ? <><PowerOff className="h-3 w-3" /> Deactivate</> : <><Power className="h-3 w-3" /> Reactivate</>}
                               </button>
                             </div>
-                          ) : (
-                            <span className="text-xs text-slate-400">View only</span>
                           )}
                         </td>
                       </tr>
@@ -540,16 +648,10 @@ export default function InventoryLookupPage() {
                 </table>
               </div>
 
-              {/* Mobile cards */}
-              <div className="md:hidden space-y-2">
+              <div className="md:hidden flex flex-col gap-3">
                 {filtered.map(item => (
-                  <div
-                    key={item.id}
-                    className={`rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 ${
-                      !item.isActive ? 'opacity-60' : ''
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
+                  <div key={item.id} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <p className={`text-sm font-semibold truncate ${item.isActive ? 'text-[#012061] dark:text-slate-100' : 'text-slate-400 dark:text-slate-500 line-through'}`}>
                           {item.value}
@@ -588,7 +690,6 @@ export default function InventoryLookupPage() {
         </div>
       </div>
 
-      {/* ═══ ADD MODAL ═══════════════════════════════════════ */}
       <AddEditModal
         open={showAdd}
         title={`Add ${activeGroupConfig.label.replace(/s$/, '')}`}
@@ -599,7 +700,6 @@ export default function InventoryLookupPage() {
         onSave={handleAdd}
       />
 
-      {/* ═══ EDIT MODAL ═════════════════════════════════════ */}
       <AddEditModal
         open={editTarget !== null}
         title={`Edit ${activeGroupConfig.label.replace(/s$/, '')}`}
@@ -610,7 +710,6 @@ export default function InventoryLookupPage() {
         onSave={handleEdit}
       />
 
-      {/* ═══ TOGGLE CONFIRMATION DIALOG ════════════════════ */}
       <Dialog open={confirmToggle !== null} onOpenChange={(open) => { if (!open) setConfirmToggle(null); }}>
         <DialogContent showCloseButton={false} className="max-w-md overflow-hidden rounded-xl border-0 bg-white p-0 shadow-2xl dark:bg-slate-900">
           <div className="flex items-center justify-between px-5 py-4" style={{ background: confirmToggle?.isActive ? '#7B1113' : '#012061' }}>
@@ -656,6 +755,15 @@ export default function InventoryLookupPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <BackupImportModal
+        open={showBackupModal}
+        loading={backupLoading}
+        error={backupError}
+        result={backupResult}
+        onClose={() => setShowBackupModal(false)}
+        onFile={handleImportBackup}
+      />
     </div>
   );
 }

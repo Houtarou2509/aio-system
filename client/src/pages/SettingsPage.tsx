@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { PermissionGate } from '../components/auth';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../lib/api';
 
 /* ─── Accordion Section ──────────────────────────────────── */
 
@@ -143,6 +144,8 @@ function QuickLink({ to, icon: Icon, label }: { to: string; icon: React.ElementT
 export default function SettingsPage() {
   const { user } = useAuth();
   const [backupStats, setBackupStats] = useState<{ lastBackup: string | null; totalBackups: number }>({ lastBackup: null, totalBackups: 0 });
+  const [openIssueCount, setOpenIssueCount] = useState<number | null>(null);
+  const isAdmin = user?.role === 'ADMIN';
   const canManageSupport = user?.role === 'ADMIN' || user?.role === 'STAFF_ADMIN';
 
   useEffect(() => {
@@ -151,7 +154,18 @@ export default function SettingsPage() {
       .then(r => r.json())
       .then(d => { if (d.success) setBackupStats(d.data ?? d); })
       .catch(() => {});
-  }, []);
+
+    if (isAdmin) {
+      apiFetch('/issues/summary')
+        .then((d: any) => {
+          const data = d.data ?? d;
+          setOpenIssueCount(data.OPEN ?? 0);
+        })
+        .catch(() => {});
+    } else {
+      setOpenIssueCount(null);
+    }
+  }, [isAdmin]);
 
   const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Never';
 
@@ -238,14 +252,21 @@ export default function SettingsPage() {
         </AccordionSection>
         )}
 
-        {canManageSupport && (
+        {isAdmin && (
         <AccordionSection
           icon={AlertCircle}
           title="Support"
           subtitle="Issue reports and quick user guidance"
         >
-          <div className="flex items-center gap-3 flex-wrap">
-            <QuickLink to="/issues" icon={AlertCircle} label="Issue Reports" />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <StatLine label="Open Issues" value={openIssueCount !== null ? String(openIssueCount) : '—'} color="#f8931f" />
+                <p className="text-[11px] text-slate-400 mt-1">User-submitted bugs and support requests</p>
+              </div>
+              <QuickLink to="/issues" icon={AlertCircle} label="Issue Reports" />
+            </div>
+            <div className="border-t border-slate-200 dark:border-slate-700 pt-3" />
             <QuickLink to="/help" icon={HelpCircle} label="Quick Guide" />
           </div>
         </AccordionSection>

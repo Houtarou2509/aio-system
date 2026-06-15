@@ -34,6 +34,7 @@ model User {
   purchaseRequests   PurchaseRequest[]  @relation("PurchaseRequests")
   approvedRequests   PurchaseRequest[]  @relation("ApprovedRequests")
   issueReports       IssueReport[]       @relation("IssueReportReporter")
+  notifications      Notification[]      @relation("UserNotifications")
 
   @@map("users")
 }
@@ -55,6 +56,8 @@ model IssueReport {
   adminNotes         String?           @db.Text
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
+
+  notifications      Notification[]
 
   @@index([status])
   @@index([reporterId])
@@ -282,18 +285,28 @@ enum NotificationType {
   WARRANTY_EXPIRED
   MAINTENANCE_OVERDUE
   MAINTENANCE_DUE_SOON
+  ISSUE_REPORT_RESOLVED
+  ISSUE_REPORT_CLOSED
 }
 
 model Notification {
-  id        String           @id @default(uuid())
-  type      NotificationType
-  message   String
-  assetId   String
-  isRead    Boolean          @default(false)
-  createdAt DateTime         @default(now())
+  id             String           @id @default(uuid())
+  type           NotificationType
+  message        String
+  assetId        String?
+  issueReportId  String?
+  recipientUserId String?
+  isRead         Boolean          @default(false)
+  createdAt      DateTime         @default(now())
 
-  asset     Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  asset         Asset?        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  issueReport   IssueReport?  @relation(fields: [issueReportId], references: [id], onDelete: Cascade)
+  recipient     User?         @relation("UserNotifications", fields: [recipientUserId], references: [id], onDelete: Cascade)
 
+  @@index([recipientUserId, isRead])
+  @@index([assetId])
+  @@index([issueReportId])
+  @@index([createdAt])
   @@map("notifications")
 }
 

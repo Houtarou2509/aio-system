@@ -24,7 +24,7 @@ interface UpcomingSchedule {
   title: string;
   scheduledDate: string;
   status: string;
-  asset: { id: string; name: string };
+  asset: { id: string; name: string } | null;
 }
 
 interface WarrantyExpiring {
@@ -217,7 +217,7 @@ export function DashboardWidgets() {
             )}
             {!maintenanceLoading && upcomingMaintenance.slice(0, 3).map(s => (
               <div key={s.id} className="flex items-center justify-between py-1.5 pl-5 border-b border-slate-50 dark:border-slate-700 last:border-b-0">
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{s.asset.name}</span>
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{s.asset?.name ?? 'Unknown asset'}</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ml-2 ${
                   s.status === 'overdue' ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-200' : 'bg-indigo-50 text-indigo-600'
                 }`}>
@@ -391,7 +391,7 @@ export function DashboardWidgets() {
                   {/* Text */}
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">
-                      {s.asset.name}
+                      {s.asset?.name ?? 'Unknown asset'}
                     </p>
                     <p className="text-[10px] text-slate-400 mt-0.5">
                       {s.title} · {relativeDate(s.scheduledDate)}

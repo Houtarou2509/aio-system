@@ -2,18 +2,20 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell, Wrench, ShieldAlert, ShieldX, Clock, Check, Inbox, CheckCheck,
-  ChevronLeft, ChevronRight, ExternalLink,
+  ChevronLeft, ChevronRight, ExternalLink, MessageCircle, Ban,
 } from 'lucide-react';
 
 /* ─── Types ─── */
 interface NotificationItem {
   id: string;
-  type: 'WARRANTY_EXPIRING' | 'WARRANTY_EXPIRED' | 'MAINTENANCE_OVERDUE' | 'MAINTENANCE_DUE_SOON';
+  type: 'WARRANTY_EXPIRING' | 'WARRANTY_EXPIRED' | 'MAINTENANCE_OVERDUE' | 'MAINTENANCE_DUE_SOON' | 'ISSUE_REPORT_RESOLVED' | 'ISSUE_REPORT_CLOSED';
   message: string;
-  assetId: string;
+  assetId?: string;
+  issueReportId?: string;
   isRead: boolean;
   createdAt: string;
-  asset: { id: string; name: string };
+  asset?: { id: string; name: string };
+  issueReport?: { id: string; status: string };
 }
 
 interface NotificationsMeta {
@@ -41,7 +43,14 @@ async function apiFetch(url: string, options?: RequestInit) {
 }
 
 /* ─── Type config ─── */
-const TYPE_CONFIG = {
+const TYPE_CONFIG: Record<NotificationItem['type'], {
+  icon: React.ElementType;
+  color: string;
+  bg: string;
+  border: string;
+  label: string;
+  dot: string;
+}> = {
   WARRANTY_EXPIRING: {
     icon: ShieldAlert,
     color: 'text-[#7B1113]',
@@ -74,7 +83,23 @@ const TYPE_CONFIG = {
     label: 'Maintenance Due Soon',
     dot: 'bg-[#b45309]',
   },
-} as const;
+  ISSUE_REPORT_RESOLVED: {
+    icon: MessageCircle,
+    color: 'text-emerald-600',
+    bg: 'bg-emerald-600/10',
+    border: 'border-emerald-600/30',
+    label: 'Issue Resolved',
+    dot: 'bg-emerald-600',
+  },
+  ISSUE_REPORT_CLOSED: {
+    icon: Ban,
+    color: 'text-slate-500',
+    bg: 'bg-slate-500/10',
+    border: 'border-slate-500/30',
+    label: "Won't Fix",
+    dot: 'bg-slate-500',
+  },
+};
 
 function formatDate(date: string): string {
   return new Date(date).toLocaleDateString('en-US', {
@@ -277,7 +302,7 @@ export default function NotificationsPage() {
                           {/* Asset name */}
                           <td className="px-4 py-3">
                             <span className="font-semibold text-[#012061] dark:text-slate-100">
-                              {n.asset.name}
+                              {n.asset?.name ?? 'Issue Report'}
                             </span>
                           </td>
 
@@ -307,13 +332,15 @@ export default function NotificationsPage() {
                           {/* Actions */}
                           <td className="px-4 py-3 text-right">
                             <div className="inline-flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={() => navigate(`/assets?id=${n.assetId}`)}
-                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-[#012061] dark:text-slate-100 hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 transition-colors"
-                                title="View asset"
-                              >
-                                <ExternalLink className="h-3 w-3" /> View
-                              </button>
+                              {n.assetId && (
+                                <button
+                                  onClick={() => navigate(`/assets?id=${n.assetId}`)}
+                                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-[#012061] dark:text-slate-100 hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 transition-colors"
+                                  title="View asset"
+                                >
+                                  <ExternalLink className="h-3 w-3" /> View
+                                </button>
+                              )}
                               {!n.isRead && (
                                 <button
                                   onClick={() => handleMarkRead(n.id)}

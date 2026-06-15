@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
   Briefcase, Building2, FolderKanban, Search, Plus, Pencil,
-  PowerOff, Power, AlertTriangle, X,
+  PowerOff, Power, AlertTriangle, X, Download, Upload,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose,
@@ -217,6 +217,16 @@ export default function AccountabilityLookupPage() {
   const [forceDialog, setForceDialog] = useState<{ id: number; currentStatus: string; newStatus: string; affectedCount: number } | null>(null);
   const [forceLoading, setForceLoading] = useState(false);
 
+  // Backup modal state
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupResult, setBackupResult] = useState<{
+    created: number; updated: number; unchanged: number; skipped: number;
+    groups?: Record<string, { created: number; updated: number; unchanged: number; skipped: number }>;
+    skippedItems?: Array<{ group: string; reason: string }>;
+  } | null>(null);
+  const [backupError, setBackupError] = useState('');
+
   // Counts per group
   const [counts, setCounts] = useState<Record<string, number>>({});
 
@@ -270,6 +280,53 @@ export default function AccountabilityLookupPage() {
 
   // Existing names for duplicate validation
   const existingNames = items.map(i => i.name);
+
+  // Backup handlers
+  const handleExportBackup = async () => {
+    try {
+      const res = await fetch('/api/lookup-backup/export', { headers: authHeaders });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || 'Export failed');
+
+      const blob = new Blob([JSON.stringify(json.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const date = new Date().toISOString().split('T')[0];
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `aio-lookup-backup-${date}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setBackupError(e.message);
+      setShowBackupModal(true);
+    }
+  };
+
+  const handleImportBackup = async (file: File) => {
+    setBackupLoading(true);
+    setBackupError('');
+    setBackupResult(null);
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const res = await fetch('/api/lookup-backup/import', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error?.message || 'Import failed');
+
+      setBackupResult(json.data);
+      await fetchItems();
+    } catch (e: any) {
+      setBackupError(e.message);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
 
   // ─── Handlers ───
   const handleAdd = async (name: string) => {
@@ -372,12 +429,26 @@ export default function AccountabilityLookupPage() {
             </div>
           </div>
           {allowed && (
-            <button
-              onClick={() => setShowAdd(true)}
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors shrink-0"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add Value
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportBackup}
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-[#012061] px-3 py-2 text-xs font-semibold text-white hover:bg-[#011845] shadow-sm transition-colors shrink-0"
+              >
+                <Download className="h-3.5 w-3.5" /> Export
+              </button>
+              <button
+                onClick={() => { setShowBackupModal(true); setBackupResult(null); setBackupError(''); }}
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs font-semibold text-[#012061] dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm transition-colors shrink-0"
+              >
+                <Upload className="h-3.5 w-3.5" /> Import
+              </button>
+              <button
+                onClick={() => setShowAdd(true)}
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-4 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors shrink-0"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add Value
+              </button>
+            </div>
           )}
         </div>
       </header>
@@ -694,6 +765,54 @@ export default function AccountabilityLookupPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ═══ BACKUP IMPORT MODAL ════════════════════════════ */}
+      {showBackupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px]" onClick={(e) => { if (e.target === e.currentTarget) setShowBackupModal(false); }}>
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#012061] px-5 py-3.5 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-white">Import Lookup Backup</h3>
+                <p className="text-[11px] text-white/50 mt-0.5">JSON file from Export. Merges values without deleting local ones.</p>
+              </div>
+              <button onClick={() => setShowBackupModal(false)} className="text-white/60 hover:text-white transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="px-5 py-4">
+              <input
+                type="file"
+                accept=".json,application/json"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) handleImportBackup(file);
+                  if (e.target) e.target.value = '';
+                }}
+                className="block w-full text-xs text-slate-700 dark:text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-[#f8931f] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-[#e0841a]"
+              />
+              {backupLoading && (
+                <div className="mt-4 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-[#f8931f]" /> Importing…
+                </div>
+              )}
+              {backupError && (
+                <div className="mt-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30 px-3 py-2 text-xs text-red-600 dark:text-red-400">{backupError}</div>
+              )}
+              {backupResult && (
+                <div className="mt-4 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-200">
+                  <p className="font-semibold mb-1">Import summary</p>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                    <span>Created:</span> <span>{backupResult.created}</span>
+                    <span>Updated:</span> <span>{backupResult.updated}</span>
+                    <span>Unchanged:</span> <span>{backupResult.unchanged}</span>
+                    <span>Skipped:</span> <span>{backupResult.skipped}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══ FORCE DEACTIVATE WARNING DIALOG ═══════════════ */}
       <Dialog open={forceDialog !== null} onOpenChange={(open) => { if (!open) setForceDialog(null); }}>

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import { parse as parseCsv } from 'csv-parse/sync';
+import { parseAndNormalizeAssetCsv } from '../utils/assetCsvImport';
 import { prisma } from '../lib/prisma';
 import { authenticate, hasPermission } from '../middleware/auth';
 import { success, error } from '../utils/response';
@@ -30,10 +30,7 @@ router.post('/preview', hasPermission('assets:create'), importUpload.single('fil
       return error(res, 'No file uploaded', 400);
     }
 
-    const records: Record<string, string>[] = parseCsv(req.file.buffer.toString(), {
-      columns: true,
-      skip_empty_lines: true,
-    });
+    const records = parseAndNormalizeAssetCsv(req.file.buffer.toString());
 
     if (records.length === 0) {
       return error(res, 'No data rows found in file', 400);
@@ -120,9 +117,6 @@ router.post('/preview', hasPermission('assets:create'), importUpload.single('fil
       if (!row.name?.trim()) {
         rowErrors.push({ field: 'name', reason: 'Name is required' });
       }
-      if (!row.serialNumber?.trim()) {
-        rowErrors.push({ field: 'serialNumber', reason: 'Serial number is required' });
-      }
       if (!row.propertyNumber?.trim()) {
         rowErrors.push({ field: 'propertyNumber', reason: 'Property number is required' });
       }
@@ -141,21 +135,24 @@ router.post('/preview', hasPermission('assets:create'), importUpload.single('fil
       }
 
       // ── b. Duplicate serialNumber check (DB + CSV) ──
-      const snLower = row.serialNumber.trim().toLowerCase();
-      if (existingSerials.has(snLower)) {
-        rowErrors.push({ field: 'serialNumber', reason: `Duplicate serial number: "${row.serialNumber.trim()}" already exists in the database` });
-      } else if (seenCsvSerials.has(snLower)) {
-        rowErrors.push({ field: 'serialNumber', reason: `Duplicate serial number: "${row.serialNumber.trim()}" appears multiple times in the CSV` });
-      } else {
-        seenCsvSerials.add(snLower);
+      if (row.serialNumber?.trim()) {
+        const snLower = row.serialNumber.trim().toLowerCase();
+        if (existingSerials.has(snLower)) {
+          rowErrors.push({ field: 'serialNumber', reason: `Duplicate serial number: "${row.serialNumber.trim()}" already exists in the database` });
+        } else if (seenCsvSerials.has(snLower)) {
+          rowErrors.push({ field: 'serialNumber', reason: `Duplicate serial number: "${row.serialNumber.trim()}" appears multiple times in the CSV` });
+        } else {
+          seenCsvSerials.add(snLower);
+        }
       }
 
       // ── c. Duplicate propertyNumber check (DB + CSV) ──
-      const pnLower = row.propertyNumber.trim().toLowerCase();
+      const propertyNumber = row.propertyNumber!;
+      const pnLower = propertyNumber.trim().toLowerCase();
       if (existingPropertyNums.has(pnLower)) {
-        rowErrors.push({ field: 'propertyNumber', reason: `Duplicate property number: "${row.propertyNumber.trim()}" already exists in the database` });
+        rowErrors.push({ field: 'propertyNumber', reason: `Duplicate property number: "${propertyNumber.trim()}" already exists in the database` });
       } else if (seenCsvPropertyNums.has(pnLower)) {
-        rowErrors.push({ field: 'propertyNumber', reason: `Duplicate property number: "${row.propertyNumber.trim()}" appears multiple times in the CSV` });
+        rowErrors.push({ field: 'propertyNumber', reason: `Duplicate property number: "${propertyNumber.trim()}" appears multiple times in the CSV` });
       } else {
         seenCsvPropertyNums.add(pnLower);
       }
@@ -187,7 +184,7 @@ router.post('/preview', hasPermission('assets:create'), importUpload.single('fil
       }
 
       // ── g. Price validation ──
-      if (row.price !== undefined && row.price !== '') {
+      if (row.price !== undefined && row.price !== null && row.price !== '') {
         const num = Number(row.price);
         if (!Number.isFinite(num)) {
           rowErrors.push({ field: 'price', reason: 'Price must be a number' });
@@ -195,13 +192,13 @@ router.post('/preview', hasPermission('assets:create'), importUpload.single('fil
       }
 
       // ── h. Date validations ──
-      if (row.purchaseDate !== undefined && row.purchaseDate !== '') {
+      if (row.purchaseDate !== undefined && row.purchaseDate !== null && row.purchaseDate !== '') {
         if (isNaN(Date.parse(row.purchaseDate))) {
           rowErrors.push({ field: 'purchaseDate', reason: 'Invalid date format for Purchase Date' });
         }
       }
 
-      if (row.warrantyExpiry !== undefined && row.warrantyExpiry !== '') {
+      if (row.warrantyExpiry !== undefined && row.warrantyExpiry !== null && row.warrantyExpiry !== '') {
         if (isNaN(Date.parse(row.warrantyExpiry))) {
           rowErrors.push({ field: 'warrantyExpiry', reason: 'Invalid date format for Warranty Expiry' });
         }
@@ -254,22 +251,22 @@ router.post('/preview', hasPermission('assets:create'), importUpload.single('fil
   }
 });
 
-function buildRowData(row: Record<string, string>): Record<string, string | null> {
+function buildRowData(row: Record<string, string | null>): Record<string, string | null> {
   return {
-    name: row.name?.trim() || null,
-    type: row.type?.trim() || null,
-    serialNumber: row.serialNumber?.trim() || null,
-    propertyNumber: row.propertyNumber?.trim() || null,
-    status: row.status?.trim() || null,
-    manufacturer: row.manufacturer?.trim() || null,
-    price: row.price?.trim() || null,
-    purchaseDate: row.purchaseDate?.trim() || null,
-    assignedTo: row.assignedTo?.trim() || null,
-    location: row.location?.trim() || null,
-    owner: row.owner?.trim() || null,
-    remarks: row.remarks?.trim() || null,
-    warrantyExpiry: row.warrantyExpiry?.trim() || null,
-    warrantyNotes: row.warrantyNotes?.trim() || null,
+    name: row.name ?? null,
+    type: row.type ?? null,
+    serialNumber: row.serialNumber ?? null,
+    propertyNumber: row.propertyNumber ?? null,
+    status: row.status ?? null,
+    manufacturer: row.manufacturer ?? null,
+    price: row.price ?? null,
+    purchaseDate: row.purchaseDate ?? null,
+    assignedTo: row.assignedTo ?? null,
+    location: row.location ?? null,
+    owner: row.owner ?? null,
+    remarks: row.remarks ?? null,
+    warrantyExpiry: row.warrantyExpiry ?? null,
+    warrantyNotes: row.warrantyNotes ?? null,
   };
 }
 

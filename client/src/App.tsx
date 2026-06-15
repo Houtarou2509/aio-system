@@ -69,7 +69,7 @@ function App() {
             <Route path="backups" element={<ProtectedRoute requiredRole="ADMIN"><BackupManagementPage /></ProtectedRoute>} />
             <Route path="accountability/report" element={<ProtectedRoute requiredRole="ADMIN"><AccountabilityReportPage /></ProtectedRoute>} />
             <Route path="help" element={<HelpPage />} />
-            <Route path="issues" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><IssueReportsPage /></ProtectedRoute>} />
+            <Route path="issues" element={<ProtectedRoute requiredRole="ADMIN"><IssueReportsPage /></ProtectedRoute>} />
             <Route path="system-health" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><SystemHealthPage /></ProtectedRoute>} />
             <Route path="data-quality" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><DataQualityPage /></ProtectedRoute>} />
           </Route>

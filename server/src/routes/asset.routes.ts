@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import sharp from 'sharp';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import { parse as parseCsv } from 'csv-parse/sync';
+import { parseAndNormalizeAssetCsv } from '../utils/assetCsvImport';
 import * as assetService from '../services/asset.service';
 import { calculateDepreciation } from '../services/depreciation.service';
 import { prisma } from '../lib/prisma';
@@ -203,10 +203,7 @@ router.post('/import', hasPermission('assets:create'), importUpload.single('file
       return error(res, 'No file uploaded', 400);
     }
 
-    const records: Record<string, string>[] = parseCsv(req.file.buffer.toString(), {
-      columns: true,
-      skip_empty_lines: true,
-    });
+    const records = parseAndNormalizeAssetCsv(req.file.buffer.toString());
 
     if (records.length === 0) {
       return error(res, 'No data rows found in file', 400);
@@ -247,9 +244,6 @@ router.post('/import', hasPermission('assets:create'), importUpload.single('file
       if (!row.name?.trim()) {
         rowErrors.push({ field: 'name', reason: 'Name is required' });
       }
-      if (!row.serialNumber?.trim()) {
-        rowErrors.push({ field: 'serialNumber', reason: 'Serial number is required' });
-      }
       if (!row.propertyNumber?.trim()) {
         rowErrors.push({ field: 'propertyNumber', reason: 'Property number is required' });
       }
@@ -262,18 +256,21 @@ router.post('/import', hasPermission('assets:create'), importUpload.single('file
       }
 
       // ── b. Duplicate serialNumber check ──
-      const snLower = row.serialNumber.trim().toLowerCase();
-      if (existingSerials.has(snLower)) {
-        rowErrors.push({ field: 'serialNumber', reason: `Duplicate serial number: "${row.serialNumber.trim()}" already exists` });
-      } else {
-        // Add to set so later rows in the same CSV can't reuse it
-        existingSerials.add(snLower);
+      if (row.serialNumber?.trim()) {
+        const snLower = row.serialNumber.trim().toLowerCase();
+        if (existingSerials.has(snLower)) {
+          rowErrors.push({ field: 'serialNumber', reason: `Duplicate serial number: "${row.serialNumber.trim()}" already exists` });
+        } else {
+          // Add to set so later rows in the same CSV can't reuse it
+          existingSerials.add(snLower);
+        }
       }
 
       // ── c. Duplicate propertyNumber check ──
-      const pnLower = row.propertyNumber.trim().toLowerCase();
+      const propertyNumber = row.propertyNumber!;
+      const pnLower = propertyNumber.trim().toLowerCase();
       if (existingPropertyNums.has(pnLower)) {
-        rowErrors.push({ field: 'propertyNumber', reason: `Duplicate property number: "${row.propertyNumber.trim()}" already exists` });
+        rowErrors.push({ field: 'propertyNumber', reason: `Duplicate property number: "${propertyNumber.trim()}" already exists` });
       } else {
         existingPropertyNums.add(pnLower);
       }
@@ -314,7 +311,7 @@ router.post('/import', hasPermission('assets:create'), importUpload.single('file
 
       // ── g. Price validation ──
       let purchasePrice: number | null = null;
-      if (row.price !== undefined && row.price !== '') {
+      if (row.price !== undefined && row.price !== null && row.price !== '') {
         const num = Number(row.price);
         if (!Number.isFinite(num)) {
           rowErrors.push({ field: 'price', reason: 'Price must be a number' });
@@ -325,7 +322,7 @@ router.post('/import', hasPermission('assets:create'), importUpload.single('file
 
       // ── h. Date validations ──
       let purchaseDate: Date | null = null;
-      if (row.purchaseDate !== undefined && row.purchaseDate !== '') {
+      if (row.purchaseDate !== undefined && row.purchaseDate !== null && row.purchaseDate !== '') {
         if (isNaN(Date.parse(row.purchaseDate))) {
           rowErrors.push({ field: 'purchaseDate', reason: 'Invalid date format for Purchase Date' });
         } else {
@@ -334,7 +331,7 @@ router.post('/import', hasPermission('assets:create'), importUpload.single('file
       }
 
       let warrantyExpiry: Date | null = null;
-      if (row.warrantyExpiry !== undefined && row.warrantyExpiry !== '') {
+      if (row.warrantyExpiry !== undefined && row.warrantyExpiry !== null && row.warrantyExpiry !== '') {
         if (isNaN(Date.parse(row.warrantyExpiry))) {
           rowErrors.push({ field: 'warrantyExpiry', reason: 'Invalid date format for Warranty Expiry' });
         } else {
@@ -352,17 +349,18 @@ router.post('/import', hasPermission('assets:create'), importUpload.single('file
 
       // Row is importable — create the asset
       try {
+        const name = row.name!;
         const asset = await prisma.asset.create({
           data: {
-            name: row.name.trim(),
+            name: name.trim(),
             type: typeValue,
             status: status as any,
             manufacturer: row.manufacturer?.trim() || null,
-            serialNumber: row.serialNumber.trim(),
+            serialNumber: row.serialNumber?.trim() || null,
             purchasePrice: purchasePrice ?? null,
             purchaseDate,
             assignedTo: row.assignedTo?.trim() || null,
-            propertyNumber: row.propertyNumber.trim(),
+            propertyNumber: propertyNumber.trim(),
             location: row.location?.trim() || null,
             owner: row.owner?.trim() || null,
             remarks: row.remarks?.trim() || null,
@@ -394,7 +392,7 @@ router.post('/import', hasPermission('assets:create'), importUpload.single('file
           metadata: {
             field: '*',
             oldValue: null,
-            newValue: `Imported "${asset.name}" (S/N: ${asset.serialNumber})`,
+            newValue: `Imported "${asset.name}" (property: ${asset.propertyNumber})`,
           },
         });
       } catch (dbErr: any) {

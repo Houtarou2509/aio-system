@@ -1,15 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, Wrench, ShieldAlert, ShieldX, Clock, Check, Inbox } from 'lucide-react';
+import { Bell, Wrench, ShieldAlert, ShieldX, Clock, Check, Inbox, MessageCircle, Ban } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '../ui/popover';
 
 interface NotificationItem {
   id: string;
-  type: 'WARRANTY_EXPIRING' | 'WARRANTY_EXPIRED' | 'MAINTENANCE_OVERDUE' | 'MAINTENANCE_DUE_SOON';
+  type: 'WARRANTY_EXPIRING' | 'WARRANTY_EXPIRED' | 'MAINTENANCE_OVERDUE' | 'MAINTENANCE_DUE_SOON' | 'ISSUE_REPORT_RESOLVED' | 'ISSUE_REPORT_CLOSED';
   message: string;
-  assetId: string;
+  assetId?: string;
+  issueReportId?: string;
   isRead: boolean;
   createdAt: string;
-  asset: { id: string; name: string };
+  asset?: { id: string; name: string };
+  issueReport?: { id: string; status: string };
 }
 
 const API_BASE = '/api';
@@ -38,7 +40,13 @@ async function markAsRead(id: string): Promise<void> {
 }
 
 /* ─── Notification type config ─── */
-const TYPE_CONFIG = {
+const TYPE_CONFIG: Record<NotificationItem['type'], {
+  icon: React.ElementType;
+  color: string;
+  bg: string;
+  border: string;
+  label: string;
+}> = {
   WARRANTY_EXPIRING: {
     icon: ShieldAlert,
     color: 'text-brand-red',
@@ -66,6 +74,20 @@ const TYPE_CONFIG = {
     bg: 'bg-[#b45309]/10',
     border: 'border-[#b45309]/30',
     label: 'Due Soon',
+  },
+  ISSUE_REPORT_RESOLVED: {
+    icon: MessageCircle,
+    color: 'text-emerald-600',
+    bg: 'bg-emerald-600/10',
+    border: 'border-emerald-600/30',
+    label: 'Issue Resolved',
+  },
+  ISSUE_REPORT_CLOSED: {
+    icon: Ban,
+    color: 'text-slate-500',
+    bg: 'bg-slate-500/10',
+    border: 'border-slate-500/30',
+    label: "Won't Fix",
   },
 } as const;
 
@@ -100,6 +122,11 @@ export default function NotificationBell() {
     const interval = setInterval(load, 60_000);
     return () => clearInterval(interval);
   }, [load]);
+
+  // Refresh when popover opens
+  useEffect(() => {
+    if (open) load();
+  }, [open, load]);
 
   const handleMarkRead = async (id: string) => {
     try {
@@ -196,7 +223,7 @@ export default function NotificationBell() {
                         <span className="text-[10px] text-slate-400">{timeAgo(n.createdAt)}</span>
                       </div>
                       <p className="text-sm font-semibold text-brand-blue leading-tight truncate">
-                        {n.asset.name}
+                        {n.asset?.name ?? 'Issue Report'}
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 break-words line-clamp-2">
                         {n.message}

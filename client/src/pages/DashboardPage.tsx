@@ -212,7 +212,7 @@ interface UpcomingSchedule {
   title: string;
   scheduledDate: string;
   status: string;
-  asset: { id: string; name: string };
+  asset: { id: string; name: string } | null;
 }
 
 interface WarrantyExpiring {
@@ -557,7 +557,7 @@ export default function DashboardPage() {
                 <div key={s.id} className={`flex items-center justify-between py-2 pl-4 border-b border-slate-50 dark:border-slate-700/50 last:border-b-0 transition-all duration-200 rounded-md px-2 -mx-1 hover:bg-slate-50 dark:hover:bg-slate-700/30 ${
                   s.status === 'overdue' ? 'shadow-[0_0_10px_rgba(239,68,68,0.1)] bg-red-50/30 dark:bg-red-950/20' : ''
                 }`}>
-                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{s.asset.name}</span>
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">{s.asset?.name ?? 'Unknown asset'}</span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ml-2 border ${
                     s.status === 'overdue'
                       ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-300 border-red-200 dark:border-red-800'

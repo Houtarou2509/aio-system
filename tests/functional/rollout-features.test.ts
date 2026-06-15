@@ -1,20 +1,22 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { app } from '../../server/src/index';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, LookupCategory } from '@prisma/client';
 import { seedUsers, cleanAssets, type UserFixture } from '../fixtures/assets';
 
 const prisma = new PrismaClient();
 
 let users: Record<string, UserFixture>;
 let adminToken: string;
+let staffAdminToken: string;
 let staffToken: string;
 let guestToken: string;
 
 beforeAll(async () => {
   users = await seedUsers();
   adminToken = users.ADMIN.accessToken;
-  staffToken = users.STAFF_ADMIN?.accessToken || users.STAFF?.accessToken || '';
+  staffAdminToken = users.STAFF_ADMIN?.accessToken || '';
+  staffToken = users.STAFF?.accessToken || '';
   guestToken = users.GUEST?.accessToken || '';
 }, 15_000);
 
@@ -42,7 +44,7 @@ describe('Data Quality endpoint', () => {
   it('GET /api/data-quality — STAFF_ADMIN succeeds with 200', async () => {
     const res = await request(app)
       .get('/api/data-quality')
-      .set('Authorization', `Bearer ${staffToken}`);
+      .set('Authorization', `Bearer ${staffAdminToken || staffToken}`);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -195,6 +197,150 @@ Test Asset,Other,ASSIGNED,,SN-BAD-STATUS-${Date.now()},1000,2025-01-15,PROP-BAD-
       .attach('file', Buffer.from(csv), { filename: 'test.csv', contentType: 'text/csv' });
 
     expect(res.status).toBe(401);
+  });
+
+  it('POST /api/assets/import/preview — exported-display headers normalize correctly and blank serial is allowed', async () => {
+    const csv = `Name,Type,Status,Location,Owner,Assigned To,Property #,Price,Purchase Date,Serial Number,Manufacturer,Remarks,Added Date
+Exported ThinkPad,Monitor,AVAILABLE,Room 101,IT Dept,,PROP-EXP-001,95000,2024-01-15,SN-EXP-001,Lenovo,Finance laptop,2026-01-01
+Exported Dell Desktop,Monitor,PENDING_ASSIGNMENT,Room 202,Admin,Juan dela Cruz,PROP-EXP-002,49999,2023-06-01,,Dell,Accounting desktop,2026-01-01
+Exported Monitor,Monitor,MAINTENANCE,Room 303,IT Dept,,PROP-EXP-003,12000,2025-03-10,SN-EXP-003,BenQ,,2026-01-01
+Exported Printer,Monitor,RETIRED,Room 404,Admin,,PROP-EXP-004,8500,2022-08-20,SN-EXP-004,Epson,Disposed unit,2026-01-01`;
+
+    const res = await request(app)
+      .post('/api/assets/import/preview')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .attach('file', Buffer.from(csv), { filename: 'exported-assets.csv', contentType: 'text/csv' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.totalRows).toBe(4);
+
+    const blankSerialRow = res.body.data.results.find((r: any) => r.row === 3);
+    expect(blankSerialRow).toBeDefined();
+    expect(blankSerialRow.status).not.toBe('invalid');
+    expect(blankSerialRow.data.serialNumber).toBeNull();
+    expect(blankSerialRow.data.name).toBe('Exported Dell Desktop');
+    expect(blankSerialRow.data.propertyNumber).toBe('PROP-EXP-002');
+
+    const withSerialRow = res.body.data.results.find((r: any) => r.row === 2);
+    expect(withSerialRow.data.serialNumber).toBe('SN-EXP-001');
+    expect(withSerialRow.data.name).toBe('Exported ThinkPad');
+    expect(withSerialRow.data.propertyNumber).toBe('PROP-EXP-001');
+    expect(withSerialRow.data.price).toBe('95000');
+    expect(withSerialRow.data.purchaseDate).toBe('2024-01-15');
+    expect(withSerialRow.data.manufacturer).toBe('Lenovo');
+    expect(withSerialRow.data.location).toBe('Room 101');
+    expect(withSerialRow.data.owner).toBe('IT Dept');
+  });
+
+  it('POST /api/assets/import — exported-display headers create assets with nullable serialNumber', async () => {
+    const propertyNumber = `PROP-IMP-${Date.now()}`;
+    const csv = `Name,Type,Status,Location,Owner,Assigned To,Property #,Price,Purchase Date,Serial Number,Manufacturer,Remarks,Added Date
+Import Test No Serial,Monitor,AVAILABLE,Room 501,IT Dept,,${propertyNumber},88000,2024-04-25,,HP,No serial provided,2026-01-01`;
+
+    const res = await request(app)
+      .post('/api/assets/import')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .attach('file', Buffer.from(csv), { filename: 'exported-assets-import.csv', contentType: 'text/csv' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    const result = res.body.data.results[0];
+    expect(result.status).not.toBe('skipped');
+    expect(result.assetId).toBeDefined();
+
+    const asset = await prisma.asset.findUnique({ where: { id: result.assetId } });
+    expect(asset).toBeTruthy();
+    expect(asset!.name).toBe('Import Test No Serial');
+    expect(asset!.propertyNumber).toBe(propertyNumber);
+    expect(asset!.serialNumber).toBeNull();
+    expect(Number(asset!.purchasePrice)).toBe(88000);
+    expect(asset!.purchaseDate?.toISOString().startsWith('2024-04-25')).toBe(true);
+    expect(asset!.manufacturer).toBe('HP');
+    expect(asset!.location).toBe('Room 501');
+    expect(asset!.owner).toBe('IT Dept');
+    expect(asset!.remarks).toBe('No serial provided');
+
+    // Clean up
+    await prisma.asset.deleteMany({ where: { id: result.assetId } });
+  });
+
+  it('CSV normalizer preserves quoted commas and newlines in exported-display headers', async () => {
+    const csv = `Name,Type,Status,Location,Owner,Assigned To,Property #,Price,Purchase Date,Serial Number,Manufacturer,Remarks,Added Date
+"Quoted\nNewline Asset",Monitor,AVAILABLE,Room 101,IT Dept,,PROP-QUOTE-001,1200,2024-02-01,SN-QUOTE-001,Lenovo,"Price, purchase date and Serial number",2026-01-01`;
+
+    const res = await request(app)
+      .post('/api/assets/import/preview')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .attach('file', Buffer.from(csv), { filename: 'quoted-fields.csv', contentType: 'text/csv' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.totalRows).toBe(1);
+
+    const row = res.body.data.results[0];
+    expect(row.status).not.toBe('invalid');
+    expect(row.data.name).toBe('Quoted\nNewline Asset');
+    expect(row.data.remarks).toBe('Price, purchase date and Serial number');
+    expect(row.data.propertyNumber).toBe('PROP-QUOTE-001');
+    expect(row.data.serialNumber).toBe('SN-QUOTE-001');
+  });
+
+  it('CSV normalizer ignores unknown short headers like Date and No', async () => {
+    const csv = `Name,No,Date,Property #
+Only Property,123,2024-01-01,PROP-SHORT-001`;
+
+    const res = await request(app)
+      .post('/api/assets/import/preview')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .attach('file', Buffer.from(csv), { filename: 'short-headers.csv', contentType: 'text/csv' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const row = res.body.data.results[0];
+    expect(row.data.name).toBe('Only Property');
+    expect(row.data.propertyNumber).toBe('PROP-SHORT-001');
+    expect(row.data.purchaseDate).toBeNull();
+    expect(row.data.remarks).toBeNull();
+  });
+
+  it('CSV normalizer prefers the first non-blank value when duplicate equivalent headers exist', async () => {
+    const csv = `Name,Property #,propertyNumber
+Asset A,PROP-FIRST,PROP-SECOND`;
+
+    const res = await request(app)
+      .post('/api/assets/import/preview')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .attach('file', Buffer.from(csv), { filename: 'duplicate-headers-first.csv', contentType: 'text/csv' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.totalRows).toBe(1);
+
+    const row = res.body.data.results[0];
+    expect(row.status).not.toBe('invalid');
+    expect(row.data.name).toBe('Asset A');
+    expect(row.data.propertyNumber).toBe('PROP-FIRST');
+  });
+
+  it('CSV normalizer falls back to second equivalent header when first is blank', async () => {
+    const csv = `Name,Property #,propertyNumber
+Asset A,,PROP-SECOND`;
+
+    const res = await request(app)
+      .post('/api/assets/import/preview')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .attach('file', Buffer.from(csv), { filename: 'duplicate-headers-fallback.csv', contentType: 'text/csv' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.totalRows).toBe(1);
+
+    const row = res.body.data.results[0];
+    expect(row.status).not.toBe('invalid');
+    expect(row.data.name).toBe('Asset A');
+    expect(row.data.propertyNumber).toBe('PROP-SECOND');
   });
 
   it('POST /api/assets/import/preview — does not create assets', async () => {

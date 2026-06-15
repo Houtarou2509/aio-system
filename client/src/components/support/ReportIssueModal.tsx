@@ -24,6 +24,7 @@ export default function ReportIssueModal({ open, onClose }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [reportRef, setReportRef] = useState('');
 
   if (!open) return null;
 
@@ -34,6 +35,7 @@ export default function ReportIssueModal({ open, onClose }: Props) {
     setSubmitting(false);
     setError('');
     setSuccess(false);
+    setReportRef('');
     onClose();
   };
 
@@ -45,7 +47,7 @@ export default function ReportIssueModal({ open, onClose }: Props) {
     }
     setSubmitting(true);
     try {
-      await apiFetch('/issues', {
+      const res = await apiFetch('/issues', {
         method: 'POST',
         body: {
           pageUrl: window.location.href,
@@ -55,8 +57,11 @@ export default function ReportIssueModal({ open, onClose }: Props) {
           userAgent: navigator.userAgent,
         },
       });
+      const data = res.data ?? res;
+      const shortId = data.id ? data.id.slice(0, 8).toUpperCase() : '';
+      setReportRef(shortId);
       setSuccess(true);
-      setTimeout(resetAndClose, 900);
+      setTimeout(resetAndClose, 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to submit issue report.');
     } finally {
@@ -85,7 +90,7 @@ export default function ReportIssueModal({ open, onClose }: Props) {
         <div className="space-y-4 p-4">
           {success ? (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-              Issue report submitted. Thank you.
+              Your issue report has been sent to the admin team.{reportRef && <span className="block text-xs font-normal mt-1 text-emerald-600">Reference: #{reportRef}</span>}
             </div>
           ) : (
             <>

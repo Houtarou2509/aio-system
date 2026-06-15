@@ -15,7 +15,7 @@ interface MaintenanceSchedule {
   status: 'pending' | 'overdue' | 'done';
   frequency: string;
   completedAt: string | null;
-  asset: { id: string; name: string };
+  asset: { id: string; name: string } | null;
 }
 
 interface CalendarStats {
@@ -200,7 +200,7 @@ export default function MaintenanceCalendarPage() {
       items = items.filter(
         s =>
           s.title.toLowerCase().includes(q) ||
-          s.asset.name.toLowerCase().includes(q) ||
+          (s.asset?.name ?? '').toLowerCase().includes(q) ||
           (s.notes && s.notes.toLowerCase().includes(q))
       );
     }
@@ -373,15 +373,12 @@ export default function MaintenanceCalendarPage() {
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 flex-1">
-                              {/* Asset Name */}
                               <p className="text-sm font-bold text-[#012061] dark:text-white leading-tight mb-0.5 group-hover:text-[#f8931f] transition-colors">
-                                {schedule.asset.name}
+                                {schedule.asset?.name ?? 'Unknown asset'}
                               </p>
-                              {/* Title */}
                               <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                                 {schedule.title}
                               </p>
-                              {/* Notes (if any) */}
                               {schedule.notes && (
                                 <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 line-clamp-1 italic">
                                   {schedule.notes}
