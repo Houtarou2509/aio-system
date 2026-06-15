@@ -105,6 +105,7 @@ model Asset {
   notifications   Notification[]
   purchaseRequest PurchaseRequest?  @relation("PurchaseReqAsset")
 
+  @@index([propertyNumber])
   @@map("assets")
 }
 

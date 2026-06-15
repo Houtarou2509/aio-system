@@ -21,12 +21,13 @@ const ROWS = Math.floor((PAGE_H - MARGIN_Y * 2 + GAP_Y) / (LABEL_H + GAP_Y)); //
 const LABELS_PER_PAGE = COLS * ROWS;
 
 // Label internal layout (all in points, relative to label origin)
-const TOP_TEXT_PT = 5.5;      // "UPPI-DRDF" font size
-const TOP_TEXT_Y = 3;         // Y offset from label top
+const TOP_TEXT_PT = 4.5;      // "UPPI-DRDF" font size
+const TOP_TEXT_Y = 7;         // Y offset from label top (comfortable top padding)
 const QR_SIZE = 44;           // QR code size (leaves quiet zone)
-const QR_Y_OFFSET = TOP_TEXT_Y + TOP_TEXT_PT + 2; // Y offset for QR top
-const BOTTOM_TEXT_PT = 5;     // Property number font size
+const QR_Y_OFFSET = TOP_TEXT_Y + TOP_TEXT_PT + 3; // Y offset for QR top
+const BOTTOM_TEXT_PT = 4;     // Property number font size
 const BOTTOM_TEXT_Y_PAD = 2;  // Padding below QR before bottom text
+const INNER_PAD = 4;          // Minimum top/bottom clearance inside cut border
 
 
 async function generateQRCode(data: string, size: number): Promise<Buffer> {
@@ -77,7 +78,7 @@ export async function generateLabelsPdf(
 
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    const doc = new PDFDocument({ size: [PAGE_W, PAGE_H], margin: 0, autoFirstPage: false });
+    const doc = new PDFDocument({ size: [PAGE_W, PAGE_H], margin: 0, autoFirstPage: false, compress: false });
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
@@ -87,7 +88,7 @@ export async function generateLabelsPdf(
 
       // Add new page if needed
       if (posInPage === 0) {
-        doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0 });
+        doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0, compress: false });
       }
 
       const asset = assets[i];
@@ -97,6 +98,13 @@ export async function generateLabelsPdf(
       const y = MARGIN_Y + row * (LABEL_H + GAP_Y);
 
       const propNum = (asset as any).propertyNumber ?? 'N/A';
+
+      // ── Cut guide border (subtle, inset from label edge) ──
+      const borderInset = 2.5;
+      doc.lineWidth(0.5)
+        .strokeColor('#cccccc')
+        .rect(x + borderInset, y + borderInset, LABEL_W - borderInset * 2, LABEL_H - borderInset * 2)
+        .stroke();
 
       // ── Top text: "UPPI-DRDF" ──
       doc.fontSize(TOP_TEXT_PT)

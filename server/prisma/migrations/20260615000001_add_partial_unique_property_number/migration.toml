@@ -1,0 +1,4 @@
+[migration]
+generated = false
+name = "add_partial_unique_property_number"
+apply_schema = true

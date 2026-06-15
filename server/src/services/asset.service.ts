@@ -249,7 +249,9 @@ export async function createAsset(data: Prisma.AssetCreateInput, performedById: 
   // ── Guard: unique propertyNumber if provided ──
   if (cleaned.propertyNumber && cleaned.propertyNumber.trim() !== '') {
     const existing = await prisma.asset.findFirst({
-      where: { propertyNumber: cleaned.propertyNumber.trim() },
+      where: {
+        propertyNumber: { equals: cleaned.propertyNumber.trim(), mode: 'insensitive' },
+      },
     });
     if (existing) {
       const err: any = new Error('Property number already exists.');
@@ -259,9 +261,10 @@ export async function createAsset(data: Prisma.AssetCreateInput, performedById: 
     }
   }
 
-  const asset = await prisma.asset.create({ data: cleaned });
+  try {
+    const asset = await prisma.asset.create({ data: cleaned });
 
-  await logAudit({
+    await logAudit({
   userId: performedById ?? null,
   action: 'CREATE',
   entityType: 'Asset',
@@ -277,7 +280,19 @@ export async function createAsset(data: Prisma.AssetCreateInput, performedById: 
   },
 });
 
-  return asset;
+    return asset;
+  } catch (err: any) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      const target = (err.meta?.target as string[]) || [];
+      if (target.some(t => t.toLowerCase().includes('propertynumber'))) {
+        const dupErr: any = new Error('Property number already exists.');
+        dupErr.code = 'DUPLICATE_PROPERTY_NUMBER';
+        dupErr.statusCode = 409;
+        throw dupErr;
+      }
+    }
+    throw err;
+  }
 }
 
 // --- GET SINGLE ---
@@ -321,9 +336,11 @@ export async function updateAsset(id: string, data: Prisma.AssetUpdateInput, per
   const newPropNum = (data as any).propertyNumber;
   if (newPropNum !== undefined && newPropNum !== null && String(newPropNum).trim() !== '') {
     const trimmed = String(newPropNum).trim();
-    if (trimmed !== existing.propertyNumber) {
+    if (trimmed.toLowerCase() !== (existing.propertyNumber || '').toLowerCase()) {
       const conflict = await prisma.asset.findFirst({
-        where: { propertyNumber: trimmed },
+        where: {
+          propertyNumber: { equals: trimmed, mode: 'insensitive' },
+        },
       });
       if (conflict) {
         const err: any = new Error('Property number already exists.');
@@ -349,18 +366,20 @@ export async function updateAsset(id: string, data: Prisma.AssetUpdateInput, per
   }
 
   const cleaned = cleanWarrantyFields(data);
-  const asset = await prisma.asset.update({ where: { id }, data: cleaned });
 
-  // Audit log each changed field (using normalized comparison to avoid false positives)
-  for (const [key, newVal] of Object.entries(data)) {
-    if (key === 'updatedAt') continue;
-    const oldVal = (existing as any)[key];
-    // Normalize both values to eliminate type/format mismatches
-    // (e.g. Date object vs ISO string, Decimal vs string)
-    const oldNorm = normalizeAuditValue(oldVal, key);
-    const newNorm = normalizeAuditValue(newVal, key);
-    if (oldNorm === newNorm) continue;
-    await logAudit({
+  try {
+    const asset = await prisma.asset.update({ where: { id }, data: cleaned });
+
+    // Audit log each changed field (using normalized comparison to avoid false positives)
+    for (const [key, newVal] of Object.entries(data)) {
+      if (key === 'updatedAt') continue;
+      const oldVal = (existing as any)[key];
+      // Normalize both values to eliminate type/format mismatches
+      // (e.g. Date object vs ISO string, Decimal vs string)
+      const oldNorm = normalizeAuditValue(oldVal, key);
+      const newNorm = normalizeAuditValue(newVal, key);
+      if (oldNorm === newNorm) continue;
+      await logAudit({
   userId: performedById ?? null,
   action: 'UPDATE',
   entityType: 'Asset',
@@ -375,54 +394,66 @@ export async function updateAsset(id: string, data: Prisma.AssetUpdateInput, per
     "summary": generateSummary({ action: 'UPDATE', entityType: 'Asset', field: key, oldValue: oldVal == null ? null : formatAuditValue(oldVal), newValue: newVal == null ? null : formatAuditValue(newVal), assetName: existing.name }),
   },
 });
-  }
-
-  // Auto-track assignment history when assignedTo changes
-  const oldAssignedTo = (existing as any).assignedTo as string | null;
-  const newAssignedToRaw = (data as any).assignedTo;
-
-  // Resolve the actual new value (handle Prisma input forms)
-  let newAssignedTo: string | null;
-  if (newAssignedToRaw === undefined) {
-    // assignedTo wasn't changed
-    newAssignedTo = oldAssignedTo;
-  } else if (newAssignedToRaw === null || newAssignedToRaw === '') {
-    newAssignedTo = null;
-  } else if (typeof newAssignedToRaw === 'string') {
-    newAssignedTo = newAssignedToRaw;
-  } else {
-    newAssignedTo = oldAssignedTo; // Prisma nested form, skip
-  }
-
-  const oldNorm = oldAssignedTo || null;
-  const newNorm = newAssignedTo || null;
-
-  if (oldNorm !== newNorm) {
-    // Close any active assignment
-    const activeAssignment = await prisma.assignment.findFirst({
-      where: { assetId: id, returnedAt: null },
-      orderBy: { assignedAt: 'desc' },
-    });
-    if (activeAssignment) {
-      await prisma.assignment.update({
-        where: { id: activeAssignment.id },
-        data: { returnedAt: new Date() },
-      });
     }
 
-    // Create new assignment if assigning to someone
-    if (newNorm) {
-      await prisma.assignment.create({
-        data: {
-          assetId: id,
-          assignedTo: newNorm,
-          assignedAt: new Date(),
-        },
-      });
-    }
-  }
+    // Auto-track assignment history when assignedTo changes
+    const oldAssignedTo = (existing as any).assignedTo as string | null;
+    const newAssignedToRaw = (data as any).assignedTo;
 
-  return asset;
+    // Resolve the actual new value (handle Prisma input forms)
+    let newAssignedTo: string | null;
+    if (newAssignedToRaw === undefined) {
+      // assignedTo wasn't changed
+      newAssignedTo = oldAssignedTo;
+    } else if (newAssignedToRaw === null || newAssignedToRaw === '') {
+      newAssignedTo = null;
+    } else if (typeof newAssignedToRaw === 'string') {
+      newAssignedTo = newAssignedToRaw;
+    } else {
+      newAssignedTo = oldAssignedTo; // Prisma nested form, skip
+    }
+
+    const oldNorm = oldAssignedTo || null;
+    const newNorm = newAssignedTo || null;
+
+    if (oldNorm !== newNorm) {
+      // Close any active assignment
+      const activeAssignment = await prisma.assignment.findFirst({
+        where: { assetId: id, returnedAt: null },
+        orderBy: { assignedAt: 'desc' },
+      });
+      if (activeAssignment) {
+        await prisma.assignment.update({
+          where: { id: activeAssignment.id },
+          data: { returnedAt: new Date() },
+        });
+      }
+
+      // Create new assignment if assigning to someone
+      if (newNorm) {
+        await prisma.assignment.create({
+          data: {
+            assetId: id,
+            assignedTo: newNorm,
+            assignedAt: new Date(),
+          },
+        });
+      }
+    }
+
+    return asset;
+  } catch (err: any) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      const target = (err.meta?.target as string[]) || [];
+      if (target.some(t => t.toLowerCase().includes('propertynumber'))) {
+        const dupErr: any = new Error('Property number already exists.');
+        dupErr.code = 'DUPLICATE_PROPERTY_NUMBER';
+        dupErr.statusCode = 409;
+        throw dupErr;
+      }
+    }
+    throw err;
+  }
 }
 
 // --- SOFT DELETE ---

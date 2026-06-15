@@ -8,6 +8,16 @@ import path from 'path';
 
 const prisma = new PrismaClient();
 
+// Helper: delete generated-format property numbers and keep cleanup scoped
+async function cleanGeneratedPropertyNumbers(prefix: string) {
+  const regex = new RegExp(`^${prefix}\\d{5}$`);
+  const assets = await prisma.asset.findMany({ where: { propertyNumber: { not: null } }, select: { id: true, propertyNumber: true } });
+  const ids = assets.filter(a => a.propertyNumber && regex.test(a.propertyNumber)).map(a => a.id);
+  if (ids.length === 0) return;
+  await prisma.auditLog.deleteMany({ where: { entityType: 'Asset', entityId: { in: ids } } });
+  await prisma.asset.deleteMany({ where: { id: { in: ids } } });
+}
+
 // ── State ────────────────────────────────────────────────────────────────────
 let users: Record<string, UserFixture>;
 let testPersonnel: { id: string; fullName: string };
@@ -832,3 +842,135 @@ describe('Asset assignedTo — issuance populates, return clears', () => {
     expect(found2.assignedTo).toBe('Bulk Assignee');
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Property number auto-generation
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Property number auto-generation', () => {
+  const year = new Date().getFullYear();
+  const prefix = `${year}9`;
+
+  beforeEach(async () => {
+    await cleanGeneratedPropertyNumbers(prefix);
+  });
+
+  it('generates {currentYear}900001 when no matching property number exists', async () => {
+    const res = await request(app)
+      .get('/api/assets/generate-property-number')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.propertyNumber).toBe(`${prefix}00001`);
+  });
+
+  it('generates next number when current year numbers already exist', async () => {
+    await prisma.asset.create({
+      data: {
+        name: 'PN Test 1',
+        type: 'LAPTOP',
+        purchasePrice: 1000,
+        purchaseDate: new Date().toISOString(),
+        propertyNumber: `${prefix}00001`,
+      },
+    });
+
+    const res = await request(app)
+      .get('/api/assets/generate-property-number')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.propertyNumber).toBe(`${prefix}00002`);
+  });
+
+  it('ignores property numbers from other years', async () => {
+    await prisma.asset.create({
+      data: {
+        name: 'PN Old Year',
+        type: 'LAPTOP',
+        purchasePrice: 1000,
+        purchaseDate: new Date().toISOString(),
+        propertyNumber: `${year - 1}99999`,
+      },
+    });
+
+    const res = await request(app)
+      .get('/api/assets/generate-property-number')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.propertyNumber).toBe(`${prefix}00001`);
+  });
+
+  it('ignores alphanumeric/manual property numbers that do not match the generated pattern', async () => {
+    await prisma.asset.create({
+      data: {
+        name: 'PN Manual',
+        type: 'LAPTOP',
+        purchasePrice: 1000,
+        purchaseDate: new Date().toISOString(),
+        propertyNumber: 'PROP-00123',
+      },
+    });
+    await prisma.asset.create({
+      data: {
+        name: 'PN Wrong Pattern',
+        type: 'LAPTOP',
+        purchasePrice: 1000,
+        purchaseDate: new Date().toISOString(),
+        propertyNumber: `${prefix}ABC`,
+      },
+    });
+
+    const res = await request(app)
+      .get('/api/assets/generate-property-number')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.propertyNumber).toBe(`${prefix}00001`);
+  });
+
+  it('rejects duplicate non-empty property numbers on create', async () => {
+    const propertyNumber = `DUP-${Date.now()}`;
+    await createAsset({
+      name: 'PN Dup Base',
+      type: 'LAPTOP',
+      adminToken: users.ADMIN.accessToken,
+      propertyNumber,
+    });
+
+    const res = await request(app)
+      .post('/api/assets')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({
+        name: 'PN Dup Clone',
+        type: 'LAPTOP',
+        manufacturer: 'Dell',
+        purchasePrice: 1000,
+        purchaseDate: new Date().toISOString(),
+        propertyNumber,
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error?.details?.code).toBe('DUPLICATE_FIELD');
+  });
+
+  it('allows blank/null property number if currently allowed', async () => {
+    const res = await request(app)
+      .post('/api/assets')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({
+        name: 'PN Blank',
+        type: 'LAPTOP',
+        manufacturer: 'Dell',
+        purchasePrice: 1000,
+        purchaseDate: new Date().toISOString(),
+        propertyNumber: '',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.propertyNumber).toBeFalsy();
+  });
+});
+

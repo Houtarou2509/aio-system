@@ -386,6 +386,24 @@ describe('Label PDF — Layout & Content', () => {
     expect(imageCount).toBeGreaterThanOrEqual(3);
   });
 
+  it('Label PDF draws a cut-guide rectangle for each label cell', async () => {
+    const a1 = await createAsset({ name: 'Cut Border 1', propertyNumber: 'CUT-001', adminToken: users.ADMIN.accessToken });
+    const a2 = await createAsset({ name: 'Cut Border 2', propertyNumber: 'CUT-002', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .post('/api/labels/generate-pdf')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ assetIds: [a1.id, a2.id] });
+
+    expect(res.status).toBe(200);
+    const pdfStr = res.body.toString('latin1');
+
+    // With compression disabled, the border rectangle operators are directly present.
+    // Each label cell has a 67x67 pt border rect (LABEL_W=72, borderInset=2.5).
+    const rectCount = (pdfStr.match(/\b\d+(?:\.\d+)?\s+\d+(?:\.\d+)?\s+67\s+67\s+re\b/g) || []).length;
+    expect(rectCount).toBeGreaterThanOrEqual(2);
+  });
+
   it('Single-asset label PDF generates with professional filename', async () => {
     const asset = await createAsset({ name: 'Filename Test', propertyNumber: 'FN-LABEL-001', adminToken: users.ADMIN.accessToken });
 

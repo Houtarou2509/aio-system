@@ -4,7 +4,7 @@ import { Asset } from '../../lib/api';
 
 import { useLookupOptions } from '@/hooks/useLookupOptions';
 import { SupplierFormModal } from '../suppliers/SupplierFormModal';
-import { Sparkles, X, Upload, Pencil, Plus, Camera, CameraOff, Check, RotateCcw, AlertTriangle, History } from 'lucide-react';
+import { Sparkles, X, Upload, Pencil, Plus, Camera, CameraOff, Check, RotateCcw, AlertTriangle, History, Wand2 } from 'lucide-react';
 import { CameraCaptureModal } from '@/components/ui/CameraCaptureModal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 
@@ -116,6 +116,7 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
   const [serialNumberError, setSerialNumberError] = useState<string | null>(null);
   const [propertyNumberError, setPropertyNumberError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
+  const [generatingPropertyNumber, setGeneratingPropertyNumber] = useState(false);
 
   // AI suggestion review state
   const [suggestions, setSuggestions] = useState<SuggestionResult | null>(null);
@@ -268,6 +269,25 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
       setImagePreview(getImageUrl(asset.imageUrl));
     }
   }, [isEdit, asset?.imageUrl]);
+
+  // ── Auto-generate Property Number ──
+  const handleGeneratePropertyNumber = async () => {
+    setGeneratingPropertyNumber(true);
+    setPropertyNumberError(null);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch('/api/assets/generate-property-number', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const d = await res.json();
+      if (!d.success) throw new Error(d.error?.message || 'Failed to generate property number');
+      setForm(prev => ({ ...prev, propertyNumber: d.data.propertyNumber }));
+    } catch (e: any) {
+      setPropertyNumberError(e?.message || 'Failed to generate property number');
+    } finally {
+      setGeneratingPropertyNumber(false);
+    }
+  };
 
   // ── AI Suggest ──
   const handleSuggest = async () => {
@@ -770,7 +790,22 @@ export function AssetFormModal({ asset, onSubmit, onClose, onImageUpload: _onIma
               {/* 7. Property Number */}
               <div>
                 <label className={labelClass}>Property #</label>
-                <input value={form.propertyNumber} onChange={e => { set('propertyNumber', e.target.value); if (propertyNumberError) setPropertyNumberError(null); }} placeholder="e.g. PROP-00123" className={`${inputClass}${propertyNumberError ? ' !border-[#7B1113] !ring-[#7B1113]' : ''}`} />
+                <div className="flex items-center gap-2">
+                  <input value={form.propertyNumber} onChange={e => { set('propertyNumber', e.target.value); if (propertyNumberError) setPropertyNumberError(null); }} placeholder="e.g. PROP-00123" className={`${inputClass}${propertyNumberError ? ' !border-[#7B1113] !ring-[#7B1113]' : ''}`} />
+                  <button
+                    type="button"
+                    onClick={handleGeneratePropertyNumber}
+                    disabled={generatingPropertyNumber}
+                    title="Auto-generate property number"
+                    className="inline-flex shrink-0 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 w-9 h-9 text-[#f8931f] hover:bg-[#f8931f]/10 disabled:opacity-50 transition-colors"
+                  >
+                    {generatingPropertyNumber ? (
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-[#f8931f]" />
+                    ) : (
+                      <Wand2 className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
                 {propertyNumberError && <p className="mt-1 text-xs text-[#7B1113]">{propertyNumberError}</p>}
               </div>
 

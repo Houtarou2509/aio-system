@@ -61,33 +61,46 @@ describe('Label Service — Layout Constants', () => {
     expect('UPPI-DRDF').toBe('UPPI-DRDF');
   });
 
-  it('QR size fits within label with quiet zone', () => {
+  it('Label content is inset from the cut-guide border', () => {
     const LABEL_W = 72;
+    const LABEL_H = 72;
+    const borderInset = 2.5;
+    const TOP_TEXT_PT = 4.5;
+    const TOP_TEXT_Y = 7;
     const QR_SIZE = 44;
-    // QR must be smaller than label width to have quiet zone
-    expect(QR_SIZE).toBeLessThan(LABEL_W);
-    // QR centered: (72 - 44) / 2 = 14pt quiet zone on each side
+    const QR_Y_OFFSET = TOP_TEXT_Y + TOP_TEXT_PT + 3;
+    const BOTTOM_TEXT_PT = 4;
+    const BOTTOM_TEXT_Y_PAD = 2;
+
+    // Top text starts with comfortable clearance inside border
+    expect(TOP_TEXT_Y).toBeGreaterThanOrEqual(borderInset + 4);
+
+    // QR stays centered horizontally with at least 10pt quiet zone on each side
     const sideMargin = (LABEL_W - QR_SIZE) / 2;
-    expect(sideMargin).toBeGreaterThanOrEqual(10); // Minimum quiet zone for QR
+    expect(sideMargin).toBeGreaterThanOrEqual(10);
+
+    // Bottom text bottom edge must be above the bottom border line
+    const bottomEdge = QR_Y_OFFSET + QR_SIZE + BOTTOM_TEXT_Y_PAD + BOTTOM_TEXT_PT;
+    expect(bottomEdge).toBeLessThanOrEqual(LABEL_H - (borderInset + 4));
   });
 
   it('All content fits within 72x72 label', () => {
     const LABEL_H = 72;
-    const TOP_TEXT_PT = 5.5;
-    const TOP_TEXT_Y = 3;
+    const TOP_TEXT_PT = 4.5;
+    const TOP_TEXT_Y = 7;
     const QR_SIZE = 44;
-    const QR_Y_OFFSET = TOP_TEXT_Y + TOP_TEXT_PT + 2; // 10.5
-    const BOTTOM_TEXT_PT = 5;
+    const QR_Y_OFFSET = TOP_TEXT_Y + TOP_TEXT_PT + 3; // 14.5
+    const BOTTOM_TEXT_PT = 4;
     const BOTTOM_TEXT_Y_PAD = 2;
-    const BOTTOM_TEXT_Y = QR_Y_OFFSET + QR_SIZE + BOTTOM_TEXT_Y_PAD; // 56.5
+    const BOTTOM_TEXT_Y = QR_Y_OFFSET + QR_SIZE + BOTTOM_TEXT_Y_PAD; // 60.5
 
     // Bottom text bottom edge
-    const bottomEdge = BOTTOM_TEXT_Y + BOTTOM_TEXT_PT; // 61.5
+    const bottomEdge = BOTTOM_TEXT_Y + BOTTOM_TEXT_PT; // 64.5
 
     // Must fit within label height
     expect(bottomEdge).toBeLessThanOrEqual(LABEL_H);
-    // Top text must start near top
-    expect(TOP_TEXT_Y).toBeLessThanOrEqual(5);
+    // Top text must start with comfortable top padding
+    expect(TOP_TEXT_Y).toBeGreaterThanOrEqual(5);
   });
 });
 

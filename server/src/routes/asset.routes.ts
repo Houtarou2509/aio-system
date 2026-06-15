@@ -104,6 +104,52 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/assets/generate-property-number — returns next unique generated property number
+router.get('/generate-property-number', hasPermission('assets:create'), async (req: Request, res: Response) => {
+  try {
+    const year = new Date().getFullYear();
+    const prefix = `${year}9`;
+
+    // Find highest matching property number for current year pattern: {year}9#####
+    const matches = await prisma.asset.findMany({
+      where: {
+        propertyNumber: { startsWith: prefix },
+      },
+      select: { propertyNumber: true },
+    });
+
+    let maxSeq = 0;
+    for (const { propertyNumber } of matches) {
+      if (!propertyNumber) continue;
+      const seqPart = propertyNumber.slice(prefix.length);
+      if (/^\d{5}$/.test(seqPart)) {
+        const seq = parseInt(seqPart, 10);
+        if (seq > maxSeq) maxSeq = seq;
+      }
+    }
+
+    const nextSeq = maxSeq + 1;
+    if (nextSeq > 99999) {
+      return error(res, `Generated property number sequence exhausted for ${year}`, 422);
+    }
+
+    const propertyNumber = `${prefix}${String(nextSeq).padStart(5, '0')}`;
+
+    // Final uniqueness check before returning (does not create the asset)
+    const existing = await prisma.asset.findFirst({
+      where: { propertyNumber },
+    });
+    if (existing) {
+      return error(res, 'Generated property number is already in use. Please try again.', 409);
+    }
+
+    return success(res, { propertyNumber }, 200);
+  } catch (err: any) {
+    console.error('[GENERATE_PROPERTY_NUMBER] error:', err);
+    return error(res, err.message || 'Failed to generate property number', 500);
+  }
+});
+
 // GET /api/assets/stats
 router.get('/stats', async (req: Request, res: Response) => {
   try {

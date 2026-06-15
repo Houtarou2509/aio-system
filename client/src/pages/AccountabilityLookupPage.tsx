@@ -529,14 +529,27 @@ export default function AccountabilityLookupPage() {
             <span className="text-[11px] text-slate-500 dark:text-slate-400 hidden lg:inline shrink-0">
               {activeCount} active · {inactiveCount} inactive
             </span>
-            {/* Mobile add button */}
             {allowed && (
-              <button
-                onClick={() => setShowAdd(true)}
-                className="sm:hidden inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#f8931f] px-3 py-2 text-xs font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors shrink-0"
-              >
-                <Plus className="h-3.5 w-3.5" /> Add
-              </button>
+              <div className="grid grid-cols-3 gap-2 sm:hidden w-full">
+                <button
+                  onClick={handleExportBackup}
+                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-2 text-[10px] font-semibold text-[#012061] dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm transition-colors"
+                >
+                  <Download className="h-3.5 w-3.5" /> Export
+                </button>
+                <button
+                  onClick={() => { setShowBackupModal(true); setBackupResult(null); setBackupError(''); }}
+                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-2 text-[10px] font-semibold text-[#012061] dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm transition-colors"
+                >
+                  <Upload className="h-3.5 w-3.5" /> Import
+                </button>
+                <button
+                  onClick={() => setShowAdd(true)}
+                  className="inline-flex items-center justify-center gap-1 rounded-lg bg-[#f8931f] px-2 py-2 text-[10px] font-semibold text-white hover:bg-[#e0841a] shadow-sm transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add
+                </button>
+              </div>
             )}
           </div>
         </section>
