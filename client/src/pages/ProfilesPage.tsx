@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, apiFetchBlob, ApiError, AUTH_EXPIRED_EVENT } from '../lib/api';
 import {
-  Users, PlusCircle, Search, Loader2, Eye, X, UserCircle, User, Briefcase, Building2, Calendar, Mail, Phone, Package, FileText, AlertTriangle, CheckCircle2, CheckCircle, Info, ChevronDown, ChevronRight, Edit3, Trash2, ClipboardCheck, FolderOpen, Printer,
+  Users, PlusCircle, Search, Loader2, Eye, X, UserCircle, User, Briefcase, Building2, Calendar, Mail, Phone, Package, FileText, AlertTriangle, CheckCircle2, CheckCircle, Info, ChevronDown, ChevronRight, Edit3, Trash2, ClipboardCheck, FolderOpen, Printer, PenLine,
 } from 'lucide-react';
 import { CameraCaptureModal } from '../components/ui/CameraCaptureModal';
 import BulkIssuanceWizard from '../components/issuances/BulkIssuanceWizard';
@@ -115,16 +115,46 @@ interface AccountabilityData {
 }
 
 function DocStatusBadge({ status }: { status: string }) {
-  const config: Record<string, { label: string; classes: string }> = {
-    issued: { label: 'Active', classes: 'bg-[#012061]/10 text-[#012061] border-[#012061]/20' },
-    returned: { label: '✓ Returned', classes: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-    pending_signature: { label: 'Pending Sign-off', classes: 'bg-[#f8931f]/10 text-[#f8931f] border-[#f8931f]/20' },
-    signed: { label: '✎ Signed', classes: 'bg-sky-50 text-sky-700 border-sky-200' },
-  };
-  const cfg = config[status] || { label: status, classes: 'bg-slate-100 text-slate-500 border-slate-200' };
+  const badgeClass = 'inline-flex min-w-[74px] items-center justify-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none tracking-wide whitespace-nowrap';
+  const normalizedStatus = status.toLowerCase();
+
+  if (normalizedStatus === 'returned') {
+    return (
+      <span className={`${badgeClass} bg-emerald-50 text-emerald-700 border-emerald-200`}>
+        <CheckCircle2 className="h-2.5 w-2.5 shrink-0" />
+        Returned
+      </span>
+    );
+  }
+
+  if (normalizedStatus === 'signed') {
+    return (
+      <span className={`${badgeClass} bg-sky-50 text-sky-700 border-sky-200`}>
+        <PenLine className="h-2.5 w-2.5 shrink-0" />
+        Signed
+      </span>
+    );
+  }
+
+  if (normalizedStatus === 'pending_signature') {
+    return (
+      <span className={`${badgeClass} min-w-[104px] bg-[#f8931f]/10 text-[#f8931f] border-[#f8931f]/20`}>
+        Pending Sign-off
+      </span>
+    );
+  }
+
+  if (normalizedStatus === 'issued') {
+    return (
+      <span className={`${badgeClass} bg-[#012061]/10 text-[#012061] border-[#012061]/20`}>
+        Active
+      </span>
+    );
+  }
+
   return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide ${cfg.classes}`}>
-      {cfg.label}
+    <span className={`${badgeClass} bg-slate-100 text-slate-500 border-slate-200`}>
+      {status}
     </span>
   );
 }
@@ -1250,7 +1280,7 @@ function AccountabilityDrawer({
                       <thead>
                         <tr className="bg-[#012061] text-left">
                           <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Doc #</th>
-                          <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Status</th>
+                          <th className="w-[108px] px-3 py-2.5 text-center text-[10px] font-semibold tracking-widest text-white/70 uppercase">Status</th>
                           <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Issued</th>
                           <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Assets</th>
                           <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Signed At</th>
@@ -1261,7 +1291,7 @@ function AccountabilityDrawer({
                         {data.agreementDocuments.map(doc => (
                           <tr key={doc.id} className="border-b border-slate-100 bg-white dark:border-slate-700 dark:bg-slate-800">
                             <td className="px-3 py-2 font-semibold text-[#012061] text-xs dark:text-slate-100">{doc.documentNumber}</td>
-                            <td className="px-3 py-2"><DocStatusBadge status={doc.status} /></td>
+                            <td className="w-[108px] px-3 py-2 text-center align-middle"><DocStatusBadge status={doc.status} /></td>
                             <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-300">{new Date(doc.issuedAt).toLocaleDateString()}</td>
                             <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-300">{doc.assetCount}</td>
                             <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
