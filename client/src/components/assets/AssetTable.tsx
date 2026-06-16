@@ -3,6 +3,7 @@ import { getWarrantyStatus, formatWarrantyDate } from '../../lib/warranty';
 import { getMaintenanceWarning } from '../../utils/maintenanceUtils';
 import { Package } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useRef, useEffect } from 'react';
 
 /* ── Resolve image URL ────────────────────────────────────── */
 
@@ -44,6 +45,37 @@ interface Props {
   onImageClick?: (url: string) => void;
 }
 
+/* ── Checkbox component used in desktop header and mobile cards ── */
+
+function SelectionCheckbox({
+  checked,
+  indeterminate,
+  onChange,
+  ariaLabel,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  onChange: () => void;
+  ariaLabel?: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = !!indeterminate;
+  }, [indeterminate]);
+  return (
+    <label className="flex items-center gap-2 cursor-pointer select-none">
+      <input
+        ref={ref}
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        aria-label={ariaLabel}
+        className="rounded border-slate-300 dark:border-slate-600 accent-[#f8931f] h-4 w-4"
+      />
+    </label>
+  );
+}
+
 /* ── Table component ──────────────────────────────────────── */
 
 export function AssetTable({
@@ -65,12 +97,11 @@ export function AssetTable({
           <thead>
             <tr className="bg-[#012061] text-left">
               <th className="px-3 py-2.5 w-10">
-                <input
-                  type="checkbox"
-                  ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                <SelectionCheckbox
                   checked={allSelected}
+                  indeterminate={someSelected}
                   onChange={onToggleSelectAll}
-                  className="rounded border-white/30 accent-[#f8931f]"
+                  ariaLabel="Select all assets on this page"
                 />
               </th>
               <th className="px-2 py-2.5 w-12" />
@@ -112,11 +143,10 @@ export function AssetTable({
                 >
                   {/* Checkbox — stop propagation so row click doesn't toggle */}
                   <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
+                    <SelectionCheckbox
                       checked={isSelected}
                       onChange={() => onToggleSelect(a.id)}
-                      className="rounded border-slate-300 dark:border-slate-600 accent-[#f8931f]"
+                      ariaLabel={`Select ${a.name}`}
                     />
                   </td>
 
@@ -209,6 +239,13 @@ export function AssetTable({
               onClick={() => onView(a)}
             >
               <div className="flex items-start gap-3">
+                <div className="shrink-0 pt-0.5" onClick={e => e.stopPropagation()}>
+                  <SelectionCheckbox
+                    checked={selectedIds.has(a.id)}
+                    onChange={() => onToggleSelect(a.id)}
+                    ariaLabel={`Select ${a.name}`}
+                  />
+                </div>
                 {/* Image / icon */}
                 <div className="shrink-0" onClick={e => e.stopPropagation()}>
                   {imgUrl ? (

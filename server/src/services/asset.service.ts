@@ -10,18 +10,24 @@ const UPLOAD_DIR = path.resolve(__dirname, '../../uploads');
 
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-// --- LIST ---
-export async function listAssets(query: {
-  page: number; limit: number;
-  type?: string; status?: string; location?: string; owner?: string; assignedTo?: string; search?: string;
-  sortBy: string; sortOrder: string;
-  purchaseDateFrom?: string; purchaseDateTo?: string;
-  warrantyExpiryFrom?: string; warrantyExpiryTo?: string;
-}) {
-  const isRetiredView = query.status === 'RETIRED';
+export interface AssetFilterInput {
+  type?: string;
+  status?: string;
+  location?: string;
+  owner?: string;
+  assignedTo?: string;
+  manufacturer?: string;
+  search?: string;
+  purchaseDateFrom?: string;
+  purchaseDateTo?: string;
+  warrantyExpiryFrom?: string;
+  warrantyExpiryTo?: string;
+}
 
-  // When viewing disposed/retired assets, include soft-deleted records.
-  // For all other views, exclude soft-deleted (deletedAt !== null) records.
+export function buildAssetWhere(query: AssetFilterInput): Prisma.AssetWhereInput {
+  const status = query.status;
+  const isRetiredView = status === 'RETIRED';
+
   const where: Prisma.AssetWhereInput = isRetiredView
     ? {
         OR: [
@@ -34,14 +40,13 @@ export async function listAssets(query: {
   if (query.type) {
     where.type = { contains: query.type, mode: 'insensitive' } as any;
   }
-  // status filter already handled above for RETIRED; for other statuses,
-  // apply normally on top of the non-deleted base filter
-  if (query.status && !isRetiredView) {
-    where.status = query.status as any;
+  if (status && !isRetiredView) {
+    where.status = status as any;
   }
   if (query.location) where.location = { contains: query.location, mode: 'insensitive' };
   if (query.owner) where.owner = { contains: query.owner, mode: 'insensitive' };
   if (query.assignedTo) where.assignedTo = { contains: query.assignedTo };
+  if (query.manufacturer) where.manufacturer = { contains: query.manufacturer, mode: 'insensitive' };
 
   // Date filters
   if (query.purchaseDateFrom || query.purchaseDateTo) {
@@ -58,7 +63,6 @@ export async function listAssets(query: {
   }
 
   if (query.search) {
-    // Check if search looks like a date (YYYY-MM-DD or YYYY)
     const isDateSearch = /^\d{4}-\d{2}-\d{2}$/.test(query.search);
     const isYearSearch = /^\d{4}$/.test(query.search);
 
@@ -83,6 +87,19 @@ export async function listAssets(query: {
 
     where.OR = orConditions;
   }
+
+  return where;
+}
+
+// --- LIST ---
+export async function listAssets(query: {
+  page: number; limit: number;
+  type?: string; status?: string; location?: string; owner?: string; assignedTo?: string; manufacturer?: string; search?: string;
+  sortBy: string; sortOrder: string;
+  purchaseDateFrom?: string; purchaseDateTo?: string;
+  warrantyExpiryFrom?: string; warrantyExpiryTo?: string;
+}) {
+  const where = buildAssetWhere(query);
 
   const [items, total] = await Promise.all([
     prisma.asset.findMany({
@@ -134,6 +151,58 @@ export async function listAssets(query: {
   });
 
   return { items: enriched, total, page: query.page, limit: query.limit, totalPages: Math.ceil(total / query.limit) };
+}
+
+// --- CSV EXPORT ---
+export async function exportAssetsCsv(assets: any[]): Promise<{ csv: string; recordCount: number }>;
+export async function exportAssetsCsv(query: AssetFilterInput): Promise<{ csv: string; recordCount: number }>;
+export async function exportAssetsCsv(arg: any[] | AssetFilterInput): Promise<{ csv: string; recordCount: number }> {
+  let assets: any[];
+  if (Array.isArray(arg)) {
+    assets = arg;
+  } else {
+    const where = buildAssetWhere(arg);
+    assets = await prisma.asset.findMany({
+      where,
+      include: {
+        assignments: {
+          where: { returnedAt: null },
+          select: { id: true, assignedTo: true, personnel: { select: { id: true, fullName: true } } },
+          orderBy: { assignedAt: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    assets = assets.map((a: any) => {
+      const activeAssignment = a.assignments?.[0];
+      if (activeAssignment) {
+        const personnelName = activeAssignment.personnel?.fullName;
+        if (personnelName) a.assignedTo = personnelName;
+        else if (!a.assignedTo) a.assignedTo = activeAssignment.assignedTo || null;
+        if (a.assignedTo && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(a.assignedTo)) {
+          a.assignedTo = activeAssignment.assignedTo || null;
+        }
+      }
+      const { assignments, ...rest } = a;
+      return rest;
+    });
+  }
+  const headers = ['Name', 'Type', 'Status', 'Location', 'Owner', 'Assigned To', 'Property #', 'Price', 'Purchase Date', 'Serial Number', 'Manufacturer', 'Remarks', 'Added Date'];
+  const esc = (val: string | number | null | undefined) => {
+    if (val == null) return '';
+    const s = String(val);
+    if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+  const rows = assets.map(a => [
+    esc(a.name), esc(a.type), esc(a.status), esc(a.location), esc(a.owner),
+    esc(a.assignedTo), esc(a.propertyNumber), esc(a.purchasePrice != null ? Number(a.purchasePrice) : ''),
+    esc(a.purchaseDate ? new Date(a.purchaseDate).toISOString().split('T')[0] : ''),
+    esc(a.serialNumber), esc(a.manufacturer), esc(a.remarks),
+    esc(new Date(a.createdAt).toISOString().split('T')[0]),
+  ].join(','));
+  return { csv: [headers.join(','), ...rows].join('\n'), recordCount: assets.length };
 }
 
 // Helper to clean warranty and blank-string fields for DB

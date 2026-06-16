@@ -62,6 +62,7 @@ export const listAssetsQuerySchema = z.object({
   location: z.string().optional(),
   owner: z.string().optional(),
   assignedTo: z.string().optional(),
+  manufacturer: z.string().optional(),
   search: z.string().optional(),
   sortBy: z.enum(['name', 'createdAt', 'purchasePrice', 'type', 'status', 'purchaseDate', 'propertyNumber']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
@@ -69,6 +70,12 @@ export const listAssetsQuerySchema = z.object({
   purchaseDateTo: z.string().optional(),
   warrantyExpiryFrom: z.string().optional(),
   warrantyExpiryTo: z.string().optional(),
+});
+
+export const exportAssetsQuerySchema = listAssetsQuerySchema.omit({ page: true, limit: true });
+
+export const exportSelectedCsvSchema = z.object({
+  assetIds: z.array(z.string().uuid()).min(1).max(200),
 });
 
 export const bulkStatusSchema = z.object({

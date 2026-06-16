@@ -5,17 +5,14 @@ import type { AssetFilters } from '../../lib/api';
 export interface FilterPreset {
   name: string;
   filters: AssetFilters;
-  manufacturerFilter: string;
   createdAt: string;
 }
 
 interface FilterPresetManagerProps {
   /** Current full filter state to save */
   filters: AssetFilters;
-  /** Current manufacturer client-side filter */
-  manufacturerFilter: string;
   /** Apply a saved preset's filter state */
-  onApplyPreset: (filters: AssetFilters, manufacturerFilter: string) => void;
+  onApplyPreset: (filters: AssetFilters) => void;
   /** Storage key for localStorage (default: 'aio-filter-presets') */
   storageKey?: string;
 }
@@ -35,7 +32,6 @@ function savePresets(storageKey: string, presets: FilterPreset[]) {
 
 export default function FilterPresetManager({
   filters,
-  manufacturerFilter,
   onApplyPreset,
   storageKey = 'aio-filter-presets',
 }: FilterPresetManagerProps) {
@@ -71,7 +67,6 @@ export default function FilterPresetManager({
     const preset: FilterPreset = {
       name,
       filters: { ...filters },
-      manufacturerFilter,
       createdAt: new Date().toISOString(),
     };
     const updated = [...filtered, preset];
@@ -82,7 +77,7 @@ export default function FilterPresetManager({
   };
 
   const handleApply = (preset: FilterPreset) => {
-    onApplyPreset(preset.filters, preset.manufacturerFilter);
+    onApplyPreset(preset.filters);
     setOpen(false);
   };
 
@@ -93,7 +88,7 @@ export default function FilterPresetManager({
   };
 
   const hasActiveFilters = filters.type || filters.status || filters.location ||
-    filters.search || manufacturerFilter || filters.purchaseDateFrom ||
+    filters.search || filters.manufacturer || filters.purchaseDateFrom ||
     filters.purchaseDateTo || filters.warrantyExpiryFrom || filters.warrantyExpiryTo;
 
   return (

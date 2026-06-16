@@ -95,15 +95,21 @@ describe('Label Generation', () => {
   });
 
   // 7
-  it('7. POST /api/labels/generate-pdf — 51 assetIds (over max 50) → 422', async () => {
-    const fakeIds = Array.from({ length: 51 }, (_, i) => `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`);
+  it('7. POST /api/labels/generate-pdf — 201 assetIds (over old max 50) → 200', async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 62; i++) {
+      const a = await createAsset({ name: `Batch ${i}`, manufacturer: 'HP', adminToken: users.ADMIN.accessToken });
+      ids.push(a.id);
+    }
 
     const res = await request(app)
       .post('/api/labels/generate-pdf')
       .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
-      .send({ assetIds: fakeIds });
+      .send({ assetIds: ids });
 
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/pdf');
+    expect(res.body.length).toBeGreaterThan(0);
   });
 
   // 8
@@ -415,5 +421,41 @@ describe('Label PDF — Layout & Content', () => {
     expect(res.status).toBe(200);
     const disposition = res.headers['content-disposition'];
     expect(disposition).toContain('1-asset.pdf');
+  });
+});
+
+describe('Label Generation — Filtered', () => {
+  it('generates PDF by location filter', async () => {
+    const roomAssets: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const a = await createAsset({ name: `Room-${i}`, location: 'Room 1', adminToken: users.ADMIN.accessToken });
+      roomAssets.push(a.id);
+    }
+    await createAsset({ name: 'Other Room', location: 'Room 2', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .post('/api/labels/generate-pdf')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ filters: { location: 'Room 1' } });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/pdf');
+    expect(res.headers['content-disposition']).toContain('5-assets.pdf');
+  });
+
+  it('generates PDF by manufacturer filter', async () => {
+    for (let i = 0; i < 3; i++) {
+      await createAsset({ name: `View-${i}`, manufacturer: 'Viewsonic', adminToken: users.ADMIN.accessToken });
+    }
+    await createAsset({ name: 'Dell One', manufacturer: 'Dell', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .post('/api/labels/generate-pdf')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ filters: { manufacturer: 'Viewsonic' } });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/pdf');
+    expect(res.headers['content-disposition']).toContain('3-assets.pdf');
   });
 });

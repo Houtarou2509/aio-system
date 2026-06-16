@@ -34,5 +34,20 @@ export function useAssets(initialFilters: AssetFilters = {}) {
 
   useEffect(() => { fetchAssets(); }, [fetchAssets]);
 
-  return { assets, loading, error, meta, filters, setFilters, refetch: fetchAssets };
+  // Fetch all asset IDs matching the current filters (used for "select all matching")
+  const fetchAllIds = useCallback(async () => {
+    const ids: string[] = [];
+    let page = 1;
+    let totalPages = 1;
+    const baseFilters = { ...apiFilters, limit: 100 };
+    do {
+      const res = await assetsApi.list({ ...baseFilters, page });
+      ids.push(...res.data.map(a => a.id));
+      totalPages = res.meta?.totalPages ?? 1;
+      page++;
+    } while (page <= totalPages);
+    return ids;
+  }, [apiFilters]);
+
+  return { assets, loading, error, meta, filters, setFilters, refetch: fetchAssets, fetchAllIds };
 }

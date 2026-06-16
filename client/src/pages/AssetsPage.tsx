@@ -1,7 +1,8 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAssets } from '../hooks/useAssets';
 import { assetsApi, Asset, ApiError } from '../lib/api';
+import { getPageSelectionState, togglePageSelection } from '../lib/assetSelection';
 import { PermissionGate } from '../components/auth';
 import { AssetTable, AssetDetailModal, AssetFormModal, ImportAssetsModal, BulkActionModal, FilterPresetManager } from '../components/assets';
 import QRScannerModal from '../components/assets/QRScannerModal';
@@ -66,7 +67,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
 /* ── Page component ──────────────────────────────────────── */
 
 export default function AssetsPage() {
-  const { assets, loading, meta, filters, setFilters, refetch } = useAssets();
+  const { assets, loading, meta, filters, setFilters, refetch, fetchAllIds } = useAssets();
   const [searchParams, setSearchParams] = useSearchParams();
   const { options: typeFilterOptions } = useLookupOptions('asset-types');
   const { options: manufacturerOptions } = useLookupOptions('manufacturers');
@@ -82,12 +83,12 @@ export default function AssetsPage() {
   // KPI state
   const [kpiData, setKpiData] = useState<AssetKpiData | null>(null);
 
-  // Manufacturer client-side filter
-  const [manufacturerFilter, setManufacturerFilter] = useState('');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
+  const [selectAllLoading, setSelectAllLoading] = useState(false);
 
   // Search ref for keyboard shortcut
   const searchRef = useRef<HTMLInputElement>(null);
@@ -268,52 +269,104 @@ export default function AssetsPage() {
     refetch();
   };
 
+  // ── Page-specific selection state ──────────────────────────────────────────
+  const currentPageIds = useMemo(() => assets.map(a => a.id), [assets]);
+  const { allSelected: currentPageAllSelected, someSelected: currentPageSomeSelected } = useMemo(
+    () => getPageSelectionState(currentPageIds, selectedIds),
+    [currentPageIds, selectedIds]
+  );
+
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+    setSelectAllMatching(false);
   }, []);
 
   const toggleSelectAll = useCallback(() => {
-    if (selectedIds.size === assets.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(assets.map(a => a.id)));
-  }, [selectedIds.size, assets]);
+    if (selectAllMatching) {
+      setSelectedIds(new Set());
+      setSelectAllMatching(false);
+    } else {
+      setSelectedIds(prev => togglePageSelection(currentPageIds, prev));
+    }
+  }, [currentPageIds, selectAllMatching]);
 
-  const deselectAll = () => setSelectedIds(new Set());
+  const selectAllFiltered = async () => {
+    if (selectAllMatching) { deselectAll(); return; }
+    setSelectAllLoading(true);
+    try {
+      const ids = await fetchAllIds();
+      setSelectedIds(new Set(ids));
+      setSelectAllMatching(true);
+      showToast(`Selected ${ids.length} matching assets across all pages`);
+    } catch {
+      showToast('Failed to select all matching assets');
+    } finally { setSelectAllLoading(false); }
+  };
 
-  const hasActiveFilters = filters.type || filters.status || filters.location || filters.search || manufacturerFilter || filters.purchaseDateFrom || filters.purchaseDateTo || filters.warrantyExpiryFrom || filters.warrantyExpiryTo;
+  const deselectAll = () => { setSelectedIds(new Set()); setSelectAllMatching(false); };
+
+  const hasActiveFilters = Boolean(filters.type || filters.status || filters.location || filters.search || filters.manufacturer || filters.purchaseDateFrom || filters.purchaseDateTo || filters.warrantyExpiryFrom || filters.warrantyExpiryTo);
 
   const handleClearAllFilters = () => {
-    setFilters({ ...filters, type: undefined, status: undefined, location: undefined, search: undefined, purchaseDateFrom: undefined, purchaseDateTo: undefined, warrantyExpiryFrom: undefined, warrantyExpiryTo: undefined, page: 1 });
-    setManufacturerFilter('');
+    setFilters({
+      ...filters,
+      type: undefined,
+      status: undefined,
+      location: undefined,
+      manufacturer: undefined,
+      search: undefined,
+      purchaseDateFrom: undefined,
+      purchaseDateTo: undefined,
+      warrantyExpiryFrom: undefined,
+      warrantyExpiryTo: undefined,
+      page: 1,
+    });
     setSelectedIds(new Set());
+    setSelectAllMatching(false);
   };
 
-  const handleApplyPreset = (presetFilters: typeof filters, presetManufacturerFilter: string) => {
+  const handleApplyPreset = (presetFilters: typeof filters) => {
     setFilters({ ...presetFilters, page: 1 });
-    setManufacturerFilter(presetManufacturerFilter);
     setSelectedIds(new Set());
+    setSelectAllMatching(false);
   };
 
-  // Print QR labels for selected assets
-  const handlePrintQR = async () => {
+  // Print QR labels for selected or filtered assets
+  const handlePrintQR = async (mode: 'selected' | 'filtered') => {
     setPrintLoading(true);
     try {
-      const ids = Array.from(selectedIds);
+      const body: any = {};
+      if (mode === 'selected') {
+        body.assetIds = Array.from(selectedIds);
+      } else {
+        body.filters = {
+          type: filters.type,
+          status: filters.status,
+          location: filters.location,
+          manufacturer: filters.manufacturer,
+          search: filters.search,
+          purchaseDateFrom: filters.purchaseDateFrom,
+          purchaseDateTo: filters.purchaseDateTo,
+          warrantyExpiryFrom: filters.warrantyExpiryFrom,
+          warrantyExpiryTo: filters.warrantyExpiryTo,
+        };
+      }
       const res = await fetch('/api/labels/generate-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
-        body: JSON.stringify({ assetIds: ids }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       const blob = await res.blob();
 
-      // Generate professional filename client-side as fallback
       const now = new Date();
       const datePart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const countPart = ids.length === 1 ? '1-asset' : `${ids.length}-assets`;
+      const countPart = mode === 'selected'
+        ? (selectedIds.size === 1 ? '1-asset' : `${selectedIds.size}-assets`)
+        : 'filtered-assets';
       const defaultFilename = `AIO-System-QR-Labels-${datePart}-${countPart}.pdf`;
-
-      // Prefer server-provided filename from X-Filename header
       const filename = res.headers.get('X-Filename') || defaultFilename;
+      const countLabel = mode === 'selected' ? String(selectedIds.size) : 'filtered results';
 
       const url = URL.createObjectURL(blob);
       const w = window.open('', '_blank');
@@ -325,7 +378,7 @@ export default function AssetsPage() {
           .toolbar a{color:#38bdf8;text-decoration:none;font-weight:600}
           .toolbar a:hover{text-decoration:underline}
           </style></head><body>
-          <div class="toolbar"><span>QR Labels — ${ids.length} asset${ids.length > 1 ? 's' : ''}</span><a href="${url}" download="${filename}">Download PDF</a></div>
+          <div class="toolbar"><span>QR Labels — ${countLabel} asset${mode === 'selected' && selectedIds.size > 1 ? 's' : ''}</span><a href="${url}" download="${filename}">Download PDF</a></div>
           <iframe src="${url}" style="width:100%;height:calc(100vh - 36px);border:none"></iframe>
           </body></html>`);
         w.document.close();
@@ -336,35 +389,40 @@ export default function AssetsPage() {
     finally { setPrintLoading(false); }
   };
 
-  // Export CSV for selected assets
-  const handleExportCSV = () => {
+  // Export CSV for selected or filtered assets
+  const handleExportCSV = async (mode: 'selected' | 'filtered') => {
     setExportLoading(true);
     try {
-      const selected = assets.filter(a => selectedIds.has(a.id));
-      const headers = ['Name', 'Type', 'Status', 'Location', 'Owner', 'Assigned To', 'Property #', 'Price', 'Purchase Date', 'Serial Number', 'Manufacturer', 'Remarks', 'Added Date'];
-      const esc = (val: string | number | null | undefined) => {
-        if (val == null) return '';
-        const s = String(val);
-        if (s.includes(',') || s.includes('"') || s.includes('\n')) return `"${s.replace(/"/g, '""')}"`;
-        return s;
-      };
-      const rows = selected.map(a => [
-        esc(a.name), esc(a.type), esc(a.status), esc(a.location), esc(a.owner),
-        esc(a.assignedTo), esc((a as any).propertyNumber), esc(a.purchasePrice != null ? Number(a.purchasePrice) : ''),
-        esc(a.purchaseDate ? new Date(a.purchaseDate).toISOString().split('T')[0] : ''),
-        esc(a.serialNumber), esc(a.manufacturer), esc((a as any).remarks),
-        esc(new Date(a.createdAt).toISOString().split('T')[0]),
-      ].join(','));
-      const csv = [headers.join(','), ...rows].join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `assets-export-${new Date().toISOString().split('T')[0]}.csv`;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      if (mode === 'selected') {
+        const blob = await assetsApi.exportSelectedCsv(Array.from(selectedIds));
+        const filename = `assets-export-${new Date().toISOString().split('T')[0]}-${selectedIds.size}-selected-assets.csv`;
+        downloadBlob(blob, filename);
+      } else {
+        const blob = await assetsApi.exportCsv({
+          type: filters.type,
+          status: filters.status,
+          location: filters.location,
+          manufacturer: filters.manufacturer,
+          search: filters.search,
+          purchaseDateFrom: filters.purchaseDateFrom,
+          purchaseDateTo: filters.purchaseDateTo,
+          warrantyExpiryFrom: filters.warrantyExpiryFrom,
+          warrantyExpiryTo: filters.warrantyExpiryTo,
+        });
+        const filename = `assets-export-${new Date().toISOString().split('T')[0]}-filtered.csv`;
+        downloadBlob(blob, filename);
+      }
       showToast('CSV exported successfully');
     } catch { showToast('Failed to export CSV.'); }
     finally { setExportLoading(false); }
+  };
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
   };
 
   // Bulk status change
@@ -375,7 +433,7 @@ export default function AssetsPage() {
       const res = await assetsApi.bulkStatus(ids, status);
       const count = (res as any).data?.updated ?? ids.length;
       showToast(`${count} asset(s) updated to ${status}`);
-      setSelectedIds(new Set()); refetch();
+      setSelectedIds(new Set()); setSelectAllMatching(false); refetch();
     } catch (err: any) {
       const msg = err?.errorData?.details?.code === 'ACTIVE_ISSUANCE_EXISTS' || err?.errorData?.code === 'ACTIVE_ISSUANCE_EXISTS'
         ? err.message
@@ -393,15 +451,10 @@ export default function AssetsPage() {
       const res = await assetsApi.bulkDelete(ids);
       const count = (res as any).data?.deleted ?? ids.length;
       showToast(`${count} asset(s) retired`);
-      setSelectedIds(new Set()); refetch();
+      setSelectedIds(new Set()); setSelectAllMatching(false); refetch();
     } catch { showToast('Failed to delete assets.'); }
     finally { setBulkLoading(false); }
   };
-
-  // Client-side manufacturer filter
-  const displayAssets = manufacturerFilter
-    ? assets.filter(a => a.manufacturer === manufacturerFilter)
-    : assets;
 
   const KPI_CARDS = [
     { key: 'totalAssets', label: 'TOTAL ASSETS', icon: Package, value: kpiData?.totalAssets ?? 0 },
@@ -482,7 +535,21 @@ export default function AssetsPage() {
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
             Filters
-            {hasActiveFilters && <span className="ml-0.5 h-4 min-w-[16px] rounded-full bg-[#f8931f] text-[10px] font-bold text-white flex items-center justify-center px-1">{Object.values(filters).filter(v => v && v !== '' && v !== undefined).length + (manufacturerFilter ? 1 : 0)}</span>}
+            {hasActiveFilters && (
+              <span className="ml-0.5 h-4 min-w-[16px] rounded-full bg-[#f8931f] text-[10px] font-bold text-white flex items-center justify-center px-1">
+                {[
+                  filters.type,
+                  filters.status,
+                  filters.location,
+                  filters.manufacturer,
+                  filters.search,
+                  filters.purchaseDateFrom,
+                  filters.purchaseDateTo,
+                  filters.warrantyExpiryFrom,
+                  filters.warrantyExpiryTo,
+                ].filter(Boolean).length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -504,7 +571,7 @@ export default function AssetsPage() {
               <option value="">Status: All</option>
               {ASSET_STATUSES.map(s => <option key={s} value={s}>{ASSET_STATUS_LABELS[s] || s}</option>)}
             </select>
-            <select value={manufacturerFilter} onChange={e => setManufacturerFilter(e.target.value)} className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-2 text-xs text-slate-700 dark:text-slate-300 h-9 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none">
+            <select value={filters.manufacturer} onChange={e => setFilters({ ...filters, manufacturer: e.target.value || undefined, page: 1 })} className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-2 text-xs text-slate-700 dark:text-slate-300 h-9 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none">
               <option value="">Manufacturer: All</option>
               {manufacturerOptions.map((opt) => (<option key={opt.id} value={opt.value}>{opt.value}</option>))}
             </select>
@@ -575,8 +642,8 @@ export default function AssetsPage() {
 
           {/* Manufacturer filter */}
           <select
-            value={manufacturerFilter}
-            onChange={e => setManufacturerFilter(e.target.value)}
+            value={filters.manufacturer}
+            onChange={e => setFilters({ ...filters, manufacturer: e.target.value || undefined, page: 1 })}
             className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none max-w-[160px]"
           >
             <option value="">Mfr: All</option>
@@ -665,18 +732,38 @@ export default function AssetsPage() {
           {/* Filter Presets */}
           <FilterPresetManager
             filters={filters}
-            manufacturerFilter={manufacturerFilter}
             onApplyPreset={handleApplyPreset}
           />
         </div>
       </section>
 
       {/* ═══ BULK ACTION TOOLBAR ════════════════════════════ */}
-      {selectedIds.size > 0 && (
-        <div className="shrink-0 px-4 sm:px-6 py-2 bg-[#012061]/5 dark:bg-slate-700/40 border-b border-[#012061]/10 flex items-center justify-between">
-          <span className="text-sm font-semibold text-[#012061] dark:text-slate-100">
-            ☑ {selectedIds.size} asset{selectedIds.size !== 1 ? 's' : ''} selected
-          </span>
+      {(selectedIds.size > 0 || selectAllMatching) && (
+        <div className="shrink-0 px-4 sm:px-6 py-2 bg-[#012061]/5 dark:bg-slate-700/40 border-b border-[#012061]/10">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold text-[#012061] dark:text-slate-100">
+                {selectAllMatching
+                  ? `${selectedIds.size} matching asset${selectedIds.size !== 1 ? 's' : ''} selected across all pages`
+                  : `${selectedIds.size} asset${selectedIds.size !== 1 ? 's' : ''} selected`}
+              </span>
+              {!selectAllMatching && selectedIds.size > 0 && meta && currentPageAllSelected && meta.total > selectedIds.size && (
+                <button
+                  onClick={selectAllFiltered}
+                  disabled={selectAllLoading}
+                  className="text-xs font-semibold text-[#f8931f] hover:underline disabled:opacity-50"
+                >
+                  {selectAllLoading ? 'Selecting...' : `Select all ${meta.total} matching assets`}
+                </button>
+              )}
+              {selectAllMatching && (
+                <button onClick={deselectAll} className="text-xs font-semibold text-[#012061] dark:text-slate-100 hover:underline">Clear selection</button>
+              )}
+            </div>
+            {hasActiveFilters && meta && (
+              <span className="text-xs text-slate-500 dark:text-slate-400">{meta.total} asset{meta.total !== 1 ? 's' : ''} match current filters</span>
+            )}
+          </div>
           <div className="flex items-center gap-2 overflow-x-auto flex-nowrap pb-1">
             <div className="relative shrink-0" ref={statusDropdownRef}>
               <button onClick={() => setStatusDropdown(!statusDropdown)} disabled={bulkLoading}
@@ -689,35 +776,61 @@ export default function AssetsPage() {
                 </div>
               )}
             </div>
-            <button onClick={handlePrintQR} disabled={printLoading}
-              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0">
-              {printLoading ? 'Generating...' : 'Print QR'}
+            <button
+              onClick={() => handlePrintQR(selectAllMatching ? 'filtered' : 'selected')}
+              disabled={printLoading}
+              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0"
+            >
+              {printLoading ? 'Generating...' : `Print QR (${selectedIds.size})`}
             </button>
             <button onClick={() => setBulkAction('assign')} disabled={bulkLoading}
-              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0">
-              Bulk Assign
-            </button>
+              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0">Bulk Assign</button>
             <button onClick={() => setBulkAction('update')} disabled={bulkLoading}
-              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0">
-              Bulk Update
-            </button>
-            <button onClick={handleExportCSV} disabled={exportLoading}
-              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0">
-              {exportLoading ? 'Exporting...' : 'Export CSV'}
+              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0">Bulk Update</button>
+            <button
+              onClick={() => handleExportCSV(selectAllMatching ? 'filtered' : 'selected')}
+              disabled={exportLoading}
+              className="rounded-lg bg-[#012061] px-3 py-1 text-xs text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0"
+            >
+              {exportLoading ? 'Exporting...' : `Export CSV (${selectedIds.size})`}
             </button>
             <PermissionGate permissions={['assets:delete']}>
               <button onClick={() => setConfirmDelete(true)} disabled={bulkLoading}
                 className="rounded-lg bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-50 shrink-0">Delete Selected</button>
-              <button onClick={() => {
-                const first = assets.find(a => selectedIds.has(a.id));
-                if (first) setDisposeTarget(first);
-              }}
+              <button onClick={() => { const first = assets.find(a => selectedIds.has(a.id)); if (first) setDisposeTarget(first); }}
                 className="rounded-lg bg-[#7B1113] px-3 py-1 text-xs text-white hover:bg-[#6a0f11] disabled:opacity-50 shrink-0">
                 <Trash2 className="h-3 w-3 inline mr-1" />Dispose
               </button>
             </PermissionGate>
             <button onClick={deselectAll}
               className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 shrink-0">Deselect All</button>
+          </div>
+        </div>
+      )}
+
+      {/* Filtered-results actions: visible when filters are active even with no selection */}
+      {hasActiveFilters && selectedIds.size === 0 && meta && meta.total > 0 && (
+        <div className="shrink-0 px-4 sm:px-6 py-2 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <span className="text-sm font-semibold text-[#012061] dark:text-slate-100">
+              {meta.total} asset{meta.total !== 1 ? 's' : ''} found
+            </span>
+            <div className="flex items-center gap-2 overflow-x-auto flex-nowrap">
+              <button
+                onClick={() => handleExportCSV('filtered')}
+                disabled={exportLoading}
+                className="rounded-lg border border-[#012061] bg-white dark:bg-slate-800 px-3 py-1 text-xs font-semibold text-[#012061] dark:text-slate-100 hover:bg-[#012061]/5 dark:hover:bg-slate-700 disabled:opacity-50 shrink-0"
+              >
+                {exportLoading ? 'Exporting...' : `Export filtered CSV (${meta.total})`}
+              </button>
+              <button
+                onClick={() => handlePrintQR('filtered')}
+                disabled={printLoading}
+                className="rounded-lg bg-[#012061] px-3 py-1 text-xs font-semibold text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0"
+              >
+                {printLoading ? 'Generating...' : `Print QR for filtered results (${meta.total})`}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -752,11 +865,11 @@ export default function AssetsPage() {
       <div className="flex-1 overflow-auto px-4 sm:px-6 py-4">
         {loading && assets.length === 0 ? (
           <p className="text-slate-500 dark:text-slate-400 text-sm">Loading assets…</p>
-        ) : !loading && displayAssets.length === 0 && !hasActiveFilters ? (
+        ) : !loading && assets.length === 0 && !hasActiveFilters ? (
           <EmptyState onAdd={() => { setEditAsset(null); setShowForm(true); }} />
         ) : (
           <AssetTable
-            assets={displayAssets}
+            assets={assets}
             onView={handleView}
             onSort={handleSort}
             sortBy={filters.sortBy || 'createdAt'}
@@ -764,8 +877,8 @@ export default function AssetsPage() {
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAll}
-            allSelected={displayAssets.length > 0 && selectedIds.size === displayAssets.length}
-            someSelected={selectedIds.size > 0 && selectedIds.size < displayAssets.length}
+            allSelected={currentPageAllSelected}
+            someSelected={currentPageSomeSelected}
             onImageClick={(url) => setExpandedImage(url)}
           />
         )}

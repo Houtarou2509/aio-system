@@ -84,6 +84,7 @@ export async function createAsset(opts: {
   name?: string;
   type?: string;
   location?: string;
+  manufacturer?: string;
   serialNumber?: string;
   propertyNumber?: string;
   purchasePrice?: number;
@@ -98,6 +99,7 @@ export async function createAsset(opts: {
     serialNumber: opts.serialNumber || `SN-${Date.now()}`,
     purchasePrice: opts.purchasePrice ?? 1000,
     purchaseDate: opts.purchaseDate || '2025-01-15',
+    ...(opts.manufacturer && { manufacturer: opts.manufacturer }),
     ...(opts.propertyNumber && { propertyNumber: opts.propertyNumber }),
     ...(opts.status && { status: opts.status }),
   };

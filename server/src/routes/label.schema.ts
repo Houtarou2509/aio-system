@@ -1,7 +1,22 @@
 import { z } from 'zod';
 
 export const generatePdfSchema = z.object({
-  assetIds: z.array(z.string()).min(1).max(50),
+  assetIds: z.array(z.string()).min(1).max(200).optional(),
+  filters: z.object({
+    type: z.string().optional(),
+    status: z.enum(['AVAILABLE', 'PENDING_ASSIGNMENT', 'ASSIGNED', 'MAINTENANCE', 'RETIRED', 'LOST']).optional(),
+    location: z.string().optional(),
+    owner: z.string().optional(),
+    assignedTo: z.string().optional(),
+    manufacturer: z.string().optional(),
+    search: z.string().optional(),
+    purchaseDateFrom: z.string().optional(),
+    purchaseDateTo: z.string().optional(),
+    warrantyExpiryFrom: z.string().optional(),
+    warrantyExpiryTo: z.string().optional(),
+  }).optional(),
+}).refine((data) => (data.assetIds?.length ?? 0) > 0 || !!data.filters, {
+  message: 'Either assetIds or filters is required',
 });
 
 export const createTemplateSchema = z.object({

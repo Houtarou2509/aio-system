@@ -60,6 +60,8 @@ import {
   bulkAssignSchema,
   bulkReturnSchema,
   bulkUpdateSchema,
+  exportAssetsQuerySchema,
+  exportSelectedCsvSchema,
 } from './asset.schema';
 import { disposeAssetSchema } from './disposal.schema';
 
@@ -158,6 +160,66 @@ router.get('/stats', async (req: Request, res: Response) => {
     return success(res, data, 200);
   } catch (err: any) {
     return error(res, err.message, 500);
+  }
+});
+
+// GET /api/assets/export.csv — export filtered assets to CSV (no pagination)
+router.get('/export.csv', async (req: Request, res: Response) => {
+  try {
+    const query = exportAssetsQuerySchema.parse(req.query);
+    const { csv } = await assetService.exportAssetsCsv(query);
+    const filename = `assets-export-${new Date().toISOString().split('T')[0]}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-Filename', filename);
+    return res.send(csv);
+  } catch (err: any) {
+    return error(res, err.message, 400);
+  }
+});
+
+// POST /api/assets/export-csv — export selected asset IDs to CSV (cross-page)
+router.post('/export-csv', async (req: Request, res: Response) => {
+  try {
+    const parsed = exportSelectedCsvSchema.safeParse(req.body);
+    if (!parsed.success) return error(res, formatValidationError(parsed.error), 422);
+    const { assetIds } = parsed.data;
+
+    const assets = await prisma.asset.findMany({
+      where: { id: { in: assetIds } },
+      include: {
+        assignments: {
+          where: { returnedAt: null },
+          select: { id: true, assignedTo: true, personnel: { select: { id: true, fullName: true } } },
+          orderBy: { assignedAt: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const items = assets.map((a: any) => {
+      const activeAssignment = a.assignments?.[0];
+      if (activeAssignment) {
+        const personnelName = activeAssignment.personnel?.fullName;
+        if (personnelName) a.assignedTo = personnelName;
+        else if (!a.assignedTo) a.assignedTo = activeAssignment.assignedTo || null;
+        if (a.assignedTo && /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(a.assignedTo)) {
+          a.assignedTo = activeAssignment.assignedTo || null;
+        }
+      }
+      const { assignments, ...rest } = a;
+      return rest;
+    });
+
+    const { csv } = await assetService.exportAssetsCsv(items);
+    const filename = `assets-export-${new Date().toISOString().split('T')[0]}-selected.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-Filename', filename);
+    return res.send(csv);
+  } catch (err: any) {
+    return error(res, err.message, 400);
   }
 });
 

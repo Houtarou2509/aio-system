@@ -2,13 +2,13 @@ import { vi } from 'vitest';
 
 // ── AWS S3 mock ──────────────────────────────────────────────────────────────
 export const mockS3Send = vi.fn().mockResolvedValue({});
-export const mockS3Client = vi.fn().mockImplementation(() => ({
-  send: mockS3Send,
-}));
+export const mockS3Client = vi.fn().mockImplementation(function S3Client(this: any) {
+  this.send = mockS3Send;
+});
 
 vi.mock('@aws-sdk/client-s3', () => ({
-  S3Client: mockS3Client,
-  PutObjectCommand: vi.fn().mockImplementation((input: any) => input),
+  S3Client: vi.fn().mockImplementation(function S3Client(this: any) { this.send = mockS3Send; }),
+  PutObjectCommand: vi.fn().mockImplementation(function PutObjectCommand(this: any, input: any) { Object.assign(this, input); }),
 }));
 
 // ── Google Drive mock ────────────────────────────────────────────────────────

@@ -56,14 +56,57 @@ function truncateText(doc: typeof PDFDocument['prototype'], text: string, maxWid
   return truncated + '…';
 }
 
+export async function countAssetsForLabels(
+  filters?: {
+    type?: string;
+    status?: string;
+    location?: string;
+    owner?: string;
+    assignedTo?: string;
+    manufacturer?: string;
+    search?: string;
+    purchaseDateFrom?: string;
+    purchaseDateTo?: string;
+    warrantyExpiryFrom?: string;
+    warrantyExpiryTo?: string;
+  }
+): Promise<number> {
+  if (!filters) return 0;
+  const { buildAssetWhere } = await import('./asset.service');
+  const where = buildAssetWhere(filters);
+  return prisma.asset.count({ where });
+}
+
 export async function generateLabelsPdf(
-  assetIds: string[],
+  assetIds?: string[],
+  filters?: {
+    type?: string;
+    status?: string;
+    location?: string;
+    owner?: string;
+    assignedTo?: string;
+    manufacturer?: string;
+    search?: string;
+    purchaseDateFrom?: string;
+    purchaseDateTo?: string;
+    warrantyExpiryFrom?: string;
+    warrantyExpiryTo?: string;
+  },
   performedById?: string,
   ipAddress?: string
 ): Promise<Buffer> {
-  const assets = await prisma.asset.findMany({
-    where: { id: { in: assetIds }, deletedAt: null },
-  });
+  let assets: any[];
+  if (assetIds?.length) {
+    assets = await prisma.asset.findMany({
+      where: { id: { in: assetIds }, deletedAt: null },
+    });
+  } else if (filters) {
+    const { buildAssetWhere } = await import('./asset.service');
+    const where = buildAssetWhere(filters);
+    assets = await prisma.asset.findMany({ where, orderBy: { propertyNumber: 'asc' } });
+  } else {
+    throw new Error('No assets found');
+  }
 
   if (assets.length === 0) throw new Error('No assets found');
 
@@ -76,6 +119,7 @@ export async function generateLabelsPdf(
     qrPngs.set(asset.id, await generateQRCode(qrValue, QR_SIZE));
   }
 
+  const count = assets.length;
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ size: [PAGE_W, PAGE_H], margin: 0, autoFirstPage: false, compress: false });

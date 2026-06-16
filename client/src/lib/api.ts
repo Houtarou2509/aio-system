@@ -243,6 +243,7 @@ export interface AssetFilters {
   type?: string;
   status?: string;
   location?: string;
+  manufacturer?: string;
   assignedTo?: string;
   search?: string;
   page?: number;
@@ -261,6 +262,14 @@ export const assetsApi = {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== '') params.set(k, String(v)); });
     return request<PaginatedResponse<Asset>>(`/assets?${params}`);
+  },
+  exportCsv: async (filters: AssetFilters = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== '') params.set(k, String(v)); });
+    return apiFetchBlob(`/assets/export.csv?${params}`);
+  },
+  exportSelectedCsv: async (assetIds: string[]) => {
+    return apiFetchBlob('/assets/export-csv', { method: 'POST', body: { assetIds } });
   },
   get: (id: string) => request<{ data: Asset & { assignments: Assignment[]; maintenanceLogs: any[] } }>(`/assets/${id}`),
   create: (data: Partial<Asset>) => request<{ data: Asset }>('/assets', { method: 'POST', body: JSON.stringify(data) }),

@@ -974,3 +974,75 @@ describe('Property number auto-generation', () => {
   });
 });
 
+describe('Asset CSV Export', () => {
+  it('1. GET /api/assets/export.csv?location=Room 1 — exports all matching rows', async () => {
+    for (let i = 0; i < 5; i++) {
+      await createAsset({ name: `Room1-${i}`, location: 'Room 1', manufacturer: 'Dell', adminToken: users.ADMIN.accessToken });
+    }
+    await createAsset({ name: 'Room2 One', location: 'Room 2', manufacturer: 'Dell', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .get('/api/assets/export.csv?location=Room 1')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    const rows = res.text.trim().split('\n');
+    // header + 5 data rows
+    expect(rows.length).toBe(6);
+    expect(rows.slice(1).every(r => r.includes('Room 1'))).toBe(true);
+  });
+
+  it('2. GET /api/assets/export.csv?manufacturer=Viewsonic — exports only that manufacturer', async () => {
+    for (let i = 0; i < 3; i++) {
+      await createAsset({ name: `View-${i}`, manufacturer: 'Viewsonic', adminToken: users.ADMIN.accessToken });
+    }
+    await createAsset({ name: 'Dell One', manufacturer: 'Dell', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .get('/api/assets/export.csv?manufacturer=Viewsonic')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    const rows = res.text.trim().split('\n');
+    expect(rows.length).toBe(4);
+    expect(rows.slice(1).every(r => r.includes('Viewsonic'))).toBe(true);
+  });
+
+  it('3. POST /api/assets/export-csv — exports selected IDs across pages', async () => {
+    const created: string[] = [];
+    for (let i = 0; i < 62; i++) {
+      const a = await createAsset({ name: `Bulk-${i}`, manufacturer: 'HP', adminToken: users.ADMIN.accessToken });
+      created.push(a.id);
+    }
+
+    const selected = created.slice(0, 62);
+    const res = await request(app)
+      .post('/api/assets/export-csv')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ assetIds: selected });
+
+    expect(res.status).toBe(200);
+    const rows = res.text.trim().split('\n');
+    expect(rows.length).toBe(63);
+  });
+});
+
+describe('Asset list manufacturer filter', () => {
+  it('GET /api/assets?manufacturer=Viewsonic — returns only matching assets and correct total', async () => {
+    for (let i = 0; i < 3; i++) {
+      await createAsset({ name: `View-${i}`, manufacturer: 'Viewsonic', adminToken: users.ADMIN.accessToken });
+    }
+    await createAsset({ name: 'Dell One', manufacturer: 'Dell', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .get('/api/assets?manufacturer=Viewsonic')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(3);
+    expect(res.body.meta.total).toBe(3);
+  });
+});
+
+

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import '../helpers/mocks'; // load mocks before app so S3/Google clients are intercepted
 import request from 'supertest';
 import { app } from '../../server/src/index';
 import { PrismaClient } from '@prisma/client';
@@ -36,27 +37,31 @@ describe('Cron — Backups', () => {
 
   // 10
   it('10. S3 upload mock called with encrypted buffer (not plaintext JSON)', async () => {
-    // Set S3 env vars so the code tries to upload
+    // Set S3 env vars so the code tries to upload; suppress Google Drive so it doesn't delay/hijack
     const originalEnv = { ...process.env };
     process.env.AWS_ACCESS_KEY_ID = 'test-key';
     process.env.AWS_SECRET_ACCESS_KEY = 'test-secret';
     process.env.AWS_S3_BUCKET = 'test-bucket';
     process.env.AWS_REGION = 'us-east-1';
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+    delete process.env.GOOGLE_REFRESH_TOKEN;
+    delete process.env.GOOGLE_DRIVE_DAILY_FOLDER_ID;
+    delete process.env.GOOGLE_DRIVE_MONTHLY_FOLDER_ID;
 
     const { runBackup } = await import('../../server/src/services/backup.service');
-    await runBackup(users.ADMIN.id);
+    const result = await runBackup(users.ADMIN.id);
+    expect(result.status).toBe('COMPLETED');
 
     // S3 mock should have been called
-    if (mockS3Send.mock.calls.length > 0) {
-      const call = mockS3Send.mock.calls[0][0];
-      const body = call?.Body;
-      if (body) {
-        const buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
-        // Verify it's not plaintext JSON (shouldn't start with '{')
-        const firstChar = buf.toString('utf8', 0, 1);
-        expect(firstChar).not.toBe('{');
-      }
-    }
+    expect(mockS3Send.mock.calls.length).toBeGreaterThan(0);
+    const call = mockS3Send.mock.calls[0][0];
+    const body = call?.Body;
+    expect(body).toBeTruthy();
+    const buf = Buffer.isBuffer(body) ? body : Buffer.from(body);
+    // Verify it's not plaintext JSON (shouldn't start with '{')
+    const firstChar = buf.toString('utf8', 0, 1);
+    expect(firstChar).not.toBe('{');
 
     // Restore env
     process.env = originalEnv;

@@ -13,26 +13,27 @@ function getClientIp(req: Request): string {
   return Array.isArray(ip) ? ip[0] : String(ip);
 }
 
-// POST /api/labels/generate-pdf — unified endpoint for 1 or many assets
+// POST /api/labels/generate-pdf — unified endpoint for 1 or many assets, by IDs or by filters
 router.post('/generate-pdf', authenticate, authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), validate(generatePdfSchema), async (req: Request, res: Response) => {
   try {
-    const { assetIds } = req.body;
-    const pdf = await labelService.generateLabelsPdf(assetIds, req.user!.id, getClientIp(req));
+    const { assetIds, filters } = req.body;
+    const pdf = await labelService.generateLabelsPdf(assetIds, filters as any, req.user!.id, getClientIp(req));
 
     // Audit: label print event
+    const totalCount = assetIds?.length ?? (await labelService.countAssetsForLabels(filters as any));
     await logAudit({
       userId: req.user!.id,
       action: 'label.printed',
       entityType: 'Asset',
-      entityId: assetIds.length === 1 ? assetIds[0] : null,
+      entityId: assetIds?.length === 1 ? assetIds[0] : null,
       ipAddress: getClientIp(req),
-      metadata: { count: assetIds.length, assetIds, summary: `Printed ${assetIds.length} label(s)` },
+      metadata: { count: totalCount, filters, assetIds, summary: `Printed ${totalCount} label(s)` },
     });
 
     // Professional PDF filename: AIO-System-QR-Labels-YYYY-MM-DD-N-assets.pdf
     const now = new Date();
     const datePart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const countPart = assetIds.length === 1 ? '1-asset' : `${assetIds.length}-assets`;
+    const countPart = totalCount === 1 ? '1-asset' : `${totalCount}-assets`;
     const filename = `AIO-System-QR-Labels-${datePart}-${countPart}.pdf`;
 
     res.setHeader('Content-Type', 'application/pdf');
