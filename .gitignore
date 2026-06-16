@@ -4,8 +4,12 @@ dist/
 .env.*
 *.log
 .DS_Store
-server/backups/
+server/backups/*.enc
+!server/backups/.gitkeep
 server/uploads/
+server/google-oauth-client.json
+server/google-oauth-client.json.json
+server/google-drive-token.json
 logs/
 server/prisma/dev.db
 *.db-journal

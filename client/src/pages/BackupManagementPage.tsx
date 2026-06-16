@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Archive, Download, RefreshCw, Shield, HardDrive, Calendar } from 'lucide-react';
+import { Archive, Download, RefreshCw, Shield, HardDrive, Calendar, BookOpen, AlertTriangle, Terminal, Copy } from 'lucide-react';
 import { apiFetch } from '../lib/api';
 
 /* ─── Types ─── */
@@ -55,6 +55,11 @@ function backupWarning(lastBackup: string | null): string | null {
   return null;
 }
 
+function backupFilename(filePath: string | null): string {
+  if (!filePath) return '---';
+  return filePath.split('/').pop() || filePath;
+}
+
 /* ═══════════════════════════════════════════════════════════
    BACKUP MANAGEMENT PAGE
    ═══════════════════════════════════════════════════════════ */
@@ -67,6 +72,8 @@ export default function BackupManagementPage() {
   const [loading, setLoading] = useState(true);
   const [backingUp, setBackingUp] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [selectedBackup, setSelectedBackup] = useState<BackupLog | null>(null);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
@@ -92,6 +99,16 @@ export default function BackupManagementPage() {
   }, []);
 
   useEffect(() => { fetchData(page); }, [page, fetchData]);
+
+  const openRestoreGuide = (backup: BackupLog | null = null) => {
+    setSelectedBackup(backup);
+    setGuideOpen(true);
+  };
+
+  const closeRestoreGuide = () => {
+    setGuideOpen(false);
+    setSelectedBackup(null);
+  };
 
   const handleBackupNow = async () => {
     setBackingUp(true);
@@ -141,14 +158,23 @@ export default function BackupManagementPage() {
             <Shield className="h-6 w-6 text-[#f8931f]" />
             <h1 className="text-lg font-bold text-white tracking-tight">Backups</h1>
           </div>
-          <button
-            onClick={handleBackupNow}
-            disabled={backingUp}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-3 sm:px-4 py-2 text-xs font-bold text-white hover:bg-[#e0841a] shadow-sm transition-colors disabled:opacity-50 shrink-0"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${backingUp ? 'animate-spin' : ''}`} />
-            {backingUp ? 'Backing up…' : 'Backup Now'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => openRestoreGuide()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-[#012061] px-3 sm:px-4 py-2 text-xs font-bold text-white hover:bg-[#012061]/80 hover:border-white/50 shadow-sm transition-colors shrink-0"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              Restore Guide
+            </button>
+            <button
+              onClick={handleBackupNow}
+              disabled={backingUp}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#f8931f] px-3 sm:px-4 py-2 text-xs font-bold text-white hover:bg-[#e0841a] shadow-sm transition-colors disabled:opacity-50 shrink-0"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${backingUp ? 'animate-spin' : ''}`} />
+              {backingUp ? 'Backing up…' : 'Backup Now'}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -192,7 +218,41 @@ export default function BackupManagementPage() {
               <p className="text-xs text-slate-400">Click \"Backup Now\" to create your first backup</p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <>
+            <div className="md:hidden space-y-3">
+              {backups.map(b => (
+                <article key={b.id} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                  <div className="flex items-start justify-between gap-3">
+                    {statusBadge(b.status)}
+                    <span className="text-xs font-semibold capitalize text-slate-500 dark:text-slate-400">{b.destination}</span>
+                  </div>
+                  <div className="mt-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">File</p>
+                    <p className="mt-1 break-all font-mono text-xs leading-relaxed text-slate-700 dark:text-slate-300">{backupFilename(b.filePath)}</p>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Size</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">{formatSize(b.encryptedSize)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Date</p>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">{formatDate(b.createdAt)}</p>
+                    </div>
+                  </div>
+                  {b.status === 'COMPLETED' && b.filePath && (
+                    <button
+                      onClick={() => handleDownload(b.id)}
+                      className="mt-3 inline-flex w-full items-center justify-center gap-1 rounded-md border border-[#012061]/15 px-3 py-2 text-xs font-semibold text-[#012061] transition-colors hover:bg-[#012061]/5 dark:border-slate-700 dark:text-slate-100 dark:hover:bg-slate-700/40"
+                    >
+                      <Download className="h-3.5 w-3.5" /> Download
+                    </button>
+                  )}
+                </article>
+              ))}
+            </div>
+
+            <div className="hidden overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 md:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-[#012061]">
@@ -229,6 +289,7 @@ export default function BackupManagementPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
 
           {/* Pagination */}
@@ -255,6 +316,136 @@ export default function BackupManagementPage() {
           {toast}
         </div>
       )}
+
+      {/* Restore Guide Modal */}
+      {guideOpen && <RestoreGuideModal backup={selectedBackup} onClose={closeRestoreGuide} />}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RESTORE GUIDE MODAL
+   ═══════════════════════════════════════════════════════════ */
+function RestoreGuideModal({ backup, onClose }: { backup: BackupLog | null; onClose: () => void }) {
+  const filename = backup?.filePath ? backup.filePath.split('/').pop() : 'backup-YYYY-MM-DDThh-mm-ss-sssZ.enc';
+
+  const commands = [
+    { label: 'Preview (dry-run, safe)', cmd: `cd server\nnpm run backup:restore -- backups/${filename} --dry-run` },
+    { label: 'Live restore (requires --yes)', cmd: `cd server\nnpm run backup:restore -- backups/${filename} --yes` },
+    { label: 'Live restore + overwrite uploads', cmd: `cd server\nnpm run backup:restore -- backups/${filename} --yes --overwrite-uploads` },
+  ];
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {}).catch(() => {});
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
+      <div
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 dark:border-slate-700 bg-[#012061] px-4 sm:px-6 py-4">
+          <div className="flex items-center gap-3">
+            <BookOpen className="h-5 w-5 text-[#f8931f]" />
+            <div>
+              <h2 className="text-base font-bold text-white">Restore Guide</h2>
+              <p className="text-[10px] text-white/70">Server-side maintenance action</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4 sm:px-6 py-5 space-y-5">
+          {/* Warning block */}
+          <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-4 py-3">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-red-800 dark:text-red-200">Restore is destructive</p>
+                <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed">
+                  Restoring from a backup replaces database-managed data (assets, users, agreements, logs, etc.) with the contents of the backup file. It must be run from the server by an operator with the correct encryption key.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* What you need */}
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">What you need</h3>
+            <ul className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
+              <li className="flex items-start gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#f8931f]" />
+                SSH or direct server access to the machine running AIO System.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#f8931f]" />
+                The <code className="rounded bg-slate-100 dark:bg-slate-700 px-1 py-0.5 text-xs font-mono">DATABASE_URL</code> and <code className="rounded bg-slate-100 dark:bg-slate-700 px-1 py-0.5 text-xs font-mono">BACKUP_ENCRYPTION_KEY</code> values from <code className="rounded bg-slate-100 dark:bg-slate-700 px-1 py-0.5 text-xs font-mono">server/.env</code>.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#f8931f]" />
+                A downloaded or locally stored <code className="rounded bg-slate-100 dark:bg-slate-700 px-1 py-0.5 text-xs font-mono">.enc</code> backup file.
+              </li>
+            </ul>
+          </section>
+
+          {/* Procedure */}
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Recommended procedure</h3>
+            <ol className="space-y-2 text-sm text-slate-700 dark:text-slate-300 list-decimal list-inside">
+              <li>Stop the app or schedule a maintenance window.</li>
+              <li>Download the backup file into <code className="rounded bg-slate-100 dark:bg-slate-700 px-1 py-0.5 text-xs font-mono">server/backups/</code> if it is not already there.</li>
+              <li>Run the dry-run command first. It decrypts and validates the archive without changing anything.</li>
+              <li>Review the model counts and upload counts printed by dry-run.</li>
+              <li>If the preview matches expectations, run the live restore command with <code className="rounded bg-slate-100 dark:bg-slate-700 px-1 py-0.5 text-xs font-mono">--yes</code>.</li>
+              <li>Restart the PM2 / server process after restore completes.</li>
+            </ol>
+          </section>
+
+          {/* Commands */}
+          <section>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Command snippets</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+              {backup ? `Pre-filled for selected backup: ${filename}` : 'Replace the filename with your backup file name.'}
+            </p>
+            <div className="space-y-3">
+              {commands.map(({ label, cmd }, idx) => (
+                <div key={idx} className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2">
+                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                      <Terminal className="h-3.5 w-3.5" /> {label}
+                    </span>
+                    <button
+                      onClick={() => handleCopy(cmd)}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-[#012061] dark:text-slate-300 hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 transition-colors"
+                    >
+                      <Copy className="h-3 w-3" /> Copy
+                    </button>
+                  </div>
+                  <pre className="px-3 py-2.5 text-[11px] leading-relaxed font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-all">{cmd}</pre>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Important note */}
+          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-4 py-3">
+            <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+              <strong>This web interface does not perform restore.</strong> It only shows the commands that an operator must run on the server. This prevents accidental data loss from a single click.
+            </p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 sm:px-6 py-3 flex justify-end">
+          <button
+            onClick={onClose}
+            className="rounded-lg bg-[#012061] px-4 py-2 text-xs font-bold text-white hover:bg-[#012061]/90 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

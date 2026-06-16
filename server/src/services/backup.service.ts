@@ -3,10 +3,13 @@ import fs from 'fs';
 import path from 'path';
 import archiver from 'archiver';
 import { prisma } from '../lib/prisma';
+import { Prisma } from '@prisma/client';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { google } from 'googleapis';
 
 
 const BACKUP_DIR = path.resolve(__dirname, '../../backups');
+const UPLOADS_DIR = path.resolve(__dirname, '../../uploads');
 const ENCRYPTION_KEY = process.env.BACKUP_ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
 
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
@@ -15,27 +18,54 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
 const TAG_LENGTH = 16;
 
-async function dumpDatabase(): Promise<Buffer> {
-  const [users, assets, assignments, maintenanceLogs, auditLogs, guestTokens, labelTemplates] = await Promise.all([
-    prisma.user.findMany(),
-    prisma.asset.findMany(),
-    prisma.assignment.findMany(),
-    prisma.maintenanceLog.findMany(),
-    prisma.auditLog.findMany(),
-    prisma.guestToken.findMany(),
-    prisma.labelTemplate.findMany(),
-  ]);
+function serializeJson(value: unknown): string {
+  return JSON.stringify(value, (_key, currentValue) => {
+    if (typeof currentValue === 'bigint') return currentValue.toString();
+    return currentValue;
+  }, 2);
+}
 
-  const dump = JSON.stringify({
+function prismaDelegateName(modelName: string): string {
+  return modelName.charAt(0).toLowerCase() + modelName.slice(1);
+}
+
+function backupLocalDay(): number {
+  const timeZone = process.env.BACKUP_TIME_ZONE || 'Asia/Manila';
+  const day = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    day: 'numeric',
+  }).format(new Date());
+  return Number(day);
+}
+
+async function dumpDatabase(): Promise<Buffer> {
+  const data: Record<string, unknown> = {};
+
+  for (const model of Prisma.dmmf.datamodel.models) {
+    const delegateName = prismaDelegateName(model.name);
+    const delegate = (prisma as unknown as Record<string, { findMany?: () => Promise<unknown[]> }>)[delegateName];
+    if (delegate?.findMany) {
+      data[delegateName] = await delegate.findMany();
+    }
+  }
+
+  const dump = serializeJson({
     version: 1,
     exportedAt: new Date().toISOString(),
-    data: { users, assets, assignments, maintenanceLogs, auditLogs, guestTokens, labelTemplates },
-  }, null, 2);
+    data,
+  });
 
   return Buffer.from(dump, 'utf-8');
 }
 
+function assertEncryptionKey() {
+  if (!/^[a-f0-9]{64}$/i.test(ENCRYPTION_KEY)) {
+    throw new Error('BACKUP_ENCRYPTION_KEY must be a 64-character hex string');
+  }
+}
+
 function encrypt(buffer: Buffer): Buffer {
+  assertEncryptionKey();
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY, 'hex'), iv);
   const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
@@ -47,9 +77,7 @@ function compressAndEncrypt(data: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     const archive = archiver('zip', { zlib: { level: 9 } });
-    const encryptStream = crypto.createCipheriv(ALGORITHM, Buffer.from(ENCRYPTION_KEY, 'hex'), crypto.randomBytes(IV_LENGTH));
 
-    // We'll just encrypt the whole zip
     archive.on('data', (chunk: Buffer) => chunks.push(chunk));
     archive.on('end', () => {
       const zipBuffer = Buffer.concat(chunks);
@@ -58,6 +86,23 @@ function compressAndEncrypt(data: Buffer): Promise<Buffer> {
     archive.on('error', reject);
 
     archive.append(data, { name: 'db-dump.json' });
+    archive.append(Buffer.from(serializeJson({
+      version: 1,
+      createdAt: new Date().toISOString(),
+      contents: {
+        database: 'db-dump.json',
+        uploads: fs.existsSync(UPLOADS_DIR) ? 'uploads/' : null,
+      },
+      encryption: {
+        algorithm: ALGORITHM,
+        layout: 'iv(16 bytes) + authTag(16 bytes) + encryptedZip',
+      },
+    })), { name: 'backup-manifest.json' });
+
+    if (fs.existsSync(UPLOADS_DIR)) {
+      archive.directory(UPLOADS_DIR, 'uploads');
+    }
+
     archive.finalize();
   });
 }
@@ -103,20 +148,71 @@ export async function uploadToS3(filePath: string): Promise<string> {
 }
 
 export async function uploadToDrive(filePath: string): Promise<string | null> {
-  if (!process.env.GOOGLE_REFRESH_TOKEN) return null;
-  // Google Drive upload — requires OAuth2 setup
-  // For now, return null if not configured
-  throw new Error('Google Drive upload not yet configured');
+  const dailyFolderId = process.env.GOOGLE_DRIVE_DAILY_FOLDER_ID || process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID;
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.GOOGLE_REFRESH_TOKEN || !dailyFolderId) {
+    return null;
+  }
+
+  const auth = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+  );
+  auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+
+  const drive = google.drive({ version: 'v3', auth });
+  const filename = path.basename(filePath);
+  const created = await drive.files.create({
+    requestBody: {
+      name: filename,
+      parents: [dailyFolderId],
+      mimeType: 'application/octet-stream',
+    },
+    media: {
+      mimeType: 'application/octet-stream',
+      body: fs.createReadStream(filePath),
+    },
+    fields: 'id,name',
+    supportsAllDrives: true,
+  });
+
+  const monthlyFolderId = process.env.GOOGLE_DRIVE_MONTHLY_FOLDER_ID;
+  if (monthlyFolderId && backupLocalDay() === 1) {
+    await drive.files.create({
+      requestBody: {
+        name: filename,
+        parents: [monthlyFolderId],
+        mimeType: 'application/octet-stream',
+      },
+      media: {
+        mimeType: 'application/octet-stream',
+        body: fs.createReadStream(filePath),
+      },
+      fields: 'id',
+      supportsAllDrives: true,
+    });
+  }
+
+  return `gdrive://${created.data.id}/${created.data.name}`;
 }
 
 export async function runBackup(performedById?: string): Promise<any> {
-  const log = await prisma.backupLog.create({
-    data: { status: 'IN_PROGRESS', destination: 'local' },
-  });
+  let log;
 
   try {
-    // Create backup
+    // Create backup before writing a log row, so the dump does not capture an IN_PROGRESS BackupLog.
     const { filePath, encryptedSize } = await createBackup();
+
+    log = await prisma.backupLog.create({
+      data: { status: 'IN_PROGRESS', destination: 'local' },
+    });
+
+    // Upload to Google Drive if configured
+    let drivePath: string | null = null;
+    try {
+      drivePath = await uploadToDrive(filePath);
+    } catch (err) {
+      console.error('[Backup] Google Drive upload failed:', err);
+    }
 
     // Upload to S3 if configured
     let s3Path: string | null = null;
@@ -131,7 +227,7 @@ export async function runBackup(performedById?: string): Promise<any> {
       where: { id: log.id },
       data: {
         status: 'COMPLETED',
-        destination: s3Path ? 's3' : 'local',
+        destination: drivePath ? 'drive' : s3Path ? 's3' : 'local',
         filePath,
         encryptedSize,
       },
@@ -140,12 +236,14 @@ export async function runBackup(performedById?: string): Promise<any> {
     // Cleanup old backups
     await cleanupOldBackups();
 
-    return { id: log.id, status: 'COMPLETED', filePath, encryptedSize, s3Path };
+    return { id: log.id, status: 'COMPLETED', filePath, encryptedSize, drivePath, s3Path };
   } catch (err: any) {
-    await prisma.backupLog.update({
-      where: { id: log.id },
-      data: { status: 'FAILED', destination: 'local' },
-    });
+    if (log?.id) {
+      await prisma.backupLog.update({
+        where: { id: log.id },
+        data: { status: 'FAILED', destination: 'local' },
+      });
+    }
     throw err;
   }
 }
