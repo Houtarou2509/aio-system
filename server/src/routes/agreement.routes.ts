@@ -13,6 +13,7 @@ import { AUDIT_ACTIONS, logAudit } from '../services/auditLog.service';
 import { prisma } from '../lib/prisma';
 import { convertPdfFirstPageToPng } from '../utils/pdfToImage';
 import { parseContentJsonField } from '../utils/contentJson';
+import * as documentArchiveService from '../services/document-archive.service';
 
 const router = Router();
 
@@ -174,6 +175,7 @@ router.post(
           isDefault: req.body.isDefault === 'true',
           defaultPropertyOfficer: req.body.defaultPropertyOfficer || undefined,
           defaultAuthorizedRep: req.body.defaultAuthorizedRep || undefined,
+          signatoryMode: req.body.signatoryMode || undefined,
           letterheadPath: req.body.letterheadPath || undefined,
         },
         logoPath,
@@ -206,6 +208,7 @@ router.patch(
           isDefault: req.body.isDefault !== undefined ? req.body.isDefault === 'true' : undefined,
           defaultPropertyOfficer: req.body.defaultPropertyOfficer || undefined,
           defaultAuthorizedRep: req.body.defaultAuthorizedRep || undefined,
+          signatoryMode: req.body.signatoryMode || undefined,
           headerLogo: req.body.headerLogo,
           letterheadPath: req.body.letterheadPath,
         },
@@ -432,6 +435,29 @@ router.post(
         entityId: String(req.params.id),
         ipAddress: Array.isArray(req.ip) ? req.ip[0] : req.ip,
       }).catch(() => {});
+
+      // Archive signed agreement copy
+      try {
+        const assignment = await prisma.assignment.findFirst({
+          where: { agreementDocumentId: document.id },
+          select: { id: true, assetId: true, personnelId: true },
+        });
+        await documentArchiveService.recordSignedAgreementArchive(
+          document.id,
+          filePath,
+          (req as any).user.id,
+          {
+            title: document.title || `Signed Agreement — ${document.documentNumber}`,
+            documentNumber: document.documentNumber,
+            personnelId: document.personnelId,
+            assignmentId: assignment?.id ?? null,
+            assetId: assignment?.assetId ?? null,
+          },
+        );
+      } catch (archiveErr) {
+        console.error('[signed-copy upload] archive creation failed:', archiveErr);
+      }
+
       success(res, document, 201);
     } catch (e: any) {
       error(res, e.message, e.message === 'Agreement document not found' ? 404 : 400);
@@ -500,6 +526,7 @@ router.get(
           assetSnapshot: true,
           propertyOfficerName: true,
           authorizedRepName: true,
+          signatoryMode: true,
           recipientSignedAt: true,
           recipientSignatureName: true,
           signedPdfPath: true,

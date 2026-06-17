@@ -482,6 +482,20 @@ export default function IssuancesPage() {
     return path.startsWith('/') ? path : `/${path}`;
   };
 
+  const pdfBlobFromResponse = async (res: Response) => {
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => '');
+      throw new Error(errorText || 'Failed to generate PDF');
+    }
+    const blob = await res.blob();
+    const bytes = await blob.arrayBuffer();
+    const header = new TextDecoder('latin1').decode(bytes.slice(0, 5));
+    if (header !== '%PDF-') {
+      throw new Error('Agreement preview did not return a valid PDF.');
+    }
+    return new Blob([bytes], { type: 'application/pdf' });
+  };
+
   const openAgreementPreview = useCallback(async (params: Record<string, any>) => {
     const paramsWithMode = { ...params, renderMode: pdfRenderMode };
     lastPdfParamsRef.current = paramsWithMode;
@@ -526,9 +540,7 @@ export default function IssuancesPage() {
           }
         }
       }
-      if (!res.ok) throw new Error('Failed to generate PDF');
-      const blob = await res.blob();
-      const typedBlob = blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
+      const typedBlob = await pdfBlobFromResponse(res);
       const url = URL.createObjectURL(typedBlob);
       const pName = params.personnelName || 'unknown';
       setPdfPreview({ blobUrl: url, loading: false, filename: `agreement-${pName.replace(/\s+/g, '-').toLowerCase()}.pdf` });
@@ -569,9 +581,7 @@ export default function IssuancesPage() {
             },
             body: JSON.stringify(updatedParams),
           });
-          if (!res.ok) throw new Error('Failed to generate PDF');
-          const blob = await res.blob();
-          const typedBlob = blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
+          const typedBlob = await pdfBlobFromResponse(res);
           const url = URL.createObjectURL(typedBlob);
           setPdfPreview({ blobUrl: url, loading: false, filename: pdfPreview.filename });
         } catch {

@@ -35,6 +35,7 @@ interface TemplateOption {
   isDefault: boolean;
   defaultPropertyOfficer?: string | null;
   defaultAuthorizedRep?: string | null;
+  signatoryMode?: 'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep';
 }
 
 /* ─── Component ─── */
@@ -70,6 +71,7 @@ export default function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: New
   // Signatory names
   const [propertyOfficerName, setPropertyOfficerName] = useState('');
   const [authorizedRepName, setAuthorizedRepName] = useState('');
+  const [signatoryMode, setSignatoryMode] = useState<'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep'>('recipientPropertyOfficerAuthorizedRep');
 
   // Debounced asset search
   useEffect(() => {
@@ -98,6 +100,7 @@ export default function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: New
           setSelectedTemplateId(def.id);
           setPropertyOfficerName(def.defaultPropertyOfficer || '');
           setAuthorizedRepName(def.defaultAuthorizedRep || '');
+          setSignatoryMode(def.signatoryMode || 'recipientPropertyOfficerAuthorizedRep');
         }
       } catch { /* non-critical */ }
       finally { setTemplatesLoading(false); }
@@ -124,6 +127,7 @@ export default function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: New
         if (data.templateId && !selectedTemplateId) setSelectedTemplateId(data.templateId);
         if (data.defaultPropertyOfficer && !propertyOfficerName) setPropertyOfficerName(data.defaultPropertyOfficer);
         if (data.defaultAuthorizedRep && !authorizedRepName) setAuthorizedRepName(data.defaultAuthorizedRep);
+        if (data.signatoryMode) setSignatoryMode(data.signatoryMode);
         setAgreement(data.resolvedText);
       } catch {
         // Fallback to client-side resolution
@@ -172,6 +176,9 @@ export default function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: New
           condition,
           agreementText: agreement,
           agreementId: selectedTemplateId || undefined,
+          propertyOfficerName: (signatoryMode === 'recipientPropertyOfficer' || signatoryMode === 'recipientPropertyOfficerAuthorizedRep') ? propertyOfficerName || undefined : undefined,
+          authorizedRepName: signatoryMode === 'recipientPropertyOfficerAuthorizedRep' ? authorizedRepName || undefined : undefined,
+          signatoryMode,
         },
       });
       onSave();
@@ -302,6 +309,7 @@ export default function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: New
                           const tpl = templates.find(t => t.id === e.target.value);
                           setPropertyOfficerName(tpl?.defaultPropertyOfficer || '');
                           setAuthorizedRepName(tpl?.defaultAuthorizedRep || '');
+                          setSignatoryMode(tpl?.signatoryMode || 'recipientPropertyOfficerAuthorizedRep');
                         }}
                         className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent appearance-none bg-white dark:bg-slate-800"
                       >
@@ -321,17 +329,23 @@ export default function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: New
                     </select>
                   </div>
 
-                  <div>
-                    <label className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Signatories</label>
-                    <div className="space-y-2 mt-1">
-                      <input type="text" value={propertyOfficerName} onChange={e => setPropertyOfficerName(e.target.value)}
-                        placeholder="Property Officer name"
-                        className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
-                      <input type="text" value={authorizedRepName} onChange={e => setAuthorizedRepName(e.target.value)}
-                        placeholder="Authorized Representative name"
-                        className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                  {signatoryMode !== 'recipientOnly' && (
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Signatories</label>
+                      <div className="space-y-2 mt-1">
+                        {(signatoryMode === 'recipientPropertyOfficer' || signatoryMode === 'recipientPropertyOfficerAuthorizedRep') && (
+                          <input type="text" value={propertyOfficerName} onChange={e => setPropertyOfficerName(e.target.value)}
+                            placeholder="Property Officer name"
+                            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                        )}
+                        {signatoryMode === 'recipientPropertyOfficerAuthorizedRep' && (
+                          <input type="text" value={authorizedRepName} onChange={e => setAuthorizedRepName(e.target.value)}
+                            placeholder="Authorized Representative name"
+                            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Right Column — Agreement Text */}
@@ -357,8 +371,9 @@ export default function NewIssuanceWizard({ onClose, onSave, onPreviewPdf }: New
                   propertyNumber: selectedAsset?.propertyNumber || undefined,
                   condition,
                   templateId: selectedTemplateId || undefined,
-                  propertyOfficerName: propertyOfficerName || undefined,
-                  authorizedRepName: authorizedRepName || undefined,
+                  propertyOfficerName: (signatoryMode === 'recipientPropertyOfficer' || signatoryMode === 'recipientPropertyOfficerAuthorizedRep') ? propertyOfficerName || undefined : undefined,
+                  authorizedRepName: signatoryMode === 'recipientPropertyOfficerAuthorizedRep' ? authorizedRepName || undefined : undefined,
+                  signatoryMode,
                   personnelId: selectedPersonnel?.id || undefined,
                 })}
                   className="flex-1 py-2.5 rounded-lg text-sm font-semibold border-2 border-[#012061] text-[#012061] dark:text-slate-100 hover:bg-[#012061] hover:text-white transition-colors flex items-center justify-center gap-2"

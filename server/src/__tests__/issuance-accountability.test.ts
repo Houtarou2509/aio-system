@@ -55,6 +55,7 @@ describe('Phase 1 accountability lifecycle', () => {
   });
 
   afterEach(async () => {
+    await prisma.documentArchiveItem.deleteMany({ where: { documentNumber: { startsWith: runId } } });
     await prisma.auditLog.deleteMany({ where: { userId: actorId } });
     await prisma.assignment.deleteMany({ where: { assignedTo: { startsWith: runId } } });
     await prisma.agreementDocument.deleteMany({ where: { personnelNameSnapshot: { startsWith: runId } } });
@@ -109,6 +110,10 @@ describe('Phase 1 accountability lifecycle', () => {
     expect(document.resolvedText).not.toMatch(/%{3,}/);
     expect(document.resolvedText).not.toMatch(/[─━═]{3,}/);
     expect(assignment.agreementText).toBe(document.resolvedText);
+
+    const archive = await prisma.documentArchiveItem.findFirst({ where: { sourceEntityType: 'AgreementDocument', sourceEntityId: document.id, documentType: 'ACCOUNTABILITY_FORM' } });
+    expect(archive).toBeTruthy();
+    expect(archive?.documentNumber).toContain('AGR');
   });
 
   it('dry-runs and cleans existing stored agreement text artifacts idempotently', async () => {
@@ -201,6 +206,10 @@ describe('Phase 1 accountability lifecycle', () => {
 
     const updatedAsset = await prisma.asset.findUniqueOrThrow({ where: { id: asset.id } });
     expect(updatedAsset.status).toBe('AVAILABLE');
+
+    const archive = await prisma.documentArchiveItem.findFirst({ where: { assignmentId: assignment.id, documentType: 'RETURN_FORM' } });
+    expect(archive).toBeTruthy();
+    expect(archive?.status).toBe('ACTIVE');
   });
 
   it('returning a damaged or lost asset does not make it available', async () => {

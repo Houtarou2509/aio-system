@@ -262,5 +262,18 @@ export async function convertToAsset(
     },
   });
 
+  // Archive purchase document metadata
+  try {
+    const { makeDocumentNumber } = await import('../services/agreement.service');
+    const { recordPurchaseDocumentArchive } = await import('../services/document-archive.service');
+    await recordPurchaseDocumentArchive(id, userId, {
+      title: `Purchase Record — ${existing.assetName}`,
+      documentNumber: makeDocumentNumber('PUR'),
+      assetId: result.asset.id,
+    });
+  } catch (archiveErr) {
+    console.error('[convertToAsset] archive creation failed:', archiveErr);
+  }
+
   return result;
 }

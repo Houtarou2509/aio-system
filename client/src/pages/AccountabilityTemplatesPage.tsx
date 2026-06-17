@@ -21,6 +21,7 @@ interface AgreementTemplate {
   isDefault: boolean;
   defaultPropertyOfficer: string | null;
   defaultAuthorizedRep: string | null;
+  signatoryMode: 'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep';
   currentVersion: number;
   versions?: AgreementTemplateVersion[];
   _count?: { versions: number };
@@ -40,6 +41,7 @@ interface AgreementTemplateVersion {
   letterheadPath: string | null;
   defaultPropertyOfficer: string | null;
   defaultAuthorizedRep: string | null;
+  signatoryMode: 'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep';
   changeSummary: string | null;
   createdAt: string;
 }
@@ -159,6 +161,7 @@ export default function AccountabilityTemplatesPage() {
   const [editLetterheadPreview, setEditLetterheadPreview] = useState<string | null>(null);
   const [editPropertyOfficer, setEditPropertyOfficer] = useState('');
   const [editAuthorizedRep, setEditAuthorizedRep] = useState('');
+  const [editSignatoryMode, setEditSignatoryMode] = useState<'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep'>('recipientPropertyOfficerAuthorizedRep');
 
   // Is this a new (unsaved) template?
   const [isNew, setIsNew] = useState(false);
@@ -245,6 +248,7 @@ export default function AccountabilityTemplatesPage() {
     setEditLetterheadPreview(template.letterheadPath || null);
     setEditPropertyOfficer(template.defaultPropertyOfficer || '');
     setEditAuthorizedRep(template.defaultAuthorizedRep || '');
+    setEditSignatoryMode(template.signatoryMode || 'recipientPropertyOfficerAuthorizedRep');
     setIsNew(newFlag);
   }
 
@@ -269,6 +273,7 @@ export default function AccountabilityTemplatesPage() {
       isDefault: false,
       defaultPropertyOfficer: null,
       defaultAuthorizedRep: null,
+      signatoryMode: 'recipientPropertyOfficerAuthorizedRep',
       currentVersion: 1,
       createdAt: '',
       updatedAt: '',
@@ -347,6 +352,7 @@ export default function AccountabilityTemplatesPage() {
         isDefault: String(editIsDefault),
         defaultPropertyOfficer: editPropertyOfficer,
         defaultAuthorizedRep: editAuthorizedRep,
+        signatoryMode: editSignatoryMode,
         ...(letterheadPathToSave ? { letterheadPath: letterheadPathToSave } : {}),
       };
 
@@ -549,10 +555,11 @@ export default function AccountabilityTemplatesPage() {
       editIsDefault !== (selected.isDefault || false) ||
       editPropertyOfficer !== (selected.defaultPropertyOfficer || '') ||
       editAuthorizedRep !== (selected.defaultAuthorizedRep || '') ||
+      editSignatoryMode !== (selected.signatoryMode || 'recipientPropertyOfficerAuthorizedRep') ||
       editLogoFile !== null ||
       editLetterheadFile !== null
     );
-  }, [isNew, selected, editName, editTitle, editContent, editContentJson, editIsDefault, editPropertyOfficer, editAuthorizedRep, editLogoFile, editLetterheadFile]);
+  }, [isNew, selected, editName, editTitle, editContent, editContentJson, editIsDefault, editPropertyOfficer, editAuthorizedRep, editSignatoryMode, editLogoFile, editLetterheadFile]);
 
   /* ─── Filtered templates ─── */
 
@@ -1029,39 +1036,52 @@ export default function AccountabilityTemplatesPage() {
                   </div>
                 </div>
 
-                {/* ═══ SECTION C: Default Signatories ═══════════════ */}
+                {/* ═══ SECTION C: Required Signatories ═══════════════ */}
                 <div className="flex items-center gap-3 pt-6 pb-1">
                   <div className="w-1.5 h-3.5 rounded-full bg-[#f8931f]" />
-                  <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Default Signatories</span>
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Required Signatories</span>
                   <div className="flex-1 border-t border-slate-200 dark:border-slate-700" />
                 </div>
 
                 <div className="pt-3 space-y-4">
-                  <p className="text-xs text-slate-400">
-                    These names will auto-fill during issuance but can be changed per document.
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Property Officer</label>
-                      <input
-                        type="text"
-                        value={editPropertyOfficer}
-                        onChange={e => setEditPropertyOfficer(e.target.value)}
-                        placeholder="e.g., Juan Dela Cruz"
-                        className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Authorized Representative</label>
-                      <input
-                        type="text"
-                        value={editAuthorizedRep}
-                        onChange={e => setEditAuthorizedRep(e.target.value)}
-                        placeholder="e.g., Maria Santos"
-                        className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Required Signatories</label>
+                    <select
+                      value={editSignatoryMode}
+                      onChange={e => setEditSignatoryMode(e.target.value as typeof editSignatoryMode)}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow bg-white dark:bg-slate-800"
+                    >
+                      <option value="recipientOnly">Recipient only</option>
+                      <option value="recipientPropertyOfficer">Recipient + Property Officer</option>
+                      <option value="recipientPropertyOfficerAuthorizedRep">Recipient + Property Officer + Authorized Representative</option>
+                    </select>
                   </div>
+
+                  {editSignatoryMode !== 'recipientOnly' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Property Officer</label>
+                        <input
+                          type="text"
+                          value={editPropertyOfficer}
+                          onChange={e => setEditPropertyOfficer(e.target.value)}
+                          placeholder="e.g., Juan Dela Cruz"
+                          className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Authorized Representative</label>
+                        <input
+                          type="text"
+                          value={editAuthorizedRep}
+                          onChange={e => setEditAuthorizedRep(e.target.value)}
+                          placeholder="e.g., Maria Santos"
+                          disabled={editSignatoryMode !== 'recipientPropertyOfficerAuthorizedRep'}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-700"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* ═══ SECTION D: Revision History ═══════════════ */}
@@ -1334,22 +1354,26 @@ export default function AccountabilityTemplatesPage() {
 
                 {/* Signatures */}
                 <div className="mt-8 pt-4">
-                  <div className="grid grid-cols-3 gap-6">
+                  <div className={`grid gap-6 ${editSignatoryMode === 'recipientOnly' ? 'grid-cols-1 max-w-xs mx-auto' : editSignatoryMode === 'recipientPropertyOfficer' ? 'grid-cols-2' : 'grid-cols-3'}`}>
                     <div className="text-center">
                       <div className="border-b border-slate-300 dark:border-slate-600 mb-1.5" />
                       <p className="text-[10px] text-slate-600 dark:text-slate-400">Juan Dela Cruz</p>
                       <p className="text-[8px] text-slate-400 uppercase tracking-wider">Recipient</p>
                     </div>
-                    <div className="text-center">
-                      <div className="border-b border-slate-300 dark:border-slate-600 mb-1.5" />
-                      <p className="text-[10px] text-slate-600 dark:text-slate-400">{editPropertyOfficer || '_________________'}</p>
-                      <p className="text-[8px] text-slate-400 uppercase tracking-wider">Property Officer</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="border-b border-slate-300 dark:border-slate-600 mb-1.5" />
-                      <p className="text-[10px] text-slate-600 dark:text-slate-400">{editAuthorizedRep || '_________________'}</p>
-                      <p className="text-[8px] text-slate-400 uppercase tracking-wider">Authorized Rep.</p>
-                    </div>
+                    {(editSignatoryMode === 'recipientPropertyOfficer' || editSignatoryMode === 'recipientPropertyOfficerAuthorizedRep') && (
+                      <div className="text-center">
+                        <div className="border-b border-slate-300 dark:border-slate-600 mb-1.5" />
+                        <p className="text-[10px] text-slate-600 dark:text-slate-400">{editPropertyOfficer || '_________________'}</p>
+                        <p className="text-[8px] text-slate-400 uppercase tracking-wider">Property Officer</p>
+                      </div>
+                    )}
+                    {editSignatoryMode === 'recipientPropertyOfficerAuthorizedRep' && (
+                      <div className="text-center">
+                        <div className="border-b border-slate-300 dark:border-slate-600 mb-1.5" />
+                        <p className="text-[10px] text-slate-600 dark:text-slate-400">{editAuthorizedRep || '_________________'}</p>
+                        <p className="text-[8px] text-slate-400 uppercase tracking-wider">Authorized Rep.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 

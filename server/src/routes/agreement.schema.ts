@@ -8,6 +8,7 @@ export const createAgreementTemplateSchema = z.object({
   isDefault: z.enum(['true', 'false']).optional(),
   defaultPropertyOfficer: z.string().max(200).optional(),
   defaultAuthorizedRep: z.string().max(200).optional(),
+  signatoryMode: z.enum(['recipientOnly', 'recipientPropertyOfficer', 'recipientPropertyOfficerAuthorizedRep']).optional(),
   letterheadPath: z.string().max(500).optional(),
 });
 
@@ -19,6 +20,7 @@ export const updateAgreementTemplateSchema = z.object({
   isDefault: z.enum(['true', 'false']).optional(),
   defaultPropertyOfficer: z.string().max(200).optional(),
   defaultAuthorizedRep: z.string().max(200).optional(),
+  signatoryMode: z.enum(['recipientOnly', 'recipientPropertyOfficer', 'recipientPropertyOfficerAuthorizedRep']).optional(),
   letterheadPath: z.string().max(500).optional(),
 }).refine(d => Object.keys(d).length > 0, {
   message: 'Provide at least one field to update',
@@ -46,6 +48,7 @@ export const agreementPdfSchema = z.object({
   title: z.string().max(500).optional().nullable(),
   propertyOfficerName: z.string().max(200).optional().nullable(),
   authorizedRepName: z.string().max(200).optional().nullable(),
+  signatoryMode: z.enum(['recipientOnly', 'recipientPropertyOfficer', 'recipientPropertyOfficerAuthorizedRep']).optional().nullable(),
   assets: z.array(pdfAssetSchema).max(100).optional(),
   recipientSignedAt: z.union([z.string(), z.date()]).optional().nullable(),
   recipientSignatureName: z.string().max(200).optional().nullable(),

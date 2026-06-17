@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
-import { X, Printer, Download, Loader2, FileText, CheckCircle2 } from 'lucide-react';
+import { X, Printer, Download, Loader2, FileText, CheckCircle2, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
+import * as pdfjsLib from 'pdfjs-dist';
 import { PermissionGate } from '../auth';
 
 type RenderMode = 'preprinted' | 'fullDigital';
@@ -37,6 +38,9 @@ function downloadFile(url: string, filename: string) {
   document.body.removeChild(a);
 }
 
+// Use the same pdfjs-dist worker file that we copied into public.
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/aio-system/pdf.worker.min.mjs';
+
 export default function PDFPreviewModal({
   open,
   onClose,
@@ -52,9 +56,15 @@ export default function PDFPreviewModal({
   onRenderModeChange,
   renderMode: renderModeProp = 'preprinted',
 }: PDFPreviewModalProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const printFrameRef = useRef<HTMLIFrameElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [iframeKey, setIframeKey] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const [numPages, setNumPages] = useState(0);
+  const [pageNumber, setPageNumber] = useState(1);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pageScale, setPageScale] = useState(1);
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
   const [uploadError, setUploadError] = useState('');
   const [currentSignedPdfPath, setCurrentSignedPdfPath] = useState<string | null>(signedPdfPath || null);
@@ -73,17 +83,58 @@ export default function PDFPreviewModal({
     setUploadError('');
   }, [signedPdfPath, signedUploadedAt, agreementDocumentId]);
 
-  // Force iframe reload when blobUrl changes or modal opens
+  // Load PDF document
   useEffect(() => {
-    if (open && blobUrl) {
-      setIframeKey(k => k + 1);
+    let cancelled = false;
+    let loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
+    setPdfError(null);
+    setNumPages(0);
+    setPageNumber(1);
+    setPdfDoc(null);
+    if (!blobUrl) {
+      setPdfLoading(false);
+      return;
     }
-  }, [open, blobUrl]);
+    setPdfLoading(true);
+    (async () => {
+      try {
+        // Fetch blob so we have an ArrayBuffer independent of the blob URL lifetime.
+        const res = await fetch(blobUrl);
+        const arrayBuffer = await res.arrayBuffer();
+        if (cancelled) return;
+        loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const doc = await loadingTask.promise;
+        if (cancelled) {
+          doc.cleanup?.()
+          return;
+        }
+        setPdfDoc(doc);
+        setNumPages(doc.numPages);
+        setPageNumber(1);
+        setPdfError(null);
+      } catch (err: any) {
+        if (!cancelled) {
+          setPdfError(err?.message || 'Failed to load PDF preview');
+        }
+      } finally {
+        if (!cancelled) setPdfLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (loadingTask) {
+        try { loadingTask.destroy(); } catch {}
+      }
+      setPdfDoc(prev => {
+        if (prev?.cleanup) { try { prev.cleanup(); } catch {} }
+        return null;
+      });
+    };
+  }, [blobUrl]);
 
   // Cleanup blob URL on unmount and close
   const cleanup = useCallback(() => {
     if (blobUrl) {
-      // Brief delay to let iframe detach before revoking
       setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
     }
   }, [blobUrl]);
@@ -107,6 +158,24 @@ export default function PDFPreviewModal({
     return () => window.removeEventListener('keydown', handler);
   }, [open]);
 
+  // Responsive scale
+  useEffect(() => {
+    const updateScale = () => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const padding = 32;
+      const availableWidth = Math.max(200, rect.width - padding);
+      // A4 ratio page default width at scale 1 is ~595pt (≈793px device pixels at 96dpi).
+      // We want the page to fit within the available width.
+      const defaultPageWidth = 793;
+      const scale = Math.min(1.4, availableWidth / defaultPageWidth);
+      setPageScale(scale);
+    };
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    return () => window.removeEventListener('resize', updateScale);
+  }, [open, numPages]);
+
   if (!open) return null;
 
   const signedCopyUrl = toPublicFileUrl(currentSignedPdfPath);
@@ -114,8 +183,14 @@ export default function PDFPreviewModal({
   const isDocumentLevel = Boolean(agreementDocumentId);
 
   const handlePrint = () => {
-    if (iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.print();
+    if (!blobUrl) return;
+    const win = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+    if (win) {
+      const tryPrint = () => {
+        try { win.print(); } catch {}
+      };
+      win.addEventListener('load', tryPrint, { once: true });
+      setTimeout(tryPrint, 800);
     }
   };
 
@@ -168,21 +243,23 @@ export default function PDFPreviewModal({
         style={{ height: '90vh' }}
         onClick={e => e.stopPropagation()}
       >
+        {/* Hidden iframe for legacy print fallback */}
+        <iframe ref={printFrameRef} src={blobUrl || ''} className="hidden" title="Print fallback" />
+
         {/* Close button — floating top-right */}
         <button
           onClick={handleClose}
-          className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white dark:bg-slate-800/80 hover:bg-white shadow flex items-center justify-center transition-colors"
+          className="absolute top-3 right-3 z-30 w-8 h-8 rounded-full bg-white dark:bg-slate-800/80 hover:bg-white shadow flex items-center justify-center transition-colors"
         >
           <X className="w-4 h-4 text-slate-500 dark:text-slate-400" />
         </button>
 
         {/* Action buttons — floating top-left */}
-        <div className="absolute top-3 left-3 z-10 flex items-center gap-2 flex-wrap">
+        <div className="absolute top-3 left-3 z-30 flex items-center gap-2 flex-wrap">
           <button
             onClick={handlePrint}
             disabled={!blobUrl}
             className="inline-flex items-center gap-1.5 rounded-lg bg-white dark:bg-slate-800/80 hover:bg-white shadow px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-40"
-            title="Print"
           >
             <Printer className="w-3.5 h-3.5" /> Print
           </button>
@@ -190,19 +267,14 @@ export default function PDFPreviewModal({
             onClick={handleDownload}
             disabled={!blobUrl}
             className="inline-flex items-center gap-1.5 rounded-lg bg-white dark:bg-slate-800/80 hover:bg-white shadow px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors disabled:opacity-40"
-            title="Download"
           >
             <Download className="w-3.5 h-3.5" /> Download
           </button>
 
-          {/* Render mode selector */}
           {onRenderModeChange && (
             <div className="inline-flex rounded-lg shadow overflow-hidden bg-white dark:bg-slate-800/80">
               <button
-                onClick={() => {
-                  setLocalRenderMode('preprinted');
-                  onRenderModeChange('preprinted');
-                }}
+                onClick={() => { setLocalRenderMode('preprinted'); onRenderModeChange('preprinted'); }}
                 className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
                   localRenderMode === 'preprinted'
                     ? 'bg-[#012061] text-white'
@@ -213,10 +285,7 @@ export default function PDFPreviewModal({
                 Preprinted
               </button>
               <button
-                onClick={() => {
-                  setLocalRenderMode('fullDigital');
-                  onRenderModeChange('fullDigital');
-                }}
+                onClick={() => { setLocalRenderMode('fullDigital'); onRenderModeChange('fullDigital'); }}
                 className={`px-3 py-1.5 text-xs font-semibold transition-colors border-l border-slate-200 dark:border-slate-600 ${
                   localRenderMode === 'fullDigital'
                     ? 'bg-[#012061] text-white'
@@ -232,7 +301,7 @@ export default function PDFPreviewModal({
 
         {/* Document-level signed copy manager */}
         {canUploadSignedCopy && (
-          <div className="absolute top-12 left-3 z-10 w-72 rounded-xl border border-white/20 bg-white/95 dark:bg-slate-900/95 shadow-xl backdrop-blur p-3">
+          <div className="absolute top-12 left-3 z-30 w-72 rounded-xl border border-white/20 bg-white/95 dark:bg-slate-900/95 shadow-xl backdrop-blur p-3">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#012061] dark:text-white">
@@ -291,11 +360,8 @@ export default function PDFPreviewModal({
                   </div>
                 ) : uploadPhase === 'error' ? (
                   <div className="flex flex-col gap-2">
-                    <div className="rounded-lg bg-red-500 px-3 py-2 text-xs font-medium text-white">
-                      {uploadError}
-                    </div>
-                    <button onClick={() => setUploadPhase('idle')}
-                      className="rounded-lg bg-white border border-slate-200 px-3 py-1.5 text-xs font-semibold text-[#f8931f] hover:bg-[#f8931f]/10">
+                    <div className="rounded-lg bg-red-500 px-3 py-2 text-xs font-medium text-white">{uploadError}</div>
+                    <button onClick={() => setUploadPhase('idle')} className="rounded-lg bg-white border border-slate-200 px-3 py-1.5 text-xs font-semibold text-[#f8931f] hover:bg-[#f8931f]/10">
                       Try again
                     </button>
                   </div>
@@ -307,13 +373,7 @@ export default function PDFPreviewModal({
                         ? 'bg-[#f8931f] text-white hover:bg-[#e0841a]'
                         : 'bg-[#012061] text-white hover:bg-[#001a4d]'
                   }`}>
-                    {uploadPhase === 'uploading' ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : signedCopyUrl ? (
-                      <FileText className="w-3.5 h-3.5" />
-                    ) : (
-                      <FileText className="w-3.5 h-3.5" />
-                    )}
+                    {uploadPhase === 'uploading' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
                     {uploadPhase === 'uploading' ? 'Uploading...' : signedCopyUrl ? 'Replace Signed Copy' : 'Upload Signed Copy'}
                     <input
                       ref={fileInputRef}
@@ -331,22 +391,57 @@ export default function PDFPreviewModal({
         )}
 
         {/* Content */}
-        <div className="flex-1 min-h-0 bg-slate-100 dark:bg-slate-800">
-          {loading ? (
+        <div ref={containerRef} className="flex-1 min-h-0 bg-slate-100 dark:bg-slate-800 overflow-auto pt-28 pb-8 px-4">
+          {loading || pdfLoading ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-slate-400" />
-                <p className="text-sm text-slate-500 dark:text-slate-400">Generating agreement...</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{loading ? 'Generating agreement...' : 'Loading PDF preview...'}</p>
               </div>
             </div>
-          ) : blobUrl ? (
-            <iframe
-              ref={iframeRef}
-              key={iframeKey}
-              src={blobUrl ? `${blobUrl}#toolbar=0` : ''}
-              className="w-full h-full border-0"
-              title="Agreement PDF Preview"
-            />
+          ) : pdfError ? (
+            <div className="flex items-center justify-center h-full px-6">
+              <div className="max-w-md rounded-xl border border-red-200 bg-red-50 p-6 text-center shadow">
+                <AlertCircle className="w-10 h-10 text-red-500 mx-auto mb-3" />
+                <h3 className="text-sm font-bold text-red-800 mb-1">Unable to render PDF preview</h3>
+                <p className="text-xs text-red-700 mb-4">Please use Download to view the agreement.</p>
+                <button
+                  onClick={handleDownload}
+                  disabled={!blobUrl}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-40"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download PDF
+                </button>
+              </div>
+            </div>
+          ) : pdfDoc ? (
+            <div className="flex flex-col items-center gap-6">
+              {Array.from({ length: numPages }, (_, i) => i + 1).map(pageNum => (
+                <PdfPage key={`${blobUrl}-${pageNum}`} pdf={pdfDoc} pageNumber={pageNum} scale={pageScale} />
+              ))}
+
+              {numPages > 1 && (
+                <div className="sticky bottom-4 z-20 inline-flex items-center gap-2 rounded-full bg-white dark:bg-slate-900 shadow px-3 py-1.5 border border-slate-200 dark:border-slate-700">
+                  <button
+                    onClick={() => setPageNumber(p => Math.max(1, p - 1))}
+                    disabled={pageNumber <= 1}
+                    className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 min-w-[3rem] text-center">
+                    {pageNumber} / {numPages}
+                  </span>
+                  <button
+                    onClick={() => setPageNumber(p => Math.min(numPages, p + 1))}
+                    disabled={pageNumber >= numPages}
+                    className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
           ) : (
             <div className="flex items-center justify-center h-full">
               <p className="text-sm text-slate-400">Failed to generate preview</p>
@@ -354,6 +449,73 @@ export default function PDFPreviewModal({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+interface PdfPageProps {
+  pdf: pdfjsLib.PDFDocumentProxy;
+  pageNumber: number;
+  scale: number;
+}
+
+function PdfPage({ pdf, pageNumber, scale }: PdfPageProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [rendering, setRendering] = useState(true);
+  const [renderError, setRenderError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let renderTask: pdfjsLib.RenderTask | null = null;
+    setRendering(true);
+    setRenderError(null);
+
+    (async () => {
+      try {
+        const page = await pdf.getPage(pageNumber);
+        if (cancelled) return;
+        const viewport = page.getViewport({ scale });
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+        renderTask = page.render({ canvasContext: ctx, viewport } as any);
+        await renderTask.promise;
+        if (!cancelled) setRendering(false);
+      } catch (err: any) {
+        if (!cancelled) {
+          setRenderError(err?.message || 'Could not render page');
+          setRendering(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (renderTask) {
+        try { renderTask.cancel(); } catch {}
+      }
+    };
+  }, [pdf, pageNumber, scale]);
+
+  return (
+    <div className="relative shadow-lg bg-white dark:bg-slate-900">
+      {rendering && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-slate-900/80 z-10">
+          <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+        </div>
+      )}
+      {renderError ? (
+        <div className="rounded border border-red-200 bg-red-50 p-4 text-center" style={{ width: 600 * scale, height: 240 }}>
+          <p className="text-xs text-red-700">Could not render page {pageNumber}: {renderError}</p>
+        </div>
+      ) : (
+        <canvas ref={canvasRef} className="block" />
+      )}
     </div>
   );
 }

@@ -35,6 +35,7 @@ model User {
   approvedRequests   PurchaseRequest[]  @relation("ApprovedRequests")
   issueReports       IssueReport[]       @relation("IssueReportReporter")
   notifications      Notification[]      @relation("UserNotifications")
+  documentArchiveUploads DocumentArchiveItem[] @relation("DocumentUploader")
 
   @@map("users")
 }
@@ -104,6 +105,7 @@ model Asset {
   guestTokens     GuestToken[]
   notifications   Notification[]
   purchaseRequest PurchaseRequest?  @relation("PurchaseReqAsset")
+  documentArchiveItems DocumentArchiveItem[] @relation("AssetDocuments")
 
   @@index([propertyNumber])
   @@map("assets")
@@ -142,6 +144,7 @@ model Assignment {
   returnedBy    User?            @relation("AssignmentReturnedBy", fields: [returnedById], references: [id], onDelete: SetNull)
   personnel     Personnel?       @relation("PersonnelAssignments", fields: [personnelId], references: [id], onDelete: SetNull)
   agreement     AgreementTemplate? @relation("AssignmentAgreement", fields: [agreementId], references: [id], onDelete: SetNull)
+  documentArchiveItems DocumentArchiveItem[] @relation("AssignmentDocuments")
 
   @@map("assignments")
 }
@@ -343,6 +346,7 @@ model Personnel {
   assignments       Assignment[] @relation("PersonnelAssignments")
   agreementDocuments AgreementDocument[] @relation("AgreementDocumentPersonnel")
   historyLogs       ProfileHistory[] @relation("PersonnelHistory")
+  documentArchiveItems DocumentArchiveItem[] @relation("PersonnelDocuments")
 
   @@map("personnel")
 }
@@ -399,6 +403,7 @@ model AgreementTemplate {
   isDefault              Boolean  @default(false)
   defaultPropertyOfficer String?  // default name for Property Officer signatory
   defaultAuthorizedRep   String?  // default name for Authorized Representative signatory
+  signatoryMode          String   @default("recipientPropertyOfficerAuthorizedRep")
   currentVersion         Int      @default(1)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
@@ -421,6 +426,7 @@ model AgreementTemplateVersion {
   contentJson            Json?    // structured Tiptap editor content (JSON)
   defaultPropertyOfficer String?
   defaultAuthorizedRep   String?
+  signatoryMode          String   @default("recipientPropertyOfficerAuthorizedRep")
   changeSummary          String?
   createdAt              DateTime @default(now())
 
@@ -451,6 +457,7 @@ model AgreementDocument {
   assetSnapshot              Json
   propertyOfficerName        String?
   authorizedRepName          String?
+  signatoryMode              String   @default("recipientPropertyOfficerAuthorizedRep")
   status                     String   @default("issued")
   issuedAt                   DateTime @default(now())
   issuedById                 String
@@ -546,6 +553,55 @@ model PurchaseRequest {
   requestedBy         User      @relation("PurchaseRequests", fields: [requestedById], references: [id])
   approvedBy          User?     @relation("ApprovedRequests", fields: [approvedById], references: [id])
   convertedToAsset    Asset?    @relation("PurchaseReqAsset", fields: [convertedToAssetId], references: [id])
+  documentArchiveItems DocumentArchiveItem[] @relation("PurchaseRequestDocuments")
 
   @@map("purchase_requests")
+}
+
+enum DocumentArchiveType {
+  ACCOUNTABILITY_FORM
+  SIGNED_AGREEMENT
+  RETURN_FORM
+  PURCHASE_DOCUMENT
+  DISPOSAL_DOCUMENT
+}
+
+enum DocumentArchiveStatus {
+  ACTIVE
+  SUPERSEDED
+  VOID
+}
+
+model DocumentArchiveItem {
+  id                 String               @id @default(uuid())
+  documentType       DocumentArchiveType
+  title              String
+  documentNumber     String               @unique
+  filePath           String?
+  sourceEntityType   String?
+  sourceEntityId     String?
+  assetId            String?
+  personnelId        String?
+  purchaseRequestId  String?
+  assignmentId       String?
+  status             DocumentArchiveStatus @default(ACTIVE)
+  uploadedById       String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  asset              Asset?               @relation("AssetDocuments", fields: [assetId], references: [id], onDelete: SetNull)
+  personnel          Personnel?           @relation("PersonnelDocuments", fields: [personnelId], references: [id], onDelete: SetNull)
+  purchaseRequest    PurchaseRequest?     @relation("PurchaseRequestDocuments", fields: [purchaseRequestId], references: [id], onDelete: SetNull)
+  assignment         Assignment?          @relation("AssignmentDocuments", fields: [assignmentId], references: [id], onDelete: SetNull)
+  uploadedBy         User?                @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([documentType])
+  @@index([status])
+  @@index([assetId])
+  @@index([personnelId])
+  @@index([purchaseRequestId])
+  @@index([assignmentId])
+  @@index([sourceEntityType, sourceEntityId])
+  @@index([createdAt])
+  @@map("document_archive_items")
 }

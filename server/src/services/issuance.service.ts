@@ -6,6 +6,12 @@ import { classifySeverity, generateSummary } from '../utils/auditHelpers';
 import { parseTemplate } from '../utils/templateParser';
 import { FALLBACK_AGREEMENT_TEMPLATE, FALLBACK_AGREEMENT_TITLE, makeDocumentNumber, sanitizeAgreementText } from './agreement.service';
 
+const SIGNATORY_MODES = ['recipientOnly', 'recipientPropertyOfficer', 'recipientPropertyOfficerAuthorizedRep'] as const;
+type SignatoryMode = typeof SIGNATORY_MODES[number];
+function normalizeSignatoryMode(value: string | null | undefined, fallback: SignatoryMode = 'recipientPropertyOfficerAuthorizedRep'): SignatoryMode {
+  return SIGNATORY_MODES.includes(value as SignatoryMode) ? (value as SignatoryMode) : fallback;
+}
+
 function resolveAssetStatusAfterReturn(returnCondition?: string): 'AVAILABLE' | 'MAINTENANCE' | 'LOST' {
   const normalized = (returnCondition || '').trim().toLowerCase();
   if (/\b(lost|missing|stolen|not returned)\b/.test(normalized)) return 'LOST';
@@ -136,8 +142,11 @@ export async function createIssuance(params: {
   notes?: string;
   agreementText?: string;
   agreementId?: string;
+  propertyOfficerName?: string;
+  authorizedRepName?: string;
+  signatoryMode?: string;
 }, performedById: string, ipAddress?: string, userAgent?: string) {
-  const { assetId, personnelId, condition, notes, agreementText, agreementId } = params;
+  const { assetId, personnelId, condition, notes, agreementText, agreementId, propertyOfficerName, authorizedRepName, signatoryMode: suppliedSignatoryMode } = params;
 
   // Verify asset is available
   const asset = await prisma.asset.findUnique({ where: { id: assetId } });
@@ -174,6 +183,17 @@ export async function createIssuance(params: {
   const documentTemplateVersion = resolvedTemplate?.templateVersion ?? agreementTemplate?.currentVersion ?? null;
   const documentTitle = resolvedTemplate?.templateTitle ?? agreementTemplate?.title ?? 'ISSUANCE & ACCOUNTABILITY AGREEMENT';
 
+  // Resolve signatory mode/names from explicit request, explicit template, or resolved default template.
+  const effectiveSignatoryMode = normalizeSignatoryMode(
+    suppliedSignatoryMode || agreementTemplate?.signatoryMode || resolvedTemplate?.signatoryMode || null
+  );
+  const effectivePropertyOfficerName = (effectiveSignatoryMode === 'recipientPropertyOfficer' || effectiveSignatoryMode === 'recipientPropertyOfficerAuthorizedRep')
+    ? (propertyOfficerName || agreementTemplate?.defaultPropertyOfficer || resolvedTemplate?.defaultPropertyOfficer || null)
+    : null;
+  const effectiveAuthorizedRepName = effectiveSignatoryMode === 'recipientPropertyOfficerAuthorizedRep'
+    ? (authorizedRepName || agreementTemplate?.defaultAuthorizedRep || resolvedTemplate?.defaultAuthorizedRep || null)
+    : null;
+
   // Create immutable agreement document + assignment, then update asset status in a transaction
   const assignment = await prisma.$transaction(async (tx) => {
     const designationSnapshot = personnel.designation || null;
@@ -191,6 +211,9 @@ export async function createIssuance(params: {
         designationSnapshot,
         projectSnapshot,
         assetSnapshot: [{ id: asset.id, name: asset.name, serialNumber: asset.serialNumber, propertyNumber: asset.propertyNumber, condition: condition || 'Good' }],
+        signatoryMode: effectiveSignatoryMode,
+        propertyOfficerName: effectivePropertyOfficerName,
+        authorizedRepName: effectiveAuthorizedRepName,
         issuedById: performedById,
       },
     });
@@ -220,6 +243,20 @@ export async function createIssuance(params: {
 
     return a;
   });
+
+  // Archive accountability form for normal issuance (outside transaction)
+  try {
+    const { recordAccountabilityFormArchive } = await import('../services/document-archive.service');
+    await recordAccountabilityFormArchive(assignment.agreementDocument!.id, performedById, {
+      title: assignment.agreementDocument!.title,
+      documentNumber: assignment.agreementDocument!.documentNumber,
+      personnelId: assignment.personnel?.id ?? personnelId,
+      assignmentId: assignment.id,
+      assetId: assignment.asset.id,
+    });
+  } catch (archiveErr) {
+    console.error('[createIssuance] archive creation failed:', archiveErr);
+  }
 
   logAudit({
     userId: performedById ?? null,
@@ -280,12 +317,13 @@ export async function bulkIssueAssets(
     agreementText?: string;
     propertyOfficerName?: string;
     authorizedRepName?: string;
+    signatoryMode?: string;
   },
   performedById: string,
   ipAddress?: string,
   userAgent?: string,
 ) {
-  const { personnelId, assetIds, condition, notes, agreementTemplateId, agreementText: suppliedAgreementText, propertyOfficerName, authorizedRepName } = params;
+  const { personnelId, assetIds, condition, notes, agreementTemplateId, agreementText: suppliedAgreementText, propertyOfficerName, authorizedRepName, signatoryMode: suppliedSignatoryMode } = params;
   const errors: Array<{ assetId: string; reason: string }> = [];
 
   // Generate a single batch ID for all assignments in this bulk operation
@@ -334,11 +372,22 @@ export async function bulkIssueAssets(
   const agreementText = sanitizeAgreementText(suppliedAgreementText?.trim() || resolvedTemplate.resolvedText);
   const agreementId = resolvedTemplate.templateId;
 
-  // Validate agreementId references an existing template (if provided)
+  let agreementTemplate: Awaited<ReturnType<typeof prisma.agreementTemplate.findUnique>> | null = null;
   if (agreementId) {
-    const tmpl = await prisma.agreementTemplate.findUnique({ where: { id: agreementId } });
-    if (!tmpl) throw new Error('Agreement template not found');
+    agreementTemplate = await prisma.agreementTemplate.findUnique({ where: { id: agreementId } });
+    if (!agreementTemplate) throw new Error('Agreement template not found');
   }
+
+  // Resolve signatory mode/names from explicit request, explicit template, or resolved default template.
+  const effectiveSignatoryMode = normalizeSignatoryMode(
+    suppliedSignatoryMode || agreementTemplate?.signatoryMode || resolvedTemplate.signatoryMode || null
+  );
+  const effectivePropertyOfficerName = (effectiveSignatoryMode === 'recipientPropertyOfficer' || effectiveSignatoryMode === 'recipientPropertyOfficerAuthorizedRep')
+    ? (propertyOfficerName || agreementTemplate?.defaultPropertyOfficer || resolvedTemplate.defaultPropertyOfficer || null)
+    : null;
+  const effectiveAuthorizedRepName = effectiveSignatoryMode === 'recipientPropertyOfficerAuthorizedRep'
+    ? (authorizedRepName || agreementTemplate?.defaultAuthorizedRep || resolvedTemplate.defaultAuthorizedRep || null)
+    : null;
 
   // Create one immutable agreement document for the batch, then link all assignments to it.
   const { assignments, agreementDocument } = await prisma.$transaction(async (tx) => {
@@ -361,8 +410,9 @@ export async function bulkIssueAssets(
           const ad = assetMap.get(aid)!;
           return { id: ad.id, name: ad.name, serialNumber: ad.serialNumber, propertyNumber: ad.propertyNumber, condition: condition || 'Good' };
         }),
-        propertyOfficerName: propertyOfficerName || null,
-        authorizedRepName: authorizedRepName || null,
+        signatoryMode: effectiveSignatoryMode,
+        propertyOfficerName: effectivePropertyOfficerName,
+        authorizedRepName: effectiveAuthorizedRepName,
         issuedById: performedById,
       },
     });
@@ -396,6 +446,19 @@ export async function bulkIssueAssets(
     }
     return { assignments: results, agreementDocument: document };
   });
+
+  // Archive accountability form for bulk issuance
+  try {
+    const { recordAccountabilityFormArchive } = await import('../services/document-archive.service');
+    await recordAccountabilityFormArchive(agreementDocument.id, performedById, {
+      title: agreementDocument.title,
+      documentNumber: agreementDocument.documentNumber,
+      personnelId,
+      assetId: validAssetIds.length === 1 ? validAssetIds[0] : null,
+    });
+  } catch (archiveErr) {
+    console.error('[bulkIssueAssets] archive creation failed:', archiveErr);
+  }
 
   logAudit({
     userId: performedById ?? null,
@@ -464,6 +527,7 @@ export async function bulkIssueAssets(
     assignments,
     agreementText,
     agreementId,
+    agreementDocumentId: agreementDocument.id,
     errors: errors.length > 0 ? errors : undefined,
   };
 }
@@ -655,6 +719,20 @@ export async function returnIssuance(
     await checkAndCloseAgreementDocument(assignment.agreementDocumentId);
   }
 
+  // Archive return form receipt
+  try {
+    const { makeDocumentNumber } = await import('../services/agreement.service');
+    const { recordReturnFormArchive } = await import('../services/document-archive.service');
+    await recordReturnFormArchive(assignment.id, performedById, {
+      title: `Return Receipt — ${assignment.asset.name}`,
+      documentNumber: makeDocumentNumber('RET'),
+      assetId: assignment.assetId,
+      personnelId: assignment.personnelId,
+    });
+  } catch (archiveErr) {
+    console.error('[returnIssuance] archive creation failed:', archiveErr);
+  }
+
   return result;
 }
 
@@ -784,6 +862,22 @@ export async function bulkReturnAssets(
     }
   }
 
+  // Archive return form receipts
+  try {
+    const { makeDocumentNumber } = await import('../services/agreement.service');
+    const { recordReturnFormArchive } = await import('../services/document-archive.service');
+    for (const assignment of assignments) {
+      await recordReturnFormArchive(assignment.id, returnedById, {
+        title: `Return Receipt — ${assignment.asset.name}`,
+        documentNumber: makeDocumentNumber('RET'),
+        assetId: assignment.assetId,
+        personnelId: assignment.personnelId,
+      });
+    }
+  } catch (archiveErr) {
+    console.error('[bulkReturnAssets] archive creation failed:', archiveErr);
+  }
+
   return {
     returned: updatedAssignments.length,
     skipped: 0,
@@ -905,6 +999,9 @@ export async function transferAsset(
             propertyNumber: asset.propertyNumber,
             condition: transferCondition,
           }],
+          propertyOfficerName: resolvedTemplate?.template?.defaultPropertyOfficer || null,
+          authorizedRepName: resolvedTemplate?.template?.defaultAuthorizedRep || null,
+          signatoryMode: resolvedTemplate?.template?.signatoryMode || 'recipientPropertyOfficerAuthorizedRep',
           issuedById: performedById,
         },
       });
@@ -1306,7 +1403,9 @@ export async function resolveTemplate(params: {
     templateTitle: usingFallbackTemplate ? FALLBACK_AGREEMENT_TITLE : template?.title ?? null,
     defaultPropertyOfficer: usingFallbackTemplate ? null : template?.defaultPropertyOfficer ?? null,
     defaultAuthorizedRep: usingFallbackTemplate ? null : template?.defaultAuthorizedRep ?? null,
+    signatoryMode: usingFallbackTemplate ? 'recipientPropertyOfficerAuthorizedRep' : template?.signatoryMode ?? 'recipientPropertyOfficerAuthorizedRep',
     headerLogo: usingFallbackTemplate ? null : template?.headerLogo ?? null,
+    template: usingFallbackTemplate ? null : template ?? null,
     // Also return the resolved data so the client can show a preview
     resolvedData: {
       personnelName: personnel.fullName,

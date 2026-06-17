@@ -927,4 +927,14 @@ router.get('/:id/condition-history', hasPermission('assets:view'), async (req: R
   }
 });
 
+// GET /api/assets/:id/lifecycle
+router.get('/:id/lifecycle', hasPermission('assets:view'), async (req: Request, res: Response) => {
+  try {
+    const events = await assetService.getAssetLifecycle(String(req.params.id));
+    return success(res, events, 200);
+  } catch (err: any) {
+    return error(res, err.message, err.message === 'Asset not found' ? 404 : 500);
+  }
+});
+
 export default router;

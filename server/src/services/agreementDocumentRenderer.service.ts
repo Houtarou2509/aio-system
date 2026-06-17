@@ -48,6 +48,7 @@ export interface AgreementDocumentViewInput {
   assets?: AgreementDocumentAssetInput[] | null;
   propertyOfficerName?: string | null;
   authorizedRepName?: string | null;
+  signatoryMode?: 'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep' | null;
   recipientSignedAt?: string | Date | null;
   recipientSignatureName?: string | null;
 }
@@ -163,23 +164,33 @@ function buildSignatures(input: AgreementDocumentViewInput): AgreementDocumentVi
     ? new Date(input.recipientSignedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     : null;
 
-  return [
+  const mode = input.signatoryMode || 'recipientPropertyOfficerAuthorizedRep';
+
+  const signatures: AgreementDocumentViewSignature[] = [
     {
       role: 'Recipient',
       label: input.recipientSignatureName?.trim() || input.personnelName || '_________________',
       subtitle: signedAt ? `Digitally signed ${signedAt}` : 'Recipient',
     },
-    {
+  ];
+
+  if (mode === 'recipientPropertyOfficer' || mode === 'recipientPropertyOfficerAuthorizedRep') {
+    signatures.push({
       role: 'Property Officer',
       label: input.propertyOfficerName?.trim() || '_________________',
       subtitle: 'Property Officer',
-    },
-    {
+    });
+  }
+
+  if (mode === 'recipientPropertyOfficerAuthorizedRep') {
+    signatures.push({
       role: 'Authorized Representative',
       label: input.authorizedRepName?.trim() || '_________________',
       subtitle: 'Authorized Representative',
-    },
-  ];
+    });
+  }
+
+  return signatures;
 }
 
 export function buildAgreementDocumentView(input: AgreementDocumentViewInput): AgreementDocumentView {

@@ -7,6 +7,9 @@ export const createIssuanceSchema = z.object({
   notes: z.string().max(1000).optional().nullable(),
   agreementText: z.string().max(20000).optional().nullable(),
   agreementId: z.string().uuid().optional().nullable(),
+  propertyOfficerName: z.string().max(200).optional().nullable(),
+  authorizedRepName: z.string().max(200).optional().nullable(),
+  signatoryMode: z.enum(['recipientOnly', 'recipientPropertyOfficer', 'recipientPropertyOfficerAuthorizedRep']).optional().nullable(),
 });
 
 export const returnIssuanceSchema = z.object({
@@ -39,6 +42,7 @@ export const bulkIssuanceSchema = z.object({
   agreementText: z.string().max(100000).optional().nullable(),
   propertyOfficerName: z.string().max(200).optional().nullable(),
   authorizedRepName: z.string().max(200).optional().nullable(),
+  signatoryMode: z.enum(['recipientOnly', 'recipientPropertyOfficer', 'recipientPropertyOfficerAuthorizedRep']).optional().nullable(),
 });
 
 export const resolveBulkTemplateSchema = z.object({

@@ -5,6 +5,16 @@ import {
   FileSignature, Search, X, ChevronRight, Users, FileText, Loader2, CheckSquare, Square,
 } from 'lucide-react';
 
+/*
+  QA Signatory UI Checklist:
+  1. Open Bulk Issuance Wizard.
+  2. Select assets and personnel to reach the Agreement step.
+  3. Choose a template with signatoryMode=recipientOnly -> only Agreement text shown; no Signatories section.
+  4. Choose recipientPropertyOfficer -> Signatories section shows Property Officer input only.
+  5. Choose recipientPropertyOfficerAuthorizedRep -> Signatories section shows Property Officer + Authorized Representative.
+  6. Confirm the issued document snapshot only stores names required by the selected mode.
+*/
+
 /* ─── Types ─── */
 
 interface AssetOption {
@@ -34,6 +44,7 @@ interface TemplateOption {
   isDefault: boolean;
   defaultPropertyOfficer?: string | null;
   defaultAuthorizedRep?: string | null;
+  signatoryMode?: 'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep';
 }
 
 /* ─── Component ─── */
@@ -74,6 +85,7 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
   // Signatory names
   const [propertyOfficerName, setPropertyOfficerName] = useState('');
   const [authorizedRepName, setAuthorizedRepName] = useState('');
+  const [signatoryMode, setSignatoryMode] = useState<'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep'>('recipientPropertyOfficerAuthorizedRep');
 
   // Debounced asset search
   useEffect(() => {
@@ -112,6 +124,7 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
           setSelectedTemplateId(def.id);
           setPropertyOfficerName(def.defaultPropertyOfficer || '');
           setAuthorizedRepName(def.defaultAuthorizedRep || '');
+          setSignatoryMode(def.signatoryMode || 'recipientPropertyOfficerAuthorizedRep');
         }
       } catch { /* non-critical */ }
       finally { setTemplatesLoading(false); }
@@ -209,6 +222,7 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
         if (data.templateId && !selectedTemplateId) setSelectedTemplateId(data.templateId);
         if (data.defaultPropertyOfficer && !propertyOfficerName) setPropertyOfficerName(data.defaultPropertyOfficer);
         if (data.defaultAuthorizedRep && !authorizedRepName) setAuthorizedRepName(data.defaultAuthorizedRep);
+        if (data.signatoryMode) setSignatoryMode(data.signatoryMode);
         setAgreement(data.resolvedText);
       } catch {
         // Fallback
@@ -243,8 +257,9 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
           notes: null,
           agreementTemplateId: selectedTemplateId || undefined,
           agreementText: agreement,
-          propertyOfficerName: propertyOfficerName || undefined,
-          authorizedRepName: authorizedRepName || undefined,
+          propertyOfficerName: (signatoryMode === 'recipientPropertyOfficer' || signatoryMode === 'recipientPropertyOfficerAuthorizedRep') ? propertyOfficerName || undefined : undefined,
+          authorizedRepName: signatoryMode === 'recipientPropertyOfficerAuthorizedRep' ? authorizedRepName || undefined : undefined,
+          signatoryMode,
         },
       });
       const data = result.data;
@@ -280,8 +295,9 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
       agreementText: agreement,
       condition,
       templateId: selectedTemplateId || undefined,
-      propertyOfficerName: propertyOfficerName || undefined,
-      authorizedRepName: authorizedRepName || undefined,
+      propertyOfficerName: (signatoryMode === 'recipientPropertyOfficer' || signatoryMode === 'recipientPropertyOfficerAuthorizedRep') ? propertyOfficerName || undefined : undefined,
+      authorizedRepName: signatoryMode === 'recipientPropertyOfficerAuthorizedRep' ? authorizedRepName || undefined : undefined,
+      signatoryMode,
       personnelId: selectedPersonnel?.id || undefined,
     });
   };
@@ -455,6 +471,7 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
                           const tpl = templates.find(t => t.id === e.target.value);
                           setPropertyOfficerName(tpl?.defaultPropertyOfficer || '');
                           setAuthorizedRepName(tpl?.defaultAuthorizedRep || '');
+                          setSignatoryMode(tpl?.signatoryMode || 'recipientPropertyOfficerAuthorizedRep');
                         }}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent appearance-none bg-white"
                       >
@@ -474,17 +491,23 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
                     </select>
                   </div>
 
-                  <div>
-                    <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Signatories</label>
-                    <div className="space-y-2 mt-1">
-                      <input type="text" value={propertyOfficerName} onChange={e => setPropertyOfficerName(e.target.value)}
-                        placeholder="Property Officer name"
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
-                      <input type="text" value={authorizedRepName} onChange={e => setAuthorizedRepName(e.target.value)}
-                        placeholder="Authorized Representative name"
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                  {signatoryMode !== 'recipientOnly' && (
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Signatories</label>
+                      <div className="space-y-2 mt-1">
+                        {(signatoryMode === 'recipientPropertyOfficer' || signatoryMode === 'recipientPropertyOfficerAuthorizedRep') && (
+                          <input type="text" value={propertyOfficerName} onChange={e => setPropertyOfficerName(e.target.value)}
+                            placeholder="Property Officer name"
+                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                        )}
+                        {signatoryMode === 'recipientPropertyOfficerAuthorizedRep' && (
+                          <input type="text" value={authorizedRepName} onChange={e => setAuthorizedRepName(e.target.value)}
+                            placeholder="Authorized Representative name"
+                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Right Column — Agreement Text */}

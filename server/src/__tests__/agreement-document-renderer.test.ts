@@ -68,4 +68,40 @@ describe('agreement document structured renderer', () => {
     ]);
     expect(view.bodyText).toBe('Official accountability body text.');
   });
+
+  it('renders only one signature for recipientOnly mode', () => {
+    const view = buildAgreementDocumentView({
+      personnelName: 'Juan Dela Cruz',
+      signatoryMode: 'recipientOnly',
+      propertyOfficerName: 'Officer A',
+      authorizedRepName: 'Rep B',
+    });
+
+    expect(view.signatures).toHaveLength(1);
+    expect(view.signatures[0].role).toBe('Recipient');
+  });
+
+  it('renders two signatures for recipientPropertyOfficer mode', () => {
+    const view = buildAgreementDocumentView({
+      personnelName: 'Juan Dela Cruz',
+      signatoryMode: 'recipientPropertyOfficer',
+      propertyOfficerName: 'Officer A',
+      authorizedRepName: 'Rep B',
+    });
+
+    expect(view.signatures).toHaveLength(2);
+    expect(view.signatures.map(s => s.role)).toEqual(['Recipient', 'Property Officer']);
+  });
+
+  it('renders three signatures for recipientPropertyOfficerAuthorizedRep mode', () => {
+    const view = buildAgreementDocumentView({
+      personnelName: 'Juan Dela Cruz',
+      signatoryMode: 'recipientPropertyOfficerAuthorizedRep',
+      propertyOfficerName: 'Officer A',
+      authorizedRepName: 'Rep B',
+    });
+
+    expect(view.signatures).toHaveLength(3);
+    expect(view.signatures.map(s => s.role)).toEqual(['Recipient', 'Property Officer', 'Authorized Representative']);
+  });
 });

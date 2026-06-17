@@ -813,5 +813,242 @@ export async function disposeAsset(
   },
 });
 
+  // Archive disposal document metadata
+  try {
+    const { makeDocumentNumber } = await import('../services/agreement.service');
+    const { recordDisposalDocumentArchive } = await import('../services/document-archive.service');
+    await recordDisposalDocumentArchive(asset.id, performedById, {
+      title: `Disposal Record — ${existing.name}`,
+      documentNumber: makeDocumentNumber('DSP'),
+      reason: data.reason,
+      method: data.method,
+    });
+  } catch (archiveErr) {
+    console.error('[disposeAsset] archive creation failed:', archiveErr);
+  }
+
   return asset;
+}
+
+export interface AssetLifecycleEvent {
+  id: string;
+  type: 'created' | 'edited' | 'issued' | 'returned' | 'repaired' | 'transferred' | 'disposed' | 'audited';
+  occurredAt: string;
+  title: string;
+  description: string;
+  actorName?: string | null;
+  source: 'asset' | 'assignment' | 'maintenance' | 'condition' | 'audit';
+  severity?: 'LOW' | 'MEDIUM' | 'HIGH' | null;
+  metadata?: Record<string, unknown>;
+}
+
+export async function getAssetLifecycle(assetId: string): Promise<AssetLifecycleEvent[]> {
+  const asset = await prisma.asset.findUnique({
+    where: { id: assetId },
+    include: {
+      assignments: {
+        include: {
+          user: { select: { id: true, fullName: true, username: true } },
+          personnel: { select: { id: true, fullName: true } },
+          returnedBy: { select: { fullName: true, username: true } },
+        },
+        orderBy: { assignedAt: 'asc' },
+      },
+      maintenanceLogs: { orderBy: { date: 'asc' } },
+      conditionLogs: {
+        include: { recordedBy: { select: { fullName: true, username: true } } },
+        orderBy: { recordedAt: 'asc' },
+      },
+    },
+  });
+  if (!asset) throw new Error('Asset not found');
+
+  const events: AssetLifecycleEvent[] = [];
+
+  // Created
+  events.push({
+    id: `created-${asset.id}`,
+    type: 'created',
+    occurredAt: asset.createdAt.toISOString(),
+    title: 'Asset created',
+    description: `${asset.name} (${asset.type}) was added to the system.`,
+    actorName: null,
+    source: 'asset',
+    severity: 'LOW',
+  });
+
+  // Assignments → issued/returned/transferred
+  for (const a of asset.assignments) {
+    const actorName = a.personnel?.fullName || a.assignedTo || a.user?.fullName || a.user?.username || null;
+    const transferConditionLog = asset.conditionLogs.find(c => c.assignmentId === a.id && c.event === 'transferred');
+    const issueConditionLog = asset.conditionLogs.find(c => c.assignmentId === a.id && c.event === 'issued');
+    const returnConditionLog = asset.conditionLogs.find(c => c.assignmentId === a.id && c.event === 'returned');
+
+    // Transfer event: a new assignment linked to a 'transferred' condition log
+    if (transferConditionLog) {
+      events.push({
+        id: a.id,
+        type: 'transferred',
+        occurredAt: a.assignedAt.toISOString(),
+        title: `Transferred to ${actorName || 'unknown'}`,
+        description: transferConditionLog.note
+          ? `Condition: ${transferConditionLog.condition} — ${transferConditionLog.note}`
+          : `Condition: ${transferConditionLog.condition}`,
+        actorName,
+        source: 'assignment',
+        severity: 'HIGH',
+        metadata: {
+          assignmentId: a.id,
+          condition: transferConditionLog.condition,
+          personnelId: a.personnelId,
+          userId: a.userId,
+          transferNote: transferConditionLog.note,
+        },
+      });
+      continue;
+    }
+
+    events.push({
+      id: a.id,
+      type: a.personnelId ? 'issued' : 'transferred',
+      occurredAt: a.assignedAt.toISOString(),
+      title: a.personnelId ? `Issued to ${actorName || 'unknown'}` : 'Assigned',
+      description: issueConditionLog
+        ? `Condition at issue: ${issueConditionLog.condition}${issueConditionLog.note ? ` — ${issueConditionLog.note}` : ''}`
+        : `Asset was ${a.personnelId ? 'issued' : 'assigned'}${a.notes ? `: ${a.notes}` : '.'}`,
+      actorName,
+      source: 'assignment',
+      severity: 'HIGH',
+      metadata: {
+        assignmentId: a.id,
+        condition: issueConditionLog?.condition || a.condition,
+        personnelId: a.personnelId,
+        userId: a.userId,
+        notes: a.notes,
+      },
+    });
+
+    if (a.returnedAt) {
+      // Skip return side of a transfer — it's represented by the transfer event of the follow-on assignment
+      if (a.accountabilityStatus === 'TRANSFERRED') continue;
+      events.push({
+        id: `${a.id}-return`,
+        type: 'returned',
+        occurredAt: a.returnedAt.toISOString(),
+        title: 'Returned',
+        description: returnConditionLog
+          ? `Condition on return: ${returnConditionLog.condition}${returnConditionLog.note ? ` — ${returnConditionLog.note}` : ''}`
+          : a.returnNote || 'Asset was returned.',
+        actorName: a.returnedBy?.fullName || a.returnedBy?.username || null,
+        source: 'assignment',
+        severity: 'MEDIUM',
+        metadata: {
+          assignmentId: a.id,
+          condition: returnConditionLog?.condition || a.returnCondition || a.condition,
+          returnNote: a.returnNote,
+          returnRemarks: a.returnRemarks,
+        },
+      });
+    }
+  }
+
+  // Maintenance → repaired
+  for (const m of asset.maintenanceLogs) {
+    events.push({
+      id: m.id,
+      type: 'repaired',
+      occurredAt: m.date.toISOString(),
+      title: 'Repaired / serviced',
+      description: m.description,
+      actorName: m.technicianName || null,
+      source: 'maintenance',
+      severity: 'MEDIUM',
+      metadata: {
+        cost: m.cost != null ? Number(m.cost) : null,
+        technicianName: m.technicianName,
+      },
+    });
+  }
+
+  // AssetConditionLog standalone events not already covered by assignment events
+  for (const c of asset.conditionLogs) {
+    if (c.assignmentId) continue; // skip enriched assignment events
+    events.push({
+      id: c.id,
+      type: (c.event === 'transferred' ? 'transferred' : c.event === 'issued' ? 'issued' : c.event === 'returned' ? 'returned' : 'audited') as AssetLifecycleEvent['type'],
+      occurredAt: c.recordedAt.toISOString(),
+      title: `${c.event.charAt(0).toUpperCase() + c.event.slice(1)} recorded`,
+      description: `Condition: ${c.condition}${c.note ? ` — ${c.note}` : ''}`,
+      actorName: c.recordedBy?.fullName || c.recordedBy?.username || null,
+      source: 'condition',
+      severity: 'LOW',
+      metadata: { condition: c.condition, note: c.note, event: c.event },
+    });
+  }
+
+  // Disposal
+  if (asset.disposalDate || asset.status === 'RETIRED' || asset.deletedAt) {
+    const occurredAt = asset.disposalDate?.toISOString()
+      || asset.deletedAt?.toISOString()
+      || asset.updatedAt.toISOString();
+    const methodLabel = asset.disposalMethod ? asset.disposalMethod.replace(/_/g, ' ').toLowerCase() : null;
+    events.push({
+      id: `disposed-${asset.id}`,
+      type: 'disposed',
+      occurredAt,
+      title: 'Asset disposed',
+      description: methodLabel
+        ? `${asset.name} was disposed via ${methodLabel}.${asset.disposalReason ? ` Reason: ${asset.disposalReason}` : ''}`
+        : asset.disposalReason || 'Asset was disposed.',
+      actorName: null,
+      source: 'asset',
+      severity: 'HIGH',
+      metadata: {
+        disposalReason: asset.disposalReason,
+        disposalMethod: asset.disposalMethod,
+        disposalDate: asset.disposalDate?.toISOString() || null,
+      },
+    });
+  }
+
+  // Audit logs
+  const auditLogs = await prisma.auditLog.findMany({
+    where: { entityType: 'Asset', entityId: assetId },
+    include: { user: { select: { fullName: true, username: true } } },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  for (const log of auditLogs) {
+    const meta = log.metadata as Record<string, unknown> | null;
+    if (log.action === 'CREATE') continue;
+    if (log.action === 'CHECKOUT' || log.action === 'ISSUANCE_CREATED' || log.action === 'ISSUANCE_BULK_CREATED') continue;
+    if (log.action === 'RETURN' || log.action === 'ISSUANCE_RETURNED') continue;
+    if (log.action === 'TRANSFER' || log.action === 'ISSUANCE_TRANSFERRED') continue;
+    if (log.action === 'DISPOSE' || (log.action === 'SOFT_DELETE' && asset.status === 'RETIRED')) continue;
+
+    const type: AssetLifecycleEvent['type'] =
+      log.action === 'UPDATE' ? 'edited' :
+      log.action === 'BULK_IMPORT' ? 'created' :
+      'audited';
+
+    const rawTitle = log.action === 'UPDATE' ? `Edited: ${meta?.field || 'fields'}`
+      : log.action === 'BULK_IMPORT' ? 'Bulk imported'
+      : log.action.replace(/_/g, ' ').toLowerCase();
+    const title = rawTitle.charAt(0).toUpperCase() + rawTitle.slice(1);
+
+    events.push({
+      id: `audit-${log.id}`,
+      type,
+      occurredAt: log.createdAt.toISOString(),
+      title,
+      description: meta?.summary ? String(meta.summary) : `${log.action} on ${log.entityType}`,
+      actorName: log.user?.fullName || log.user?.username || null,
+      source: 'audit',
+      severity: (meta?.severity as 'LOW' | 'MEDIUM' | 'HIGH' | undefined) || 'LOW',
+      metadata: meta || undefined,
+    });
+  }
+
+  events.sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
+  return events;
 }
