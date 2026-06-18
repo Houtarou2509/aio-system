@@ -39,7 +39,7 @@ function DocStatusBadge({ status }: { status: string | undefined | null }) {
   const s = status.toLowerCase();
   if (s === 'returned') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+      <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 border border-sky-200">
         <CheckCircle2 className="h-2.5 w-2.5" /> Returned
       </span>
     );
