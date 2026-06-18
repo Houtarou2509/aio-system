@@ -36,6 +36,18 @@ export function parseGuestToken(value: string): string | null {
   return null;
 }
 
+// Html5QrcodeScannerState enum (from html5-qrcode's state-manager.d.ts):
+//   UNKNOWN = 0, NOT_STARTED = 1, SCANNING = 2, PAUSED = 3
+// Only SCANNING or PAUSED states should be stopped.
+const STATE_SCANNING = 2;
+const STATE_PAUSED = 3;
+
+// Module-level guard: only one Html5Qrcode instance can exist at a time across
+// all renders/mounts. This prevents duplicate camera previews even if React
+// re-enters the effect or the user taps Scan repeatedly.
+let globalScannerActive: Html5Qrcode | null = null;
+let globalSessionId = 0;
+
 export default function QRScannerModal({ open, onClose, onAssetResolved }: Props) {
   const navigate = useNavigate();
   const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -43,6 +55,23 @@ export default function QRScannerModal({ open, onClose, onAssetResolved }: Props
   const hasStartedRef = useRef(false);
   const hasHandledScanRef = useRef(false);
   const isMountedRef = useRef(true);
+  const sessionIdRef = useRef(0);
+
+  // Refs to hold the latest callbacks so the scanner effect can depend only on
+  // `open` without risking a stale closure for resolveAndNavigate / onClose / onAssetResolved.
+  const onCloseRef = useRef(onClose);
+  const onAssetResolvedRef = useRef(onAssetResolved);
+  const navigateRef = useRef(navigate);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+  useEffect(() => {
+    onAssetResolvedRef.current = onAssetResolved;
+  }, [onAssetResolved]);
+  useEffect(() => {
+    navigateRef.current = navigate;
+  }, [navigate]);
 
   const [error, setError] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -50,33 +79,61 @@ export default function QRScannerModal({ open, onClose, onAssetResolved }: Props
   const [isClosing, setIsClosing] = useState(false);
 
   // ─── Safe cleanup ───
+  // Idempotent: safe to call multiple times. Stops the scanner, clears the DOM,
+  // nulls all refs, and removes any leftover children from #qr-reader.
   const safeStopAndClearScanner = useCallback(async () => {
-    if (!scannerRef.current) return;
-    if (isStoppingRef.current) return;
-
-    isStoppingRef.current = true;
     const scanner = scannerRef.current;
+    if (!scanner && !globalScannerActive) {
+      // Still clean up the DOM container in case html5-qrcode left orphan children
+      const container = document.getElementById('qr-reader');
+      if (container) {
+        while (container.firstChild) container.removeChild(container.firstChild);
+      }
+      isStoppingRef.current = false;
+      hasStartedRef.current = false;
+      if (isMountedRef.current) setScanning(false);
+      return;
+    }
+
+    // Use whichever scanner instance is active (prefer ref, fall back to global)
+    const activeScanner = scanner || globalScannerActive;
+    if (isStoppingRef.current && activeScanner === scannerRef.current) return;
+    isStoppingRef.current = true;
 
     try {
-      if (hasStartedRef.current) {
+      if (hasStartedRef.current && activeScanner) {
         try {
-          await scanner.stop();
+          // Only call stop() if the scanner is in SCANNING or PAUSED state.
+          // Calling stop() on NOT_STARTED throws in the real library.
+          const state = (activeScanner as any).getState?.();
+          if (state === STATE_SCANNING || state === STATE_PAUSED) {
+            await activeScanner.stop();
+          }
         } catch (e: any) {
           if (!String(e?.message || e || '').includes('not running') && !String(e?.message || e || '').includes('not paused')) {
             console.warn('[QRScanner] stop() error:', e);
           }
         }
       }
-      try { scanner.clear(); } catch {}
+      try { activeScanner?.clear(); } catch {}
     } finally {
       scannerRef.current = null;
+      if (globalScannerActive === activeScanner) globalScannerActive = null;
       hasStartedRef.current = false;
       isStoppingRef.current = false;
+
+      // Always empty the #qr-reader container to remove any orphaned video/canvas
+      const container = document.getElementById('qr-reader');
+      if (container) {
+        while (container.firstChild) container.removeChild(container.firstChild);
+      }
+
       if (isMountedRef.current) setScanning(false);
     }
   }, []);
 
   // ─── Decode handler — routing order: internal QR first, guest last ───
+  // Reads from refs so the scanner effect can stay dep-free on these callbacks.
   const resolveAndNavigate = useCallback(async (decodedText: string) => {
     const value = decodedText.trim();
     console.info('[QRScanner] decoded:', value);
@@ -104,14 +161,14 @@ export default function QRScannerModal({ open, onClose, onAssetResolved }: Props
         });
         if (!detailRes.ok) {
           // Fallback: use partial data from lookup
-          onClose();
-          onAssetResolved?.(partialAsset as Asset);
+          onCloseRef.current();
+          onAssetResolvedRef.current?.(partialAsset as Asset);
           return;
         }
         const detailBody = await detailRes.json();
 
-        onClose();
-        onAssetResolved?.(detailBody.data as Asset);
+        onCloseRef.current();
+        onAssetResolvedRef.current?.(detailBody.data as Asset);
       } catch {
         setError('Failed to resolve QR code. Check your connection and try again.');
         setResolving(false);
@@ -130,16 +187,16 @@ export default function QRScannerModal({ open, onClose, onAssetResolved }: Props
         });
         if (detailRes.ok) {
           const detailBody = await detailRes.json();
-          onClose();
-          onAssetResolved?.(detailBody.data as Asset);
+          onCloseRef.current();
+          onAssetResolvedRef.current?.(detailBody.data as Asset);
           return;
         }
       } catch {
         // fall through to search
       }
       setResolving(false);
-      onClose();
-      navigate(`/assets?page=1&search=${encodeURIComponent(value)}`);
+      onCloseRef.current();
+      navigateRef.current(`/assets?page=1&search=${encodeURIComponent(value)}`);
       return;
     }
 
@@ -147,25 +204,25 @@ export default function QRScannerModal({ open, onClose, onAssetResolved }: Props
     const guestToken = parseGuestToken(value);
     if (guestToken) {
       console.info('[QRScanner] route: guest');
-      onClose();
-      navigate(`/guest/${guestToken}`);
+      onCloseRef.current();
+      navigateRef.current(`/guest/${guestToken}`);
       return;
     }
 
     // ── 4. Fallback: treat as search query ──
     console.info('[QRScanner] route: search');
-    onClose();
-    navigate(`/assets?page=1&search=${encodeURIComponent(value)}`);
-  }, [navigate, onClose, onAssetResolved]);
+    onCloseRef.current();
+    navigateRef.current(`/assets?page=1&search=${encodeURIComponent(value)}`);
+  }, []);
 
   // ─── Close handler ───
   const handleClose = useCallback(async () => {
     if (isClosing) return;
     setIsClosing(true);
     await safeStopAndClearScanner();
-    onClose();
+    onCloseRef.current();
     setIsClosing(false);
-  }, [isClosing, safeStopAndClearScanner, onClose]);
+  }, [isClosing, safeStopAndClearScanner]);
 
   // ─── Try-again handler ───
   const handleTryAgain = useCallback(() => {
@@ -181,10 +238,13 @@ export default function QRScannerModal({ open, onClose, onAssetResolved }: Props
     return () => { isMountedRef.current = false; };
   }, []);
 
-  // ─── Main scanner lifecycle ───
+  // ─── Main scanner lifecycle (idempotent) ───
+  // This effect runs only when `open` changes. Callbacks are accessed via refs
+  // so the scan handler always calls the latest version without re-running the effect.
   useEffect(() => {
     if (!open) return;
 
+    // Reset state for this open cycle
     setError('');
     setScanning(false);
     setResolving(false);
@@ -192,42 +252,98 @@ export default function QRScannerModal({ open, onClose, onAssetResolved }: Props
     hasHandledScanRef.current = false;
     isStoppingRef.current = false;
 
-    const scanner = new Html5Qrcode('qr-reader');
-    scannerRef.current = scanner;
+    // ── Guard 1: If a scanner is somehow still active globally, stop it first ──
+    // This handles the case where a previous effect's cleanup hasn't completed yet.
+    let mySessionId = ++globalSessionId;
+    sessionIdRef.current = mySessionId;
     let cancelled = false;
 
-    scanner
-      .start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        async (decodedText) => {
-          if (cancelled || hasHandledScanRef.current) return;
-          hasHandledScanRef.current = true;
+    const startScanner = async () => {
+      // If a previous scanner is still active, stop and clear it first
+      if (globalScannerActive) {
+        try {
+          const state = (globalScannerActive as any).getState?.();
+          // Only stop if SCANNING or PAUSED; NOT_STARTED throws on stop()
+          if (state === STATE_SCANNING || state === STATE_PAUSED) {
+            await globalScannerActive.stop().catch(() => {});
+          }
+          globalScannerActive.clear();
+        } catch {}
+        globalScannerActive = null;
+      }
 
-          await safeStopAndClearScanner();
-          if (!isMountedRef.current) return;
-          resolveAndNavigate(decodedText);
-        },
-        () => {}
-      )
-      .then(() => {
-        if (cancelled) {
-          safeStopAndClearScanner();
+      // Also null our ref if it pointed to the old scanner
+      scannerRef.current = null;
+      hasStartedRef.current = false;
+      isStoppingRef.current = false;
+
+      // ── Guard 2: Empty the #qr-reader container before creating a new instance ──
+      // This removes any orphaned <video>/<canvas> children from a prior session.
+      const container = document.getElementById('qr-reader');
+      if (container) {
+        while (container.firstChild) container.removeChild(container.firstChild);
+      }
+
+      // ── Guard 3: Bail if effect was cancelled during async cleanup ──
+      if (cancelled || sessionIdRef.current !== mySessionId) return;
+      if (!isMountedRef.current) return;
+
+      // Create a fresh Html5Qrcode instance
+      const scanner = new Html5Qrcode('qr-reader');
+      scannerRef.current = scanner;
+      globalScannerActive = scanner;
+
+      try {
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          async (decodedText) => {
+            if (cancelled || hasHandledScanRef.current) return;
+            if (sessionIdRef.current !== mySessionId) return;
+            hasHandledScanRef.current = true;
+
+            await safeStopAndClearScanner();
+            if (!isMountedRef.current) return;
+            resolveAndNavigate(decodedText);
+          },
+          () => {}
+        );
+
+        // ── Guard 4: start() may resolve after close — discard if stale ──
+        if (cancelled || sessionIdRef.current !== mySessionId) {
+          // This scanner is stale — stop it immediately
+          try {
+            const state = (scanner as any).getState?.();
+            if (state === STATE_SCANNING || state === STATE_PAUSED) {
+              await scanner.stop().catch(() => {});
+            }
+            scanner.clear();
+          } catch {}
+          if (globalScannerActive === scanner) globalScannerActive = null;
+          if (scannerRef.current === scanner) scannerRef.current = null;
           return;
         }
+
         hasStartedRef.current = true;
         setScanning(true);
-      })
-      .catch((err) => {
-        if (cancelled) return;
+      } catch (err: any) {
+        if (cancelled || sessionIdRef.current !== mySessionId) return;
+        // Clean up the failed scanner
+        if (globalScannerActive === scanner) globalScannerActive = null;
+        if (scannerRef.current === scanner) scannerRef.current = null;
+        try { scanner.clear(); } catch {}
         setError(typeof err === 'string' ? err : 'Camera access denied or unavailable');
-      });
+      }
+    };
+
+    startScanner();
 
     return () => {
       cancelled = true;
       safeStopAndClearScanner();
     };
-  }, [open, safeStopAndClearScanner, resolveAndNavigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
 

@@ -177,6 +177,10 @@ export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) 
       if (!data.success) throw new Error(data.error?.message || 'Import failed');
       setResult(data.data);
       setStep('result');
+      // Notify parent immediately so KPI/list refresh without requiring a button click.
+      // Guard against duplicate calls: onImportComplete is only called here, not on
+      // "View Imported Assets" which just closes the modal.
+      onImportComplete();
     } catch (err: any) {
       setFileError(err.message || 'Import failed');
     } finally {
@@ -437,7 +441,7 @@ export function ImportAssetsModal({ isOpen, onClose, onImportComplete }: Props) 
                 </button>
               )}
               <button
-                onClick={() => { handleClose(); onImportComplete(); }}
+                onClick={handleClose}
                 className="rounded-lg bg-[#012061] px-4 py-2 text-xs font-bold text-white hover:bg-[#012061]/90 transition-colors"
               >
                 View Imported Assets

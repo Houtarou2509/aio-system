@@ -264,9 +264,13 @@ export default function AppLayout() {
           { to: '/reports', icon: BarChart3, label: 'Reports' },
           { to: '/issuances', icon: FileSignature, label: 'Issuances', roles: ['ADMIN', 'STAFF_ADMIN'] },
         ].filter(item => !item.roles || item.roles.includes(user?.role || '')).slice(0, 5).map(item => {
-          const isActive = item.end
-            ? location.pathname === item.to
-            : location.pathname.startsWith(item.to.replace(/\/$/, '')) && item.to !== '/';
+          const [itemPath, itemSearch] = item.to.split('?');
+          const currentParams = new URLSearchParams(location.search);
+          const isActive = itemSearch
+            ? location.pathname === itemPath && Array.from(new URLSearchParams(itemSearch)).every(([key, value]) => currentParams.get(key) === value)
+            : item.end
+              ? location.pathname === item.to
+              : location.pathname.startsWith(item.to.replace(/\/$/, '')) && item.to !== '/';
           return (
             <NavLink
               key={item.to}

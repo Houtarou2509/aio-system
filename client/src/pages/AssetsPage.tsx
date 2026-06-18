@@ -121,8 +121,9 @@ export default function AssetsPage() {
 
   const statusDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fetch KPI data
-  useEffect(() => {
+  // Fetch KPI data — extracted as a reusable callback so it can be called
+  // after asset mutations to keep KPI cards in sync with the list.
+  const refetchKpi = useCallback(() => {
     const token = localStorage.getItem('accessToken');
     fetch('/api/dashboard/stats', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
@@ -137,6 +138,11 @@ export default function AssetsPage() {
       })
       .catch((e) => console.error('[AssetsPage] Failed to load KPI stats:', e));
   }, []);
+
+  // Initial KPI fetch on mount
+  useEffect(() => {
+    refetchKpi();
+  }, [refetchKpi]);
 
   // Stable helper to remove a single query param using the latest URL state.
   // This avoids stale closure issues when multiple param handlers run concurrently.
@@ -153,15 +159,13 @@ export default function AssetsPage() {
     setSearchParams(latest, { replace: true });
   }, [setSearchParams]);
 
-  // Auto-open scanner when navigated with ?action=scan (mobile bottom nav)
-  // Runs on mount + when searchParams actually contain action=scan.
-  // Clears only the action param to preserve other params like id.
+  // Auto-open scanner when navigated with ?action=scan (mobile bottom nav).
+  // Keep the query param while the modal is open so the bottom tab remains active.
   useEffect(() => {
     if (searchParams.get('action') === 'scan') {
       setScannerOpen(true);
-      clearQueryParam('action');
     }
-  }, [searchParams.get('action'), clearQueryParam]);
+  }, [searchParams.get('action')]);
 
   // Handle warranty quick-filter URL params: ?warrantyExpiring=1 or ?warrantyExpired=1
   useEffect(() => {
@@ -239,7 +243,7 @@ export default function AssetsPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleImportComplete = () => { refetch(); };
+  const handleImportComplete = () => { refetch(); refetchKpi(); };
 
   const handleSort = (field: string) => {
     setFilters({
@@ -251,11 +255,18 @@ export default function AssetsPage() {
 
   const handleView = (asset: Asset) => { setSelectedAsset(asset); setShowDetail(true); };
 
+  const handleScannerClose = () => {
+    setScannerOpen(false);
+    if (searchParams.get('action') === 'scan') {
+      clearQueryParam('action');
+    }
+  };
+
   const handleCreate = async (data: any) => {
     if (data instanceof FormData) await assetsApi.createWithImage(data);
     else await assetsApi.create(data);
     setShowForm(false);
-    refetch();
+    refetch(); refetchKpi();
   };
 
   const handleEdit = (asset: Asset) => { setShowDetail(false); setEditAsset(asset); setShowForm(true); };
@@ -266,7 +277,7 @@ export default function AssetsPage() {
     else await assetsApi.update(editAsset.id, data);
     setShowForm(false);
     setEditAsset(null);
-    refetch();
+    refetch(); refetchKpi();
   };
 
   // ── Page-specific selection state ──────────────────────────────────────────
@@ -433,7 +444,7 @@ export default function AssetsPage() {
       const res = await assetsApi.bulkStatus(ids, status);
       const count = (res as any).data?.updated ?? ids.length;
       showToast(`${count} asset(s) updated to ${status}`);
-      setSelectedIds(new Set()); setSelectAllMatching(false); refetch();
+      setSelectedIds(new Set()); setSelectAllMatching(false); refetch(); refetchKpi();
     } catch (err: any) {
       const msg = err?.errorData?.details?.code === 'ACTIVE_ISSUANCE_EXISTS' || err?.errorData?.code === 'ACTIVE_ISSUANCE_EXISTS'
         ? err.message
@@ -451,7 +462,7 @@ export default function AssetsPage() {
       const res = await assetsApi.bulkDelete(ids);
       const count = (res as any).data?.deleted ?? ids.length;
       showToast(`${count} asset(s) retired`);
-      setSelectedIds(new Set()); setSelectAllMatching(false); refetch();
+      setSelectedIds(new Set()); setSelectAllMatching(false); refetch(); refetchKpi();
     } catch { showToast('Failed to delete assets.'); }
     finally { setBulkLoading(false); }
   };
@@ -903,7 +914,7 @@ export default function AssetsPage() {
         <AssetFormModal asset={editAsset} onSubmit={editAsset ? handleUpdate : handleCreate} onClose={() => { setShowForm(false); setEditAsset(null); }} onImageUpload={assetsApi.uploadImage} />
       )}
       <ImportAssetsModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} onImportComplete={handleImportComplete} />
-      <QRScannerModal open={scannerOpen} onClose={() => setScannerOpen(false)} onAssetResolved={(asset) => { setSelectedAsset(asset); setShowDetail(true); }} />
+      <QRScannerModal open={scannerOpen} onClose={handleScannerClose} onAssetResolved={(asset) => { setSelectedAsset(asset); setShowDetail(true); }} />
 
       {/* ═══ BULK OPERATION MODAL ═══════════════════════════ */}
       {bulkAction !== 'none' && (
@@ -917,7 +928,7 @@ export default function AssetsPage() {
               const res = await assetsApi.bulkAssign(Array.from(selectedIds), personnelId, notes);
               showToast(`Assigned ${res.data.assigned} assets`);
               if (res.data.errors.length > 0) showToast(`${res.data.errors.length} failed`);
-              deselectAll(); refetch();
+              deselectAll(); refetch(); refetchKpi();
             } catch { showToast('Bulk assign failed'); }
             finally { setBulkLoading(false); setBulkAction('none'); }
           }}
@@ -926,7 +937,7 @@ export default function AssetsPage() {
             try {
               const res = await assetsApi.bulkUpdate(Array.from(selectedIds), updates);
               showToast(`Updated ${res.data.updated} assets`);
-              deselectAll(); refetch();
+              deselectAll(); refetch(); refetchKpi();
             } catch { showToast('Bulk update failed'); }
             finally { setBulkLoading(false); setBulkAction('none'); }
           }}
@@ -964,7 +975,7 @@ export default function AssetsPage() {
           onDisposed={() => {
             setDisposeTarget(null);
             setSelectedIds(new Set());
-            refetch();
+            refetch(); refetchKpi();
             showToast('Asset disposed successfully');
           }}
         />
