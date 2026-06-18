@@ -805,9 +805,9 @@ export default function IssuancesPage() {
           <EmptyState onAdd={() => setShowBulkWizard(true)} />
         ) : (
           <>
-          <div className="hidden md:block overflow-x-auto overflow-y-auto max-h-[calc(100vh-300px)] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+          <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 z-10">
+              <thead>
                 <tr className="bg-[#012061] text-left">
                   <th className="px-4 py-2.5 w-10 bg-[#012061]">
                     <span

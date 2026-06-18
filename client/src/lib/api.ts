@@ -448,6 +448,7 @@ export const documentsApi = {
   },
   get: (id: string) => request<{ data: DocumentArchiveItem }>(`/documents/${id}`),
   download: (id: string) => apiFetchBlob(`/documents/${id}/download`),
+  generateAgreementPdf: (body: Record<string, any>) => apiFetchBlob('/agreements/pdf', { method: 'POST', body }),
   upload: async (formData: FormData) => {
     const token = localStorage.getItem('accessToken');
     const res = await fetch(`${API_BASE}/documents/upload`, {

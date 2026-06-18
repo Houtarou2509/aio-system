@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { FileArchive, Search, Download, ExternalLink, FileText, Loader2, X, Upload, Calendar, SlidersHorizontal } from 'lucide-react';
+import { FileArchive, Search, Download, ExternalLink, FileText, Loader2, X, Upload, Calendar, SlidersHorizontal, Eye, Printer, AlertCircle } from 'lucide-react';
 import { documentsApi, type DocumentArchiveItem, type DocumentFilters } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import PDFPreviewModal from '../components/issuances/PDFPreviewModal';
 
 const DOCUMENT_TYPES: { value: DocumentArchiveItem['documentType']; label: string }[] = [
   { value: 'ACCOUNTABILITY_FORM', label: 'Accountability Form' },
@@ -66,6 +67,22 @@ function getLinkedRoute(doc: DocumentArchiveItem): string | null {
   return null;
 }
 
+function canPreviewDocument(doc: DocumentArchiveItem): boolean {
+  return Boolean(
+    doc.filePath ||
+    (
+      doc.documentType === 'ACCOUNTABILITY_FORM' &&
+      doc.sourceEntityType === 'AgreementDocument' &&
+      doc.sourceEntityId
+    )
+  );
+}
+
+function documentFilename(doc: DocumentArchiveItem): string {
+  const fallback = doc.documentNumber || doc.title || doc.id.slice(0, 8);
+  return `${fallback.replace(/[^\w.-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'document'}.pdf`;
+}
+
 export default function DocumentsPage() {
   const { user } = useAuth();
   const canUpload = user?.role === 'ADMIN' || user?.role === 'STAFF_ADMIN' || (user?.permissions || []).includes('documents:upload');
@@ -77,6 +94,12 @@ export default function DocumentsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{ blobUrl: string | null; loading: boolean; filename: string }>({
+    blobUrl: null,
+    loading: false,
+    filename: 'document.pdf',
+  });
 
   const fetchDocuments = useCallback(async (f: DocumentFilters) => {
     setLoading(true);
@@ -109,22 +132,165 @@ export default function DocumentsPage() {
     setFilters({ page: 1, limit: 20 });
   };
 
-  const handleDownload = async (id: string, fileName?: string) => {
+  const getDocumentPdfBlob = async (doc: DocumentArchiveItem) => {
+    if (doc.filePath) {
+      return documentsApi.download(doc.id);
+    }
+
+    if (
+      doc.documentType === 'ACCOUNTABILITY_FORM' &&
+      doc.sourceEntityType === 'AgreementDocument' &&
+      doc.sourceEntityId
+    ) {
+      return documentsApi.generateAgreementPdf({
+        personnelName: doc.personnel?.fullName || 'Document recipient',
+        assetName: doc.asset?.name || doc.title || 'Archived asset',
+        title: doc.title,
+        documentNumber: doc.documentNumber,
+        agreementDocumentId: doc.sourceEntityId,
+        renderMode: 'fullDigital',
+      });
+    }
+
+    throw new Error('Document file is not available.');
+  };
+
+  const handlePreview = async (doc: DocumentArchiveItem) => {
+    if (!canPreviewDocument(doc)) {
+      showToast('Document file is not available.');
+      return;
+    }
+    const filename = documentFilename(doc);
+    setActionLoading(`${doc.id}:preview`);
+    setPdfPreview({ blobUrl: null, loading: true, filename });
     try {
-      const blob = await documentsApi.download(id);
+      const blob = await getDocumentPdfBlob(doc);
+      const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+      setPdfPreview({ blobUrl: url, loading: false, filename });
+    } catch (err: any) {
+      setPdfPreview({ blobUrl: null, loading: false, filename: 'document.pdf' });
+      showToast(err.message || 'Document file is not available.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDownload = async (doc: DocumentArchiveItem) => {
+    if (!canPreviewDocument(doc)) {
+      showToast('Document file is not available.');
+      return;
+    }
+    const filename = documentFilename(doc);
+    setActionLoading(`${doc.id}:download`);
+    try {
+      const blob = await getDocumentPdfBlob(doc);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = fileName || `document-${id.slice(0, 8)}.pdf`;
+      a.download = filename;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      showToast(err.message || 'Download failed');
+      showToast(err.message || 'Document file is not available.');
+    } finally {
+      setActionLoading(null);
     }
+  };
+
+  const handlePrint = async (doc: DocumentArchiveItem) => {
+    if (!canPreviewDocument(doc)) {
+      showToast('Document file is not available.');
+      return;
+    }
+    setActionLoading(`${doc.id}:print`);
+    try {
+      const blob = await getDocumentPdfBlob(doc);
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!win) {
+        showToast('Pop-up blocked. Use Preview or Download instead.');
+        URL.revokeObjectURL(url);
+        return;
+      }
+      const tryPrint = () => {
+        try { win.print(); } catch {}
+      };
+      win.addEventListener('load', tryPrint, { once: true });
+      setTimeout(tryPrint, 800);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err: any) {
+      showToast(err.message || 'Document file is not available.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const closePdfPreview = () => {
+    setPdfPreview({ blobUrl: null, loading: false, filename: 'document.pdf' });
   };
 
   const hasFilters = filters.search || filters.documentType || filters.status || filters.dateFrom || filters.dateTo || filters.assetId || filters.personnelId || filters.purchaseRequestId || filters.assignmentId;
   const activeFilterCount = [filters.search, filters.documentType, filters.status, filters.dateFrom, filters.dateTo, filters.assetId, filters.personnelId, filters.purchaseRequestId, filters.assignmentId].filter(Boolean).length;
+
+  const renderDocumentActions = (doc: DocumentArchiveItem, compact = false) => {
+    const available = canPreviewDocument(doc);
+    const baseButtonClass = compact
+      ? 'inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors'
+      : 'inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors';
+    const disabled = Boolean(actionLoading);
+    const isLoading = actionLoading?.startsWith(`${doc.id}:`);
+
+    if (!available) {
+      return (
+        <button
+          type="button"
+          disabled
+          title="No PDF file available"
+          aria-label="No PDF file available"
+          className={`${baseButtonClass} cursor-not-allowed bg-slate-100 text-slate-300 dark:bg-slate-700/50 dark:text-slate-500`}
+        >
+          <AlertCircle className="h-4 w-4" />
+        </button>
+      );
+    }
+
+    return (
+      <div className={`flex items-center ${compact ? 'gap-1' : 'justify-end gap-1.5'}`}>
+        <button
+          type="button"
+          onClick={() => handlePreview(doc)}
+          disabled={disabled}
+          title="Preview PDF"
+          aria-label={`Preview ${doc.documentNumber}`}
+          className={`${baseButtonClass} bg-blue-50 text-blue-600 hover:bg-blue-100 disabled:opacity-40 dark:bg-blue-950/40 dark:text-blue-300`}
+        >
+          {isLoading && actionLoading?.endsWith(':preview') ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+        </button>
+        <button
+          type="button"
+          onClick={() => handleDownload(doc)}
+          disabled={disabled}
+          title="Download PDF"
+          aria-label={`Download ${doc.documentNumber}`}
+          className={`${baseButtonClass} bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-40 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600`}
+        >
+          {isLoading && actionLoading?.endsWith(':download') ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+        </button>
+        <button
+          type="button"
+          onClick={() => handlePrint(doc)}
+          disabled={disabled}
+          title="Print PDF"
+          aria-label={`Print ${doc.documentNumber}`}
+          className={`${baseButtonClass} bg-[#f8931f]/10 text-[#f8931f] hover:bg-[#f8931f]/20 disabled:opacity-40`}
+        >
+          {isLoading && actionLoading?.endsWith(':print') ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col h-screen pt-14 md:pt-0 bg-[#012061] md:bg-transparent">
@@ -325,15 +491,7 @@ export default function DocumentsPage() {
                       </div>
                       <div className="flex items-center justify-between">
                         {statusBadge(doc.status)}
-                        {doc.filePath && (
-                          <button
-                            onClick={() => handleDownload(doc.id, `${doc.documentNumber}.pdf`)}
-                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-[#012061] dark:text-slate-300 hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 transition-colors"
-                            title="Download PDF"
-                          >
-                            <Download className="h-3.5 w-3.5" /> Download
-                          </button>
-                        )}
+                        {renderDocumentActions(doc, true)}
                       </div>
                     </div>
                   );
@@ -398,17 +556,7 @@ export default function DocumentsPage() {
                           <td className="px-3 py-2.5 text-xs text-slate-500 dark:text-slate-400">{formatDate(doc.createdAt)}</td>
                           <td className="px-3 py-2.5">{statusBadge(doc.status)}</td>
                           <td className="px-3 py-2.5 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              {doc.filePath && (
-                                <button
-                                  onClick={() => handleDownload(doc.id, `${doc.documentNumber}.pdf`)}
-                                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-[#012061] dark:text-slate-300 hover:bg-[#012061]/5 dark:hover:bg-slate-700/40 transition-colors"
-                                  title="Download PDF"
-                                >
-                                  <Download className="h-3 w-3" />
-                                </button>
-                              )}
-                            </div>
+                            {renderDocumentActions(doc)}
                           </td>
                         </tr>
                       );
@@ -452,6 +600,14 @@ export default function DocumentsPage() {
           {toast}
         </div>
       )}
+
+      <PDFPreviewModal
+        open={Boolean(pdfPreview.blobUrl || pdfPreview.loading)}
+        onClose={closePdfPreview}
+        blobUrl={pdfPreview.blobUrl}
+        loading={pdfPreview.loading}
+        downloadFilename={pdfPreview.filename}
+      />
 
       {uploadOpen && <UploadModal onClose={() => setUploadOpen(false)} onUploaded={() => { fetchDocuments(filters); setUploadOpen(false); showToast('Document uploaded'); }} />}
     </div>
