@@ -873,15 +873,15 @@ export default function IssuancesPage() {
                         {/* Return status */}
                         {iss.returnedAt ? (
                           <div className="flex items-center gap-1.5">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                            <CheckCircle2 className="w-3 h-3 text-sky-500" />
+                            <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400">
                               Returned {new Date(iss.returnedAt).toLocaleDateString()}
                             </span>
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5">
-                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Active</span>
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Active</span>
                           </div>
                         )}
 
@@ -1035,8 +1035,8 @@ export default function IssuancesPage() {
                           <ul className="space-y-0.5">
                             {batchItems.map(bi => (
                               <li key={bi.id} className={`flex items-center gap-1.5 text-xs ${bi.returnedAt ? 'text-slate-400 dark:text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${bi.returnedAt ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                                {bi.returnedAt && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 shrink-0" />}
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${bi.returnedAt ? 'bg-sky-400' : 'bg-emerald-400'}`} />
+                                {bi.returnedAt && <CheckCircle2 className="w-2.5 h-2.5 text-sky-400 shrink-0" />}
                                 {bi.asset?.name || '—'}
                                 {bi.asset?.serialNumber && <span className="text-slate-400">· {bi.asset.serialNumber}</span>}
                               </li>
@@ -1061,24 +1061,24 @@ export default function IssuancesPage() {
                         {/* Return status */}
                         {allReturned ? (
                           <div className="flex items-center gap-1.5">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                            <CheckCircle2 className="w-3 h-3 text-sky-500" />
+                            <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400">
                               All returned
                             </span>
                           </div>
                         ) : anyReturned ? (
                           <div className="flex flex-col gap-0.5">
                             <div className="flex items-center gap-1.5">
-                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                              <div className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+                              <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400">
                                 {batchItems.filter(i => i.returnedAt).length}/{batchItems.length} returned
                               </span>
                             </div>
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5">
-                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Active</span>
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Active</span>
                           </div>
                         )}
 
@@ -1192,10 +1192,10 @@ export default function IssuancesPage() {
                         </td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${bi.returnedAt ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${bi.returnedAt ? 'bg-sky-400' : 'bg-emerald-400'}`} />
                             <div>
                               <p className={`text-xs font-semibold ${bi.returnedAt ? 'text-slate-400' : 'text-slate-700 dark:text-slate-300'}`}>
-                                {bi.returnedAt && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 inline mr-0.5" />}
+                                {bi.returnedAt && <CheckCircle2 className="w-2.5 h-2.5 text-sky-400 inline mr-0.5" />}
                                 {bi.asset?.name || '—'}
                               </p>
                               {bi.asset?.serialNumber && (
@@ -1212,8 +1212,8 @@ export default function IssuancesPage() {
                         <td className="px-4 py-2.5">
                               {bi.returnedAt ? (
                             <div className="flex items-center gap-1.5">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                              <span className="text-[10px] font-semibold text-emerald-500">Returned</span>
+                              <CheckCircle2 className="w-3 h-3 text-sky-400" />
+                              <span className="text-[10px] font-semibold text-sky-500">Returned</span>
                               {bi.conditionAtReturn && (
                                 <span className="text-[9px] text-slate-400 ml-1">({bi.conditionAtReturn})</span>
                               )}
@@ -1286,12 +1286,12 @@ export default function IssuancesPage() {
                       </div>
                       <div className="shrink-0">
                         {iss.returnedAt ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-800">
                             <CheckCircle2 className="w-3 h-3" /> Returned
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> Active
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider border border-emerald-200 dark:border-emerald-800">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Active
                           </span>
                         )}
                       </div>
@@ -1449,16 +1449,16 @@ export default function IssuancesPage() {
                     </div>
                     <div className="shrink-0">
                       {allReturned ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-800">
                           <CheckCircle2 className="w-3 h-3" /> All returned
                         </span>
                       ) : anyReturned ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-800">
                           {batchItems.filter(i => i.returnedAt).length}/{batchItems.length} returned
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> Active
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider border border-emerald-200 dark:border-emerald-800">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Active
                         </span>
                       )}
                     </div>
@@ -1498,10 +1498,10 @@ export default function IssuancesPage() {
                     <div className="space-y-1.5 mb-2 pt-1.5 border-t border-slate-100 dark:border-slate-700/50">
                       {batchItems.map(bi => (
                         <div key={bi.id} className="flex items-center gap-2 rounded-md bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5">
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${bi.returnedAt ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${bi.returnedAt ? 'bg-sky-400' : 'bg-emerald-400'}`} />
                           <div className="flex-1 min-w-0">
                             <p className={`text-xs font-semibold truncate ${bi.returnedAt ? 'text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
-                              {bi.returnedAt && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 inline mr-0.5" />}
+                              {bi.returnedAt && <CheckCircle2 className="w-2.5 h-2.5 text-sky-400 inline mr-0.5" />}
                               {bi.asset?.name || '—'}
                             </p>
                             {bi.asset?.serialNumber && (
@@ -1510,7 +1510,7 @@ export default function IssuancesPage() {
                           </div>
                           <div className="shrink-0 flex items-center gap-1">
                             {bi.returnedAt ? (
-                              <span className="text-[10px] font-semibold text-emerald-500">Returned</span>
+                              <span className="text-[10px] font-semibold text-sky-500">Returned</span>
                             ) : (
                               <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Active</span>
                             )}
