@@ -3,6 +3,7 @@ import { Asset } from '../../lib/api';
 import { MaintenanceTab } from '../maintenance';
 import { AuditTimeline } from '../audit';
 import { GuestTokenManager } from '../guest';
+import { AssetLifecycleTimeline } from './AssetLifecycleTimeline';
 import FinancialsTab from '../depreciation/FinancialsTab';
 import { getWarrantyStatus, formatWarrantyDate } from '../../lib/warranty';
 import { PermissionGate } from '../auth';
@@ -33,6 +34,7 @@ import {
   Activity,
   AlertTriangle,
   ExternalLink,
+  History,
 } from 'lucide-react';
 
 /** Resolve asset image URL — prepend base path if relative */
@@ -239,6 +241,7 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose, initialTab
                   ...(!isGuest ? [{ value: 'financials', label: 'Financials', icon: DollarSign }] : []),
                   { value: 'condition', label: 'Condition', icon: Activity },
                   { value: 'history', label: 'History', icon: User },
+                  { value: 'lifecycle', label: 'Lifecycle', icon: History },
                   { value: 'maintenance', label: 'Maintenance', icon: Wrench },
                   { value: 'audit', label: 'Audit', icon: FileText },
                 ].map(t => {
@@ -458,6 +461,9 @@ export function AssetDetailModal({ asset, onClose, onEdit, onDispose, initialTab
 
                 {/* ─── Audit Tab ─── */}
                 {tab === 'audit' && <AuditTimeline entityId={asset.id} />}
+
+                {/* ─── Lifecycle Tab ─── */}
+                {tab === 'lifecycle' && <AssetLifecycleTimeline assetId={asset.id} />}
 
               </div>
             </ScrollArea>

@@ -10,6 +10,7 @@ import {
   X,
   Loader2,
   ChevronRight,
+  FileArchive,
 } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 
@@ -27,6 +28,9 @@ interface SearchItem {
   action?: string;
   performedAt?: string;
   contactPerson?: string | null;
+  documentNumber?: string;
+  documentType?: string;
+  title?: string;
 }
 
 interface SearchResults {
@@ -35,6 +39,7 @@ interface SearchResults {
   issuances: SearchItem[];
   audit: SearchItem[];
   suppliers: SearchItem[];
+  documents: SearchItem[];
 }
 
 const CATEGORIES = [
@@ -43,6 +48,7 @@ const CATEGORIES = [
   { key: 'issuances' as const, label: 'Issuances', icon: FileSignature, route: '/issuances' },
   { key: 'audit' as const, label: 'Audit Trail', icon: History, route: '/audit' },
   { key: 'suppliers' as const, label: 'Suppliers', icon: Truck, route: '/suppliers' },
+  { key: 'documents' as const, label: 'Documents', icon: FileArchive, route: '/documents' },
 ];
 
 interface GlobalSearchModalProps {
@@ -145,6 +151,8 @@ export default function GlobalSearchModal({ onClose }: GlobalSearchModalProps) {
         return item.action || '';
       case 'suppliers':
         return item.contactPerson || '';
+      case 'documents':
+        return [item.documentNumber, item.documentType, item.status].filter(Boolean).join(' · ');
       default:
         return '';
     }
@@ -162,6 +170,8 @@ export default function GlobalSearchModal({ onClose }: GlobalSearchModalProps) {
         return item.summary || item.action || '';
       case 'suppliers':
         return item.name || '';
+      case 'documents':
+        return item.title || item.documentNumber || '';
       default:
         return '';
     }
@@ -190,7 +200,7 @@ export default function GlobalSearchModal({ onClose }: GlobalSearchModalProps) {
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search assets, personnel, issuances..."
+            placeholder="Search assets, personnel, issuances, documents..."
             className="flex-1 bg-transparent border-none outline-none text-lg text-slate-900 dark:text-white placeholder:text-slate-400"
           />
           {loading && <Loader2 className="w-5 h-5 text-[#f8931f] animate-spin shrink-0" />}

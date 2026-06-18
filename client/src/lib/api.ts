@@ -256,6 +256,18 @@ export interface AssetFilters {
   warrantyExpiryTo?: string;
 }
 
+export interface AssetLifecycleEvent {
+  id: string;
+  type: 'created' | 'edited' | 'issued' | 'returned' | 'repaired' | 'transferred' | 'disposed' | 'audited';
+  occurredAt: string;
+  title: string;
+  description: string;
+  actorName?: string | null;
+  source: 'asset' | 'assignment' | 'maintenance' | 'condition' | 'audit';
+  severity?: 'LOW' | 'MEDIUM' | 'HIGH' | null;
+  metadata?: Record<string, unknown>;
+}
+
 // Assets API
 export const assetsApi = {
   list: (filters: AssetFilters = {}) => {
@@ -272,6 +284,7 @@ export const assetsApi = {
     return apiFetchBlob('/assets/export-csv', { method: 'POST', body: { assetIds } });
   },
   get: (id: string) => request<{ data: Asset & { assignments: Assignment[]; maintenanceLogs: any[] } }>(`/assets/${id}`),
+  lifecycle: (id: string) => request<{ data: AssetLifecycleEvent[] }>(`/assets/${id}/lifecycle`),
   create: (data: Partial<Asset>) => request<{ data: Asset }>('/assets', { method: 'POST', body: JSON.stringify(data) }),
   createWithImage: async (formData: FormData) => {
     const token = localStorage.getItem('accessToken');
@@ -387,5 +400,63 @@ export const auditApi = {
     a.download = `audit-logs-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  },
+};
+
+export interface DocumentArchiveItem {
+  id: string;
+  documentType: 'ACCOUNTABILITY_FORM' | 'SIGNED_AGREEMENT' | 'RETURN_FORM' | 'PURCHASE_DOCUMENT' | 'DISPOSAL_DOCUMENT';
+  title: string;
+  documentNumber: string;
+  filePath?: string | null;
+  sourceEntityType?: string | null;
+  sourceEntityId?: string | null;
+  assetId?: string | null;
+  personnelId?: string | null;
+  purchaseRequestId?: string | null;
+  assignmentId?: string | null;
+  status: 'ACTIVE' | 'SUPERSEDED' | 'VOID';
+  uploadedById?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  asset?: { id: string; name: string; serialNumber?: string; propertyNumber?: string } | null;
+  personnel?: { id: string; fullName: string; designation?: string } | null;
+  purchaseRequest?: { id: string; assetName: string; status: string } | null;
+  assignment?: { id: string; assignedTo?: string; assetId?: string } | null;
+  uploadedBy?: { id: string; username: string; fullName?: string } | null;
+}
+
+export interface DocumentFilters {
+  search?: string;
+  documentType?: DocumentArchiveItem['documentType'];
+  status?: DocumentArchiveItem['status'];
+  dateFrom?: string;
+  dateTo?: string;
+  assetId?: string;
+  personnelId?: string;
+  purchaseRequestId?: string;
+  assignmentId?: string;
+  page?: number;
+  limit?: number;
+}
+
+export const documentsApi = {
+  list: (filters: DocumentFilters = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== '') params.set(k, String(v)); });
+    return request<PaginatedResponse<DocumentArchiveItem>>(`/documents?${params}`);
+  },
+  get: (id: string) => request<{ data: DocumentArchiveItem }>(`/documents/${id}`),
+  download: (id: string) => apiFetchBlob(`/documents/${id}/download`),
+  upload: async (formData: FormData) => {
+    const token = localStorage.getItem('accessToken');
+    const res = await fetch(`${API_BASE}/documents/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    const data = await res.json();
+    if (!data.success) throw new ApiError(data.error?.message || 'Upload failed', res.status, data.error);
+    return data;
   },
 };

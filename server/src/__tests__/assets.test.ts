@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import { app } from '../index';
+import { prisma } from '../lib/prisma';
 
 let accessToken: string;
 
@@ -41,5 +42,46 @@ describe('Asset endpoints (authenticated)', () => {
       expect(res.status).toBe(404);
       expect(res.body).toHaveProperty('success', false);
     });
+  });
+});
+
+const runId = `asset-dsp-${Date.now()}`;
+
+describe('Asset disposal archive', () => {
+  let token: string;
+
+  beforeAll(async () => {
+    const res = await request(app).post('/api/auth/login').send({ email: 'admin@aio-system.local', password: 'admin123' });
+    token = res.body.data.accessToken;
+  });
+
+  afterAll(async () => {
+    await prisma.documentArchiveItem.deleteMany({ where: { documentNumber: { startsWith: runId } } });
+    await prisma.asset.deleteMany({ where: { name: { startsWith: runId } } });
+  });
+
+  it('creates a DISPOSAL_DOCUMENT archive item when disposing an asset', async () => {
+    const asset = await prisma.asset.create({
+      data: {
+        name: `${runId} Disposal Asset`,
+        type: 'Laptop',
+        serialNumber: `${runId}-SN`,
+        propertyNumber: `${runId}-PN`,
+        status: 'AVAILABLE',
+      },
+    });
+
+    const res = await request(app)
+      .post(`/api/assets/${asset.id}/dispose`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ reason: 'End of life', method: 'SCRAPPED', date: new Date().toISOString().split('T')[0] });
+
+    expect(res.status).toBe(200);
+
+    const archive = await prisma.documentArchiveItem.findFirst({
+      where: { assetId: asset.id, documentType: 'DISPOSAL_DOCUMENT' },
+    });
+    expect(archive).toBeTruthy();
+    expect(archive?.status).toBe('ACTIVE');
   });
 });

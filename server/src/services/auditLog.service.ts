@@ -17,6 +17,8 @@ export const AUDIT_ACTIONS = {
   ISSUE_REPORT_CREATED: 'issue_report.created',
   ISSUE_REPORT_STATUS_UPDATED: 'issue_report.status_updated',
   ISSUE_REPORT_NOTES_UPDATED: 'issue_report.notes_updated',
+  DOCUMENT_ARCHIVED: 'document.archived',
+  DOCUMENT_VIEWED: 'document.viewed',
 } as const;
 
 export async function logAudit(params: {

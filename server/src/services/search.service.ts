@@ -30,6 +30,7 @@ export interface GlobalSearchResults {
   issuances: SearchResult[];
   audit: SearchResult[];
   suppliers: SearchResult[];
+  documents: SearchResult[];
 }
 
 function getAuditMetadataValue(metadata: Prisma.JsonValue | null, key: string): string | null {
@@ -40,7 +41,7 @@ function getAuditMetadataValue(metadata: Prisma.JsonValue | null, key: string): 
 }
 
 export async function globalSearch(query: string): Promise<GlobalSearchResults> {
-  const emptyResult = { assets: [], personnel: [], issuances: [], audit: [], suppliers: [] };
+  const emptyResult = { assets: [], personnel: [], issuances: [], audit: [], suppliers: [], documents: [] };
 
   if (!query || query.length < 2) {
     return emptyResult;
@@ -109,6 +110,38 @@ export async function globalSearch(query: string): Promise<GlobalSearchResults> 
   // e) Suppliers: no model in schema — return empty
   const suppliers: SearchResult[] = [];
 
+  // f) Document archive: search by document number, title, asset name, personnel name, source entity
+  const documents = await prisma.documentArchiveItem.findMany({
+    where: {
+      OR: [
+        { documentNumber: { contains: query, mode: 'insensitive' } },
+        { title: { contains: query, mode: 'insensitive' } },
+        { sourceEntityType: { contains: query, mode: 'insensitive' } },
+        { sourceEntityId: { contains: query, mode: 'insensitive' } },
+        { asset: { name: { contains: query, mode: 'insensitive' } } },
+        { asset: { serialNumber: { contains: query, mode: 'insensitive' } } },
+        { asset: { propertyNumber: { contains: query, mode: 'insensitive' } } },
+        { personnel: { fullName: { contains: query, mode: 'insensitive' } } },
+        { personnel: { email: { contains: query, mode: 'insensitive' } } },
+        { purchaseRequest: { assetName: { contains: query, mode: 'insensitive' } } },
+      ],
+    },
+    select: {
+      id: true,
+      documentNumber: true,
+      documentType: true,
+      title: true,
+      status: true,
+      createdAt: true,
+      asset: { select: { name: true, serialNumber: true, propertyNumber: true } },
+      personnel: { select: { fullName: true } },
+      purchaseRequest: { select: { assetName: true } },
+      assignment: { select: { assignedTo: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 5,
+  });
+
   return {
     assets: assets.map(a => ({
       id: a.id,
@@ -134,5 +167,15 @@ export async function globalSearch(query: string): Promise<GlobalSearchResults> 
       performedAt: a.createdAt,
     })),
     suppliers,
+    documents: documents.map(d => ({
+      id: d.id,
+      documentNumber: d.documentNumber,
+      documentType: d.documentType,
+      title: d.title,
+      status: d.status,
+      assetName: d.asset?.name ?? d.purchaseRequest?.assetName ?? undefined,
+      assignedTo: d.personnel?.fullName ?? d.assignment?.assignedTo ?? undefined,
+      performedAt: d.createdAt,
+    })),
   };
 }

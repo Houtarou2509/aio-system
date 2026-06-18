@@ -12,6 +12,8 @@ import { buildAgreementDocumentView, type AgreementDocumentView } from './agreem
    INTERFACE
    ═══════════════════════════════════════════════════════ */
 
+type SignatoryMode = 'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep';
+
 interface TemplateCreateData {
   name: string;
   title?: string;
@@ -20,6 +22,7 @@ interface TemplateCreateData {
   isDefault?: boolean;
   defaultPropertyOfficer?: string;
   defaultAuthorizedRep?: string;
+  signatoryMode?: SignatoryMode;
   headerLogo?: string;
   letterheadPath?: string;
 }
@@ -32,11 +35,19 @@ interface TemplateUpdateData {
   isDefault?: boolean;
   defaultPropertyOfficer?: string;
   defaultAuthorizedRep?: string;
+  signatoryMode?: SignatoryMode;
   headerLogo?: string;
   letterheadPath?: string;
 }
 
 export const FALLBACK_AGREEMENT_TITLE = 'ISSUANCE & ACCOUNTABILITY AGREEMENT';
+
+const SIGNATORY_MODES: SignatoryMode[] = ['recipientOnly', 'recipientPropertyOfficer', 'recipientPropertyOfficerAuthorizedRep'];
+
+export function normalizeSignatoryMode(value: string | undefined | null): SignatoryMode {
+  if (SIGNATORY_MODES.includes(value as SignatoryMode)) return value as SignatoryMode;
+  return 'recipientPropertyOfficerAuthorizedRep';
+}
 
 export const FALLBACK_AGREEMENT_TEMPLATE = `ISSUANCE AND ACCOUNTABILITY AGREEMENT
 
@@ -129,6 +140,7 @@ export async function createTemplate(
         isDefault: data.isDefault ?? false,
         defaultPropertyOfficer: data.defaultPropertyOfficer ?? null,
         defaultAuthorizedRep: data.defaultAuthorizedRep ?? null,
+        signatoryMode: normalizeSignatoryMode(data.signatoryMode),
         currentVersion: 1,
         ...(logoPath ? { headerLogo: logoPath } : {}),
         ...(letterheadFilePath || data.letterheadPath ? { letterheadPath: letterheadFilePath || data.letterheadPath } : {}),
@@ -147,6 +159,7 @@ export async function createTemplate(
         letterheadPath: template.letterheadPath,
         defaultPropertyOfficer: template.defaultPropertyOfficer,
         defaultAuthorizedRep: template.defaultAuthorizedRep,
+        signatoryMode: template.signatoryMode,
         changeSummary: 'Initial version',
       },
     });
@@ -173,6 +186,7 @@ export async function updateTemplate(
   if (data.isDefault !== undefined) updateData.isDefault = data.isDefault;
   if (data.defaultPropertyOfficer !== undefined) updateData.defaultPropertyOfficer = data.defaultPropertyOfficer || null;
   if (data.defaultAuthorizedRep !== undefined) updateData.defaultAuthorizedRep = data.defaultAuthorizedRep || null;
+  if (data.signatoryMode !== undefined) updateData.signatoryMode = normalizeSignatoryMode(data.signatoryMode);
   if (logoPath && logoPath !== '') updateData.headerLogo = logoPath;
   else if (data.headerLogo === '') updateData.headerLogo = null;
   else if (typeof data.headerLogo === 'string' && data.headerLogo !== '') updateData.headerLogo = data.headerLogo;
@@ -190,6 +204,7 @@ export async function updateTemplate(
     letterheadPath: updateData.letterheadPath !== undefined ? updateData.letterheadPath : existing.letterheadPath,
     defaultPropertyOfficer: updateData.defaultPropertyOfficer ?? existing.defaultPropertyOfficer,
     defaultAuthorizedRep: updateData.defaultAuthorizedRep ?? existing.defaultAuthorizedRep,
+    signatoryMode: updateData.signatoryMode ?? existing.signatoryMode,
   };
 
   const revisionChanged =
@@ -200,6 +215,7 @@ export async function updateTemplate(
     nextSnapshot.letterheadPath !== existing.letterheadPath ||
     nextSnapshot.defaultPropertyOfficer !== existing.defaultPropertyOfficer ||
     nextSnapshot.defaultAuthorizedRep !== existing.defaultAuthorizedRep ||
+    nextSnapshot.signatoryMode !== existing.signatoryMode ||
     JSON.stringify(nextSnapshot.contentJson) !== JSON.stringify(existing.contentJson);
 
   return prisma.$transaction(async (tx) => {
@@ -229,8 +245,9 @@ export async function updateTemplate(
           letterheadPath: nextSnapshot.letterheadPath,
           defaultPropertyOfficer: nextSnapshot.defaultPropertyOfficer,
           defaultAuthorizedRep: nextSnapshot.defaultAuthorizedRep,
+          signatoryMode: nextSnapshot.signatoryMode,
           changeSummary: 'Template edited',
-        },
+},
       });
     }
 
@@ -292,6 +309,7 @@ export async function duplicateTemplate(id: string) {
         isDefault: false,
         defaultPropertyOfficer: contentSource.defaultPropertyOfficer,
         defaultAuthorizedRep: contentSource.defaultAuthorizedRep,
+        signatoryMode: contentSource.signatoryMode ?? 'recipientPropertyOfficerAuthorizedRep',
         headerLogo: contentSource.headerLogo,
         letterheadPath: contentSource.letterheadPath,
         currentVersion: 1,
@@ -310,6 +328,7 @@ export async function duplicateTemplate(id: string) {
         letterheadPath: template.letterheadPath,
         defaultPropertyOfficer: template.defaultPropertyOfficer,
         defaultAuthorizedRep: template.defaultAuthorizedRep,
+        signatoryMode: template.signatoryMode,
         changeSummary: 'Duplicated from template: ' + source.name,
       },
     });
@@ -459,7 +478,7 @@ export async function backfillAgreementDocuments(params: { performedById: string
           institution: { select: { name: true } },
         },
       },
-      agreement: { select: { id: true, name: true, title: true, headerLogo: true, letterheadPath: true, defaultPropertyOfficer: true, defaultAuthorizedRep: true, currentVersion: true, versions: { orderBy: { versionNumber: 'desc' }, take: 1, select: { id: true, versionNumber: true } } } },
+      agreement: { select: { id: true, name: true, title: true, headerLogo: true, letterheadPath: true, defaultPropertyOfficer: true, defaultAuthorizedRep: true, signatoryMode: true, currentVersion: true, versions: { orderBy: { versionNumber: 'desc' }, take: 1, select: { id: true, versionNumber: true } } } },
     },
   });
 
@@ -516,7 +535,7 @@ export async function backfillAgreementDocuments(params: { performedById: string
     const signedAssignment = assignments.find(a => a.recipientSignedAt) || first;
     const signedCopyAssignment = assignments.find(a => a.personnel?.signedAgreementPath);
     const document = await prisma.$transaction(async (tx) => {
-      const created = await tx.agreementDocument.create({
+      const document = await tx.agreementDocument.create({
         data: {
           documentNumber: makeDocumentNumber('AGR-BF'),
           templateId: first.agreementId || null,
@@ -535,6 +554,7 @@ export async function backfillAgreementDocuments(params: { performedById: string
           assetSnapshot: assets,
           propertyOfficerName: first.agreement?.defaultPropertyOfficer || null,
           authorizedRepName: first.agreement?.defaultAuthorizedRep || null,
+          signatoryMode: first.agreement?.signatoryMode || 'recipientPropertyOfficerAuthorizedRep',
           status: getDocumentStatus(assignments),
           issuedAt: first.assignedAt,
           issuedById: first.userId || params.performedById,
@@ -546,26 +566,40 @@ export async function backfillAgreementDocuments(params: { performedById: string
         },
       });
 
+      // Archive accountability form for backfilled document
+      try {
+        const { recordAccountabilityFormArchive } = await import('../services/document-archive.service');
+        await recordAccountabilityFormArchive(document.id, params.performedById, {
+          title: document.title,
+          documentNumber: document.documentNumber,
+          personnelId: document.personnelId,
+          assignmentId: assignments.length === 1 ? first.id : null,
+          assetId: assets.length === 1 ? assets[0].id : null,
+        });
+      } catch (archiveErr) {
+        console.error('[backfillAgreementDocuments] archive creation failed:', archiveErr);
+      }
+
       const linked = await tx.assignment.updateMany({
         where: { id: { in: assignments.map(a => a.id) }, agreementDocumentId: null },
-        data: { agreementDocumentId: created.id },
+        data: { agreementDocumentId: document.id },
       });
 
       await logAudit({
   userId: params.performedById ?? null,
   action: 'BACKFILL',
   entityType: 'AgreementDocument',
-  entityId: created.id ?? null,
+  entityId: document.id ?? null,
   ipAddress: null,
   metadata: {
     "field": 'agreementDocumentId',
     "newValue": `${linked.count} historical assignment(s) linked`,
     "severity": 'MEDIUM',
-    "summary": `Backfilled agreement document ${created.documentNumber} for ${linked.count} historical assignment(s)`,
+    "summary": `Backfilled agreement document ${document.documentNumber} for ${linked.count} historical assignment(s)`,
   },
 });
 
-      return { created, linkedCount: linked.count };
+      return { created: document, linkedCount: linked.count };
     });
 
     documentsCreated += 1;
@@ -1384,6 +1418,7 @@ export interface AgreementPdfParams {
   title?: string | null;
   propertyOfficerName?: string | null;
   authorizedRepName?: string | null;
+  signatoryMode?: SignatoryMode | null;
   assets?: Array<{ name: string; serialNumber?: string | null; propertyNumber?: string | null; condition?: string | null }>;
   recipientSignedAt?: string | Date | null;
   recipientSignatureName?: string | null;
@@ -1507,6 +1542,7 @@ export async function resolveAgreementPdfParams(p: AgreementPdfParams): Promise<
     title: document.title || p.title || null,
     propertyOfficerName: document.propertyOfficerName || p.propertyOfficerName || null,
     authorizedRepName: document.authorizedRepName || p.authorizedRepName || null,
+    signatoryMode: normalizeSignatoryMode(document.signatoryMode || p.signatoryMode || null),
     assets: resolvedAssets.length ? resolvedAssets : p.assets,
     recipientSignedAt: document.recipientSignedAt || p.recipientSignedAt || null,
     recipientSignatureName: document.recipientSignatureName || p.recipientSignatureName || null,
@@ -1595,6 +1631,7 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
     })),
     propertyOfficerName: propertyOfficerName || tmpl?.defaultPropertyOfficer,
     authorizedRepName: authorizedRepName || tmpl?.defaultAuthorizedRep,
+    signatoryMode: normalizeSignatoryMode(p.signatoryMode || tmpl?.signatoryMode || null),
     recipientSignedAt,
     recipientSignatureName,
   });
@@ -1936,7 +1973,8 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
     if (y + SIG_BLOCK_HEIGHT > CONTENT_BOTTOM_Y) y = addContinuationPage(false);
     const sigLineY = Math.max(y + 14, CONTENT_BOTTOM_Y - SIG_BLOCK_HEIGHT);
     const sigLabelY = sigLineY + 14;
-    const colW = (CW - 20) / 3;
+    const sigCount = documentView.signatures.length || 1;
+    const colW = (CW - ((sigCount - 1) * 10)) / sigCount;
     const sigCols = documentView.signatures.map((signature, index) => ({
       x: M + (colW + 10) * index,
       label: signature.label,

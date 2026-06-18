@@ -24,6 +24,8 @@ export const ALL_PERMISSIONS = {
   'backups:create': 'Create Backups',
   'settings:view': 'View Settings',
   'notifications:view': 'View Notifications',
+  'documents:view': 'View Documents Archive',
+  'documents:upload': 'Upload Documents to Archive',
 } as const;
 
 export type PermissionKey = keyof typeof ALL_PERMISSIONS;
@@ -38,6 +40,7 @@ export const DEFAULT_PERMISSIONS: Record<string, PermissionKey[]> = {
     'issuances:view', 'issuances:create', 'issuances:edit', 'issuances:return',
     'audit:view', 'audit:export',
     'notifications:view',
+    'documents:view', 'documents:upload',
   ],
   STAFF: [
     'assets:view',

@@ -18,6 +18,20 @@ export const initialPreviewState: AgreementPreviewState = {
   filename: 'agreement.pdf',
 };
 
+async function pdfBlobFromResponse(res: Response) {
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => '');
+    throw new Error(errorText || 'Failed to generate PDF');
+  }
+  const blob = await res.blob();
+  const bytes = await blob.arrayBuffer();
+  const header = new TextDecoder('latin1').decode(bytes.slice(0, 5));
+  if (header !== '%PDF-') {
+    throw new Error('Agreement preview did not return a valid PDF.');
+  }
+  return new Blob([bytes], { type: 'application/pdf' });
+}
+
 export function useAgreementPreview() {
   const [preview, setPreview] = useState<AgreementPreviewState>(initialPreviewState);
 
@@ -70,9 +84,7 @@ export function useAgreementPreview() {
         }
       }
 
-      if (!res.ok) throw new Error('Failed to generate PDF');
-      const blob = await res.blob();
-      const typedBlob = blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
+      const typedBlob = await pdfBlobFromResponse(res);
       const url = URL.createObjectURL(typedBlob);
       const pName = params.personnelName || 'unknown';
       setPreview(prev => ({

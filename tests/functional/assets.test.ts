@@ -1046,3 +1046,171 @@ describe('Asset list manufacturer filter', () => {
 });
 
 
+
+
+describe('Asset Lifecycle Timeline', () => {
+  it('GET /api/assets/:id/lifecycle (no auth) → 401', async () => {
+    const asset = await createAsset({ name: 'Lifecycle Auth', adminToken: users.ADMIN.accessToken });
+    const res = await request(app).get(`/api/assets/${asset.id}/lifecycle`);
+    expect(res.status).toBe(401);
+  });
+
+  it('GET /api/assets/:id/lifecycle — created event first', async () => {
+    const asset = await createAsset({ name: 'Lifecycle Created', adminToken: users.ADMIN.accessToken });
+    const res = await request(app)
+      .get(`/api/assets/${asset.id}/lifecycle`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.data[0].type).toBe('created');
+    expect(res.body.data[0].source).toBe('asset');
+  });
+
+  it('GET /api/assets/:id/lifecycle — includes issued and returned events', async () => {
+    const { asset, assignment } = await createCheckedOutAsset({
+      name: 'Lifecycle Issued Returned',
+      adminToken: users.ADMIN.accessToken,
+      personnelId: testPersonnel.id,
+    });
+
+    await request(app)
+      .post(`/api/issuances/${assignment.id}/return`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ condition: 'Good', returnNote: 'Returned for QA' });
+
+    const res = await request(app)
+      .get(`/api/assets/${asset.id}/lifecycle`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    const types = res.body.data.map((e: any) => e.type);
+    expect(types).toContain('created');
+    expect(types).toContain('issued');
+    expect(types).toContain('returned');
+  });
+
+  it('GET /api/assets/:id/lifecycle — includes edited event after update', async () => {
+    const asset = await createAsset({ name: 'Lifecycle Edited', adminToken: users.ADMIN.accessToken });
+
+    await request(app)
+      .put(`/api/assets/${asset.id}`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ location: 'New Location' });
+
+    const res = await request(app)
+      .get(`/api/assets/${asset.id}/lifecycle`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    const types = res.body.data.map((e: any) => e.type);
+    expect(types).toContain('edited');
+  });
+
+  it('GET /api/assets/:id/lifecycle — includes repaired event after maintenance log', async () => {
+    const asset = await createAsset({ name: 'Lifecycle Repaired', adminToken: users.ADMIN.accessToken });
+
+    await prisma.maintenanceLog.create({
+      data: {
+        assetId: asset.id,
+        technicianName: 'Tech One',
+        description: 'Replaced screen',
+        cost: 2500,
+        date: new Date(),
+      },
+    });
+
+    const res = await request(app)
+      .get(`/api/assets/${asset.id}/lifecycle`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    const types = res.body.data.map((e: any) => e.type);
+    expect(types).toContain('repaired');
+  });
+
+  it('GET /api/assets/:id/lifecycle — disposed event after disposal', async () => {
+    const asset = await createAsset({ name: 'Lifecycle Disposed', adminToken: users.ADMIN.accessToken });
+
+    await request(app)
+      .post(`/api/assets/${asset.id}/dispose`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ reason: 'End of life', method: 'SCRAPPED', date: '2026-06-01' });
+
+    const res = await request(app)
+      .get(`/api/assets/${asset.id}/lifecycle`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    const types = res.body.data.map((e: any) => e.type);
+    expect(types).toContain('disposed');
+  });
+
+
+
+  it('GET /api/assets/:id/lifecycle — includes transferred event after issuance transfer', async () => {
+    const personnelA = await createPersonnel({ fullName: 'Personnel A', designation: 'Staff', project: 'QA' });
+    const personnelB = await createPersonnel({ fullName: 'Personnel B', designation: 'Staff', project: 'QA' });
+
+    const { asset, assignment } = await createCheckedOutAsset({
+      name: 'Lifecycle Transfer Asset',
+      adminToken: users.ADMIN.accessToken,
+      personnelId: personnelA.id,
+    });
+
+    const transferRes = await request(app)
+      .post(`/api/issuances/${assignment.id}/transfer`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({
+        toPersonnelId: personnelB.id,
+        condition: 'Good',
+        transferNote: 'Handed over to Personnel B',
+      });
+
+    expect(transferRes.status).toBe(201);
+
+    const res = await request(app)
+      .get(`/api/assets/${asset.id}/lifecycle`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    const types = res.body.data.map((e: any) => e.type);
+    expect(types).toContain('transferred');
+
+    const transferEvent = res.body.data.find((e: any) => e.type === 'transferred');
+    expect(transferEvent).toBeDefined();
+    expect(transferEvent.title).toContain('Personnel B');
+    expect(transferEvent.description).toContain('Handed over to Personnel B');
+    expect(transferEvent.source).toBe('assignment');
+
+    // No duplicate generic audited TRANSFER event
+    const auditedTransfer = res.body.data.find(
+      (e: any) => e.type === 'audited' && (e.title.toLowerCase().includes('transfer') || e.description.toLowerCase().includes('transfer'))
+    );
+    expect(auditedTransfer).toBeUndefined();
+  });
+
+  it('GET /api/assets/:id/lifecycle — events are sorted chronologically', async () => {
+    const { asset, assignment } = await createCheckedOutAsset({
+      name: 'Lifecycle Sorted',
+      adminToken: users.ADMIN.accessToken,
+      personnelId: testPersonnel.id,
+    });
+
+    await request(app)
+      .post(`/api/issuances/${assignment.id}/return`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ condition: 'Fair' });
+
+    const res = await request(app)
+      .get(`/api/assets/${asset.id}/lifecycle`)
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(res.status).toBe(200);
+    const occurredAt = res.body.data.map((e: any) => new Date(e.occurredAt).getTime());
+    for (let i = 1; i < occurredAt.length; i++) {
+      expect(occurredAt[i]).toBeGreaterThanOrEqual(occurredAt[i - 1]);
+    }
+  });
+});

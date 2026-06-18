@@ -26,6 +26,8 @@ export const ALL_PERMISSIONS: Record<string, string> = {
   'backups:create': 'Create Backups',
   'settings:view': 'View Settings',
   'notifications:view': 'View Notifications',
+  'documents:view': 'View Documents Archive',
+  'documents:upload': 'Upload Documents to Archive',
 };
 
 export const PERMISSION_KEYS = Object.keys(ALL_PERMISSIONS);
@@ -50,6 +52,7 @@ export const DEFAULT_PERMISSIONS: Record<string, string[]> = {
     'audit:view',
     'audit:export',
     'notifications:view',
+    'documents:view', 'documents:upload',
   ],
   STAFF: [
     'assets:view',

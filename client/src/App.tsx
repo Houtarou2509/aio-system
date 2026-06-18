@@ -30,6 +30,7 @@ import HelpPage from './pages/HelpPage';
 import IssueReportsPage from './pages/IssueReportsPage';
 import SystemHealthPage from './pages/SystemHealthPage';
 import DataQualityPage from './pages/DataQualityPage';
+import DocumentsPage from './pages/DocumentsPage';
 import './index.css';
 
 function App() {
@@ -68,6 +69,7 @@ function App() {
             <Route path="maintenance-calendar" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN','STAFF'] as any}><MaintenanceCalendarPage /></ProtectedRoute>} />
             <Route path="backups" element={<ProtectedRoute requiredRole="ADMIN"><BackupManagementPage /></ProtectedRoute>} />
             <Route path="accountability/report" element={<ProtectedRoute requiredRole="ADMIN"><AccountabilityReportPage /></ProtectedRoute>} />
+            <Route path="documents" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><DocumentsPage /></ProtectedRoute>} />
             <Route path="help" element={<HelpPage />} />
             <Route path="issues" element={<ProtectedRoute requiredRole="ADMIN"><IssueReportsPage /></ProtectedRoute>} />
             <Route path="system-health" element={<ProtectedRoute requiredRole={['ADMIN','STAFF_ADMIN'] as any}><SystemHealthPage /></ProtectedRoute>} />

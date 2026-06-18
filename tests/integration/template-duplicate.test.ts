@@ -42,6 +42,7 @@ describe('duplicateTemplate', () => {
     isDefault: true,
     defaultPropertyOfficer: 'Officer A',
     defaultAuthorizedRep: 'Rep B',
+    signatoryMode: 'recipientPropertyOfficer',
     currentVersion: 3,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -58,6 +59,7 @@ describe('duplicateTemplate', () => {
         letterheadPath: '/uploads/letterheads/letterhead.png',
         defaultPropertyOfficer: 'Officer A',
         defaultAuthorizedRep: 'Rep B',
+        signatoryMode: 'recipientPropertyOfficer',
         changeSummary: 'Updated content',
         createdAt: new Date(),
       },
@@ -73,6 +75,7 @@ describe('duplicateTemplate', () => {
     isDefault: false,
     defaultPropertyOfficer: 'Officer A',
     defaultAuthorizedRep: 'Rep B',
+    signatoryMode: 'recipientPropertyOfficer',
     headerLogo: '/uploads/logos/logo.png',
     letterheadPath: '/uploads/letterheads/letterhead.png',
     currentVersion: 1,
@@ -96,6 +99,7 @@ describe('duplicateTemplate', () => {
     expect(createData.isDefault).toBe(false);
     expect(createData.defaultPropertyOfficer).toBe('Officer A');
     expect(createData.defaultAuthorizedRep).toBe('Rep B');
+    expect(createData.signatoryMode).toBe('recipientPropertyOfficer');
     expect(createData.headerLogo).toBe('/uploads/logos/logo.png');
     expect(createData.letterheadPath).toBe('/uploads/letterheads/letterhead.png');
     // Verify version was created

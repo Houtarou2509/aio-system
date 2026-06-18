@@ -39,6 +39,7 @@ import issueRoutes from './routes/issue.routes';
 import systemRoutes from './routes/system.routes';
 import dataQualityRoutes from './routes/data-quality.routes';
 import lookupBackupRoutes from './routes/lookupBackup.routes';
+import documentArchiveRoutes from './routes/document-archive.routes';
 import { startCronJobs } from './jobs/cron';
 
 // Start server only when not in test
@@ -120,6 +121,7 @@ app.use('/api/issues', issueRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/data-quality', dataQualityRoutes);
 app.use('/api/lookup-backup', lookupBackupRoutes);
+app.use('/api/documents', documentArchiveRoutes);
 
 // Redirect root to /aio-system/
 app.get('/', (_req, res) => {
