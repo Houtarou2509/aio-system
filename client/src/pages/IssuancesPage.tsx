@@ -37,13 +37,6 @@ const RETURN_CONDITION_OPTIONS = ['Good', 'Fair', 'Damaged', 'Lost'];
 function DocStatusBadge({ status }: { status: string | undefined | null }) {
   if (!status) return null;
   const s = status.toLowerCase();
-  if (s === 'returned') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 border border-sky-200">
-        <CheckCircle2 className="h-2.5 w-2.5" /> Returned
-      </span>
-    );
-  }
   if (s === 'pending_signature') {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-[#f8931f]/10 px-2 py-0.5 text-[10px] font-bold text-[#f8931f] border border-[#f8931f]/30">
@@ -58,12 +51,21 @@ function DocStatusBadge({ status }: { status: string | undefined | null }) {
       </span>
     );
   }
-  // 'issued' or any other → Active (navy)
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-[#012061]/10 px-2 py-0.5 text-[10px] font-bold text-[#012061] border border-[#012061]/20 dark:bg-slate-700/50 dark:text-slate-100 dark:border-slate-600">
-      Active
-    </span>
-  );
+  // 'returned', 'issued', and other lifecycle states duplicate the main issuance
+  // return status, so keep the cell quieter by hiding it.
+  return null;
+}
+
+function hasVisibleDocStatus(status: string | undefined | null) {
+  if (!status) return false;
+  return ['pending_signature', 'signed'].includes(status.toLowerCase());
+}
+
+function hasDocumentStatusDetails(
+  document: Issuance['agreementDocument'] | undefined | null,
+  recipientSignedAt: string | undefined | null
+) {
+  return Boolean(recipientSignedAt || document?.signedPdfPath || hasVisibleDocStatus(document?.status));
 }
 
 /* ─── Verified Badge with Popover ─── */
@@ -832,12 +834,13 @@ export default function IssuancesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {groupedIssuances.map(row => {
-                  if (row.type === 'single') {
-                    const iss = row.item;
-                    return (
+	                {groupedIssuances.map(row => {
+	                  if (row.type === 'single') {
+	                    const iss = row.item;
+	                    const hasDocDetails = hasDocumentStatusDetails(iss.agreementDocument, iss.recipientSignedAt);
+	                    return (
                       <tr key={iss.id} className="bg-white dark:bg-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all group">
-                        <td className="px-4 py-4">
+	                      <td className="px-4 py-4">
                           <span
                             onClick={() => toggleSelect(iss.id)}
                             className={`inline-flex items-center justify-center w-4 h-4 rounded border cursor-pointer ${
@@ -847,7 +850,7 @@ export default function IssuancesPage() {
                             {selectedIds.has(iss.id) && <CheckCircle className="w-3 h-3 text-white" />}
                           </span>
                         </td>
-                      <td className="px-4 py-4">
+	                      <td className="px-4 py-4">
                         <div className="flex flex-col">
                           <p className="font-bold text-sm text-[#012061] dark:text-slate-100">{iss.asset?.name || '—'}</p>
                           <div className="flex items-center gap-1.5 mt-0.5">
@@ -869,8 +872,8 @@ export default function IssuancesPage() {
                       <td className="px-4 py-4 text-xs font-medium text-slate-600 dark:text-slate-400 tabular-nums">
                         {new Date(iss.assignedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                       </td>
-                      <td className="px-4 py-4">
-                        {/* Return status */}
+	                      <td className={`px-4 py-4 ${hasDocDetails ? 'align-top' : 'align-middle'}`}>
+	                        {/* Return status */}
                         {iss.returnedAt ? (
                           <div className="flex items-center gap-1.5">
                             <CheckCircle2 className="w-3 h-3 text-sky-500" />
@@ -886,7 +889,7 @@ export default function IssuancesPage() {
                         )}
 
                         {/* Document status — separated */}
-                        {(iss.recipientSignedAt || iss.agreementDocument?.status) && (
+	                        {hasDocDetails && (
                           <div className="mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-700/50 space-y-1">
                             {iss.recipientSignedAt && (
                               <div className="text-[10px] font-semibold text-[#012061] dark:text-slate-200">
@@ -999,9 +1002,10 @@ export default function IssuancesPage() {
                   if (row.type !== 'batch') return null;
                   const batchItems = row.items;
                   const first = batchItems[0];
-                  const batchAgreementDocument = batchItems.find((item: Issuance) => item.agreementDocument)?.agreementDocument || first.agreementDocument;
-                  const allReturned = batchItems.every((i: Issuance) => i.returnedAt);
-                  const anyReturned = batchItems.some((i: Issuance) => i.returnedAt);
+	                  const batchAgreementDocument = batchItems.find((item: Issuance) => item.agreementDocument)?.agreementDocument || first.agreementDocument;
+	                  const allReturned = batchItems.every((i: Issuance) => i.returnedAt);
+	                  const anyReturned = batchItems.some((i: Issuance) => i.returnedAt);
+	                  const hasBatchDocDetails = hasDocumentStatusDetails(batchAgreementDocument, first.recipientSignedAt);
                   const batchId = row.batchId;
                   const isExpanded = expandedBatches.has(batchId || '');
                   const toggleBatch = () => {
@@ -1015,7 +1019,7 @@ export default function IssuancesPage() {
                   return (
                     <React.Fragment key={`batch-${batchId}`}>
                     <tr className={`bg-white dark:bg-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-all group ${isExpanded ? 'border-b-0' : ''}`}>
-                      <td className="px-4 py-4 align-top pt-5">
+		                      <td className="px-4 py-4 align-top pt-5">
                         <button
                           onClick={toggleBatch}
                           className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 cursor-pointer transition-colors"
@@ -1044,7 +1048,7 @@ export default function IssuancesPage() {
                           </ul>
                         </div>
                       </td>
-                      <td className="px-4 py-4 align-top pt-5">
+	                      <td className="px-4 py-4 align-top pt-5">
                         <div className="flex flex-col">
                           <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">{first.personnel?.fullName || first.assignedTo || '—'}</p>
                           {first.personnel && (
@@ -1057,8 +1061,8 @@ export default function IssuancesPage() {
                       <td className="px-4 py-4 text-xs font-medium text-slate-600 dark:text-slate-400 tabular-nums align-top pt-5">
                         {new Date(first.assignedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                       </td>
-                      <td className="px-4 py-4 align-top pt-5">
-                        {/* Return status */}
+	                      <td className={`px-4 py-4 ${hasBatchDocDetails ? 'align-top pt-5' : 'align-middle'}`}>
+	                        {/* Return status */}
                         {allReturned ? (
                           <div className="flex items-center gap-1.5">
                             <CheckCircle2 className="w-3 h-3 text-sky-500" />
@@ -1083,7 +1087,7 @@ export default function IssuancesPage() {
                         )}
 
                         {/* Document status — separated */}
-                        {(first.recipientSignedAt || batchAgreementDocument?.status) && (
+	                        {hasBatchDocDetails && (
                           <div className="mt-1.5 pt-1.5 border-t border-slate-100 dark:border-slate-700/50 space-y-1">
                             {first.recipientSignedAt && (
                               <div className="text-[10px] font-semibold text-[#012061] dark:text-slate-200">
@@ -1305,7 +1309,7 @@ export default function IssuancesPage() {
                     </div>
 
                     {/* Document status badges */}
-                    {(iss.recipientSignedAt || iss.agreementDocument?.status) && (
+                    {hasDocumentStatusDetails(iss.agreementDocument, iss.recipientSignedAt) && (
                       <div className="flex flex-wrap items-center gap-1 mb-2 pt-1.5 border-t border-slate-100 dark:border-slate-700/50">
                         {iss.recipientSignedAt && (
                           <span className="text-[10px] font-semibold text-[#012061] dark:text-slate-200">
@@ -1470,7 +1474,7 @@ export default function IssuancesPage() {
                   </div>
 
                   {/* Document status badges */}
-                  {(first.recipientSignedAt || batchAgreementDocument?.status) && (
+                  {hasDocumentStatusDetails(batchAgreementDocument, first.recipientSignedAt) && (
                     <div className="flex flex-wrap items-center gap-1 mb-2 pt-1.5 border-t border-slate-100 dark:border-slate-700/50">
                       {first.recipientSignedAt && (
                         <span className="text-[10px] font-semibold text-[#012061] dark:text-slate-200">
