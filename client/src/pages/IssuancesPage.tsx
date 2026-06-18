@@ -280,7 +280,7 @@ export default function IssuancesPage() {
   const [meta, setMeta] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const preFilterPersonnel = searchParams.get('personnel');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'returned'>(preFilterPersonnel ? 'active' : 'all');
   const [page, setPage] = useState(1);
@@ -725,7 +725,17 @@ export default function IssuancesPage() {
       {preFilterPersonnel && (
         <div className="shrink-0 px-4 sm:px-6 py-2 bg-[#f8931f]/10 border-b border-[#f8931f]/20 flex items-center justify-between">
           <span className="text-xs font-semibold text-[#f8931f]">Filtered by profile — showing only this person's active issuances</span>
-          <a href="/issuances" className="text-xs font-semibold text-[#012061] hover:underline">Clear filter</a>
+          <button
+            type="button"
+            onClick={() => {
+              const next = new URLSearchParams(searchParams);
+              next.delete('personnel');
+              setSearchParams(next, { replace: true });
+            }}
+            className="text-xs font-semibold text-[#012061] hover:underline"
+          >
+            Clear filter
+          </button>
         </div>
       )}
 
@@ -870,8 +880,8 @@ export default function IssuancesPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Active</span>
+                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Active</span>
                           </div>
                         )}
 
@@ -1025,7 +1035,7 @@ export default function IssuancesPage() {
                           <ul className="space-y-0.5">
                             {batchItems.map(bi => (
                               <li key={bi.id} className={`flex items-center gap-1.5 text-xs ${bi.returnedAt ? 'text-slate-400 dark:text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${bi.returnedAt ? 'bg-emerald-400' : 'bg-[#f8931f]/40'}`} />
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${bi.returnedAt ? 'bg-emerald-400' : 'bg-amber-400'}`} />
                                 {bi.returnedAt && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 shrink-0" />}
                                 {bi.asset?.name || '—'}
                                 {bi.asset?.serialNumber && <span className="text-slate-400">· {bi.asset.serialNumber}</span>}
@@ -1067,8 +1077,8 @@ export default function IssuancesPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-1.5">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Active</span>
+                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Active</span>
                           </div>
                         )}
 
@@ -1182,7 +1192,7 @@ export default function IssuancesPage() {
                         </td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${bi.returnedAt ? 'bg-emerald-400' : 'bg-[#f8931f]'}`} />
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${bi.returnedAt ? 'bg-emerald-400' : 'bg-amber-400'}`} />
                             <div>
                               <p className={`text-xs font-semibold ${bi.returnedAt ? 'text-slate-400' : 'text-slate-700 dark:text-slate-300'}`}>
                                 {bi.returnedAt && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 inline mr-0.5" />}
@@ -1280,8 +1290,8 @@ export default function IssuancesPage() {
                             <CheckCircle2 className="w-3 h-3" /> Returned
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Active
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> Active
                           </span>
                         )}
                       </div>
@@ -1447,8 +1457,8 @@ export default function IssuancesPage() {
                           {batchItems.filter(i => i.returnedAt).length}/{batchItems.length} returned
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Active
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> Active
                         </span>
                       )}
                     </div>
@@ -1488,7 +1498,7 @@ export default function IssuancesPage() {
                     <div className="space-y-1.5 mb-2 pt-1.5 border-t border-slate-100 dark:border-slate-700/50">
                       {batchItems.map(bi => (
                         <div key={bi.id} className="flex items-center gap-2 rounded-md bg-slate-50 dark:bg-slate-900/50 px-2 py-1.5">
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${bi.returnedAt ? 'bg-emerald-400' : 'bg-[#f8931f]/40'}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${bi.returnedAt ? 'bg-emerald-400' : 'bg-amber-400'}`} />
                           <div className="flex-1 min-w-0">
                             <p className={`text-xs font-semibold truncate ${bi.returnedAt ? 'text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-300'}`}>
                               {bi.returnedAt && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 inline mr-0.5" />}
