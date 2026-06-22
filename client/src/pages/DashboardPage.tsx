@@ -39,10 +39,6 @@ function cleanActivityText(text: string): string {
     );
 }
 
-function truncateFeed(text: string, max = 72): string {
-  return text.length > max ? text.slice(0, max) + '…' : text;
-}
-
 function extractRelativeTime(text: string): string {
   // The dash (—) separates the activity description from the audit timestamp.
   // The timestamp after — is the real event time (from auditLog.createdAt),
@@ -98,55 +94,99 @@ function humanizeActionType(type: string): string {
   return map[type] || type;
 }
 
-function humanizeActivity(raw: string): { actor: string; action: string; context: string } {
+/**
+ * Maps raw audit action keys to human-readable action labels.
+ * Shared mapping — must stay in sync with server-side formatAuditAction.
+ */
+const AUDIT_ACTION_MAP: Record<string, string> = {
+  'issuance.created':           'created an issuance',
+  'issuance.bulk_created':      'created a bulk issuance',
+  'issuance.returned':           'returned an asset',
+  'issuance.signed':            'signed an agreement',
+  'issuance.transferred':       'transferred an asset',
+  'agreement.pdf_viewed':       'viewed an agreement PDF',
+  'agreement.signed_copy_uploaded': 'uploaded a signed agreement',
+  'personnel.created':          'created a personnel record',
+  'personnel.updated':          'updated a personnel record',
+  'personnel.deleted':          'deleted a personnel record',
+  'asset.locked':               'locked an asset',
+  'asset.released':             'released an asset',
+  'issue_report.created':        'created an issue report',
+  'issue_report.status_updated': 'updated an issue report status',
+  'issue_report.notes_updated':  'updated issue report notes',
+  'document.archived':          'archived a document',
+  'document.viewed':            'viewed a document',
+  'user.created':               'created a user account',
+  'user.updated':               'updated a user account',
+  'user.status_changed':        'changed a user status',
+  'warranty.expiry_notified':   'sent a warranty expiry notification',
+  'purchase_request.converted': 'converted a purchase request',
+  'label.printed':              'printed a label',
+  'lookup.force_deactivated':   'force-deactivated a lookup record',
+  'audit.cleanup':              'cleaned up audit logs',
+  // Legacy uppercase actions
+  'create':                     'created',
+  'update':                     'updated',
+  'delete':                     'deleted',
+  'checkout':                   'checked out an asset',
+  'return':                     'returned an asset',
+  'issuance_lock':              'locked an asset for issuance',
+  'issuance_unlock':            'unlocked an asset from issuance',
+};
+
+export function humanizeActivity(raw: string): { actor: string; action: string; context: string } {
   const cleaned = cleanActivityText(raw);
 
-  // "uppidrdf changed photoUrl from ..."
+  // Split off the timestamp: "actor action text — Jun 18, 2026, 5:17 PM"
+  const dashIdx = cleaned.lastIndexOf(' — ');
+  const mainPart = dashIdx !== -1 ? cleaned.slice(0, dashIdx) : cleaned;
+
+  // The first token is always the actor
+  const spaceIdx = mainPart.indexOf(' ');
+  const actor = spaceIdx !== -1 ? mainPart.slice(0, spaceIdx) : mainPart;
+  const rest = spaceIdx !== -1 ? mainPart.slice(spaceIdx + 1).trim() : '';
+
+  // Legacy raw-format strings still contain dotted action keys like
+  // "agreement.pdf_viewed" or "document.archived".  If we detect one,
+  // replace the entire rest with the mapped readable label.
+  for (const [key, label] of Object.entries(AUDIT_ACTION_MAP)) {
+    if (key.includes('.')) {
+      // Only match dotted keys against the raw text (legacy format)
+      if (cleaned.toLowerCase().includes(key)) {
+        return { actor, action: label, context: '' };
+      }
+    }
+  }
+
+  // Specific field-change patterns (server sends "changed X from A to B on Y")
   if (/changed photoUrl/i.test(cleaned)) {
-    const actor = cleaned.split(' ')[0];
     return { actor, action: 'Profile photo updated', context: '' };
   }
-
-  // "uppidrdf agreement.pdf_viewed AgreementDocument — May 25, 2026..."
-  if (/agreement\.pdf_viewed/i.test(cleaned)) {
-    const actor = cleaned.split(' ')[0];
-    return { actor, action: 'Agreement PDF viewed', context: '' };
-  }
-
-  // "uppidrdf changed returnedAt from ... to ... on Assignment — ..."
   if (/changed returnedAt/i.test(cleaned)) {
-    const actor = cleaned.split(' ')[0];
     return { actor, action: 'Asset returned', context: '' };
   }
-
-  // "uppidrdf changed recipientSignedAt from null to ... on Assignment"
   if (/changed recipientSignedAt/i.test(cleaned)) {
-    const actor = cleaned.split(' ')[0];
     return { actor, action: 'Agreement signed', context: '' };
   }
-
-  // "uppidrdf changed status from AVAILABLE to PENDING_ASSIGNMENT on Asset — ..."
   const statusMatch = cleaned.match(/changed status from "(\w+)" to "(\w+)"/i) || cleaned.match(/changed status from (\w+) to (\w+)/i);
   if (statusMatch) {
-    const actor = cleaned.split(' ')[0];
     return { actor, action: `Status changed: ${statusMatch[1]} → ${statusMatch[2]}`, context: '' };
   }
 
-  // "uppidrdf checkout Assignment — ..."
-  if (/checkout\s+Assignment/i.test(cleaned)) {
-    const actor = cleaned.split(' ')[0];
+  // Legacy: "admin checkout Assignment — ..."
+  if (/^\S+\s+checkout\s+\w+/i.test(mainPart)) {
     return { actor, action: 'Asset checked out', context: '' };
   }
 
-  // "uppidrdf issuance.bulk_created AgreementDocument — ..."
-  if (/issuance\.bulk_created/i.test(cleaned)) {
-    const actor = cleaned.split(' ')[0];
-    return { actor, action: 'Bulk issuance created', context: '' };
+  // Server-formatted strings: rest is already readable like
+  // "viewed an agreement PDF" or "archived a document".
+  // Guard: if rest starts with a raw key pattern (lowercase.dots), reject it.
+  if (rest && !/^[a-z][a-z._]*\s+[A-Z]/.test(rest)) {
+    return { actor, action: rest, context: '' };
   }
 
-  // Fallback: truncate
-  const actor = cleaned.split(' ')[0] || '';
-  return { actor, action: truncateFeed(cleaned, 60), context: '' };
+  // Last resort: generic message, no raw keys
+  return { actor, action: 'performed an action', context: '' };
 }
 
 function relativeDate(iso: string): string {

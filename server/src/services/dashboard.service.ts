@@ -24,19 +24,28 @@ export async function getDashboardStats() {
       ? log.metadata as Record<string, unknown>
       : {};
     const user = log.user?.username || 'System';
-    const action = log.action.toLowerCase();
-    const entity = log.entityType;
     const timestamp = new Date(log.createdAt).toLocaleString('en-PH', {
       month: 'short', day: 'numeric', year: 'numeric',
       hour: 'numeric', minute: '2-digit',
     });
     const field = typeof metadata.field === 'string' ? metadata.field : '';
+
+    // Map known event types to human-readable action labels
+    const readableAction = formatAuditAction(log.action);
+    const objectLabel = formatAuditEntity(log.entityType);
+
     if (field === '*' || !field) {
-      return `${user} ${action === 'create' ? 'added' : action === 'delete' ? 'removed' : action} ${entity} — ${timestamp}`;
+      // Non-field-change events: use the mapped action label
+      if (readableAction) {
+        return `${user} ${readableAction} — ${timestamp}`;
+      }
+      // Unknown action — safe fallback, no raw keys
+      return `${user} performed an action on ${objectLabel} — ${timestamp}`;
     }
+    // Field-change events: keep the "changed X from A to B" format
     const oldVal = cleanActivityValue(metadata.oldValue == null ? '' : String(metadata.oldValue));
     const newVal = cleanActivityValue(metadata.newValue == null ? '' : String(metadata.newValue));
-    return `${user} changed ${field} from "${oldVal || '—'}" to "${newVal || '—'}" on ${entity} — ${timestamp}`;
+    return `${user} changed ${field} from "${oldVal || '—'}" to "${newVal || '—'}" on ${objectLabel} — ${timestamp}`;
   });
 
   return {
@@ -49,6 +58,74 @@ export async function getDashboardStats() {
     byLocation: Object.fromEntries((byLocation as any[]).filter((l: any) => l.location).map((l: any) => [l.location, l._count.location])),
     activityFeed,
   };
+}
+
+/* ── Shared activity formatting helpers ────────────────────────── */
+
+/**
+ * Maps raw audit action keys (e.g. "document.archived") to a
+ * human-readable action label (e.g. "archived a document").
+ * Returns null for field-change actions that are handled separately
+ * (CREATE, UPDATE, DELETE with a metadata.field).
+ */
+function formatAuditAction(action: string): string | null {
+  const map: Record<string, string> = {
+    'issuance.created':           'created an issuance',
+    'issuance.bulk_created':      'created a bulk issuance',
+    'issuance.returned':           'returned an asset',
+    'issuance.signed':            'signed an agreement',
+    'issuance.transferred':       'transferred an asset',
+    'agreement.pdf_viewed':       'viewed an agreement PDF',
+    'agreement.signed_copy_uploaded': 'uploaded a signed agreement',
+    'personnel.created':          'created a personnel record',
+    'personnel.updated':          'updated a personnel record',
+    'personnel.deleted':          'deleted a personnel record',
+    'asset.locked':               'locked an asset',
+    'asset.released':             'released an asset',
+    'issue_report.created':        'created an issue report',
+    'issue_report.status_updated': 'updated an issue report status',
+    'issue_report.notes_updated':  'updated issue report notes',
+    'document.archived':          'archived a document',
+    'document.viewed':            'viewed a document',
+    'user.created':               'created a user account',
+    'user.updated':               'updated a user account',
+    'user.status_changed':        'changed a user status',
+    'warranty.expiry_notified':   'sent a warranty expiry notification',
+    'purchase_request.converted': 'converted a purchase request',
+    'label.printed':              'printed a label',
+    'lookup.force_deactivated':   'force-deactivated a lookup record',
+    'audit.cleanup':              'cleaned up audit logs',
+    // Legacy uppercase actions (stored directly, not via AUDIT_ACTIONS constants)
+    'create':                     'created',
+    'update':                     'updated',
+    'delete':                     'deleted',
+    'checkout':                   'checked out an asset',
+    'return':                     'returned an asset',
+    'issuance_lock':              'locked an asset for issuance',
+    'issuance_unlock':            'unlocked an asset from issuance',
+  };
+  const lower = action.toLowerCase();
+  return map[lower] || null;
+}
+
+/**
+ * Maps raw entityType strings (e.g. "DocumentArchiveItem") to a
+ * human-readable object label (e.g. "document").
+ */
+function formatAuditEntity(entityType: string): string {
+  const map: Record<string, string> = {
+    'Asset':               'asset',
+    'Assignment':          'assignment',
+    'AgreementDocument':   'agreement',
+    'DocumentArchiveItem': 'document',
+    'Personnel':           'personnel',
+    'MaintenanceLog':      'maintenance log',
+    'Supplier':            'supplier',
+    'PurchaseRequest':     'purchase request',
+    'User':                'user',
+    'AuditLog':            'audit log',
+  };
+  return map[entityType] || entityType.replace(/([A-Z])/g, ' $1').trim().toLowerCase();
 }
 
 // Clean up raw date strings in audit log values for display
