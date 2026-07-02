@@ -70,12 +70,20 @@ export const listAssetsQuerySchema = z.object({
   purchaseDateTo: z.string().optional(),
   warrantyExpiryFrom: z.string().optional(),
   warrantyExpiryTo: z.string().optional(),
+  qrPrintStatus: z.enum(['printed', 'not_printed']).optional(),
 });
 
 export const exportAssetsQuerySchema = listAssetsQuerySchema.omit({ page: true, limit: true });
 
 export const exportSelectedCsvSchema = z.object({
   assetIds: z.array(z.string().uuid()).min(1).max(200),
+});
+
+export const markQrPrintedSchema = z.object({
+  assetIds: z.array(z.string().uuid()).min(1).max(200).optional(),
+  filters: exportAssetsQuerySchema.optional(),
+}).refine((data) => (data.assetIds?.length ?? 0) > 0 || !!data.filters, {
+  message: 'Either assetIds or filters is required',
 });
 
 export const bulkStatusSchema = z.object({

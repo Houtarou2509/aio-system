@@ -71,7 +71,7 @@ app.use(helmet({
 app.use(cors({
   origin: isProduction ? true : ['http://localhost:3000', 'http://localhost:5173'],
   credentials: true,
-  exposedHeaders: ['Content-Disposition', 'X-Filename'],
+  exposedHeaders: ['Content-Disposition', 'X-Filename', 'X-QR-Printed-Asset-Ids', 'X-QR-Printed-At'],
 }));
 
 // Request logging

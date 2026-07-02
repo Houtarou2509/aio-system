@@ -160,6 +160,75 @@ describe('Asset CRUD — Read', () => {
     expect(res.body.data[0].location).toBe('Office A');
   });
 
+  it('GET /api/assets?qrPrintStatus filters printed and not printed assets', async () => {
+    const printed = await createAsset({ name: 'QR Already Printed', adminToken: users.ADMIN.accessToken });
+    const unprinted = await createAsset({ name: 'QR Not Printed', adminToken: users.ADMIN.accessToken });
+
+    await prisma.asset.update({
+      where: { id: printed.id },
+      data: { qrPrintedAt: new Date(), qrPrintedById: users.ADMIN.id },
+    });
+
+    const printedRes = await request(app)
+      .get('/api/assets?qrPrintStatus=printed')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+    const unprintedRes = await request(app)
+      .get('/api/assets?qrPrintStatus=not_printed')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+
+    expect(printedRes.status).toBe(200);
+    expect(printedRes.body.data.map((a: any) => a.id)).toContain(printed.id);
+    expect(printedRes.body.data.map((a: any) => a.id)).not.toContain(unprinted.id);
+    expect(unprintedRes.status).toBe(200);
+    expect(unprintedRes.body.data.map((a: any) => a.id)).toContain(unprinted.id);
+    expect(unprintedRes.body.data.map((a: any) => a.id)).not.toContain(printed.id);
+  });
+
+  it('POST /api/assets/mark-qr-printed marks selected asset IDs as printed', async () => {
+    const asset = await createAsset({ name: 'QR Explicit Selected', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .post('/api/assets/mark-qr-printed')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ assetIds: [asset.id] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.updated).toBe(1);
+
+    const updated = await prisma.asset.findUnique({ where: { id: asset.id } });
+    expect(updated?.qrPrintedAt).toBeTruthy();
+    expect(updated?.qrPrintedById).toBe(users.ADMIN.id);
+  });
+
+  it('POST /api/assets/mark-qr-printed marks filtered unprinted assets', async () => {
+    const roomAsset = await createAsset({ name: 'QR Filter Room', location: 'QR Room A', adminToken: users.ADMIN.accessToken });
+    const otherRoomAsset = await createAsset({ name: 'QR Other Room', location: 'QR Room B', adminToken: users.ADMIN.accessToken });
+    const alreadyPrinted = await createAsset({ name: 'QR Filter Printed', location: 'QR Room A', adminToken: users.ADMIN.accessToken });
+
+    await prisma.asset.update({
+      where: { id: alreadyPrinted.id },
+      data: { qrPrintedAt: new Date(), qrPrintedById: users.ADMIN.id },
+    });
+
+    const res = await request(app)
+      .post('/api/assets/mark-qr-printed')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ filters: { location: 'QR Room A', qrPrintStatus: 'not_printed' } });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.updated).toBe(1);
+
+    const [updatedRoom, unchangedOther, stillPrinted] = await Promise.all([
+      prisma.asset.findUnique({ where: { id: roomAsset.id } }),
+      prisma.asset.findUnique({ where: { id: otherRoomAsset.id } }),
+      prisma.asset.findUnique({ where: { id: alreadyPrinted.id } }),
+    ]);
+    expect(updatedRoom?.qrPrintedAt).toBeTruthy();
+    expect(updatedRoom?.qrPrintedById).toBe(users.ADMIN.id);
+    expect(unchangedOther?.qrPrintedAt).toBeNull();
+    expect(stillPrinted?.qrPrintedAt).toBeTruthy();
+  });
+
   // 9
   it('9. GET /api/assets/:id (Admin) — returns full asset with assignments and maintenanceLogs', async () => {
     const asset = await createAsset({ name: 'Full Detail Asset', adminToken: users.ADMIN.accessToken });

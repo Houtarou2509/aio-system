@@ -32,6 +32,8 @@ export interface TemplateData {
   propertyNumber?: string;
   condition?: string;
   assets?: Array<{ name: string; serialNumber?: string; propertyNumber?: string; condition?: string }>;
+  secondarySignatoryTitle?: string;
+  firstSignatoryTitle?: string;
 }
 
 function assetRows(data: TemplateData) {
@@ -95,6 +97,8 @@ function computeDerived(data: TemplateData): Record<string, string> {
     assetTable,
     assetSection: assetCount > 1 ? assetTable : assetParagraph,
     assetList: assetTable,
+    secondarySignatoryTitle: data.secondarySignatoryTitle || 'Property Officer',
+    firstSignatoryTitle: data.firstSignatoryTitle || 'Authorized Representative',
   };
 }
 

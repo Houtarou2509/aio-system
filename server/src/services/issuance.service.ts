@@ -82,7 +82,7 @@ export async function getActiveIssuanceForAsset(assetId: string) {
       asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
       personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
       agreement: { select: { id: true, name: true, title: true } },
-        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, secondarySignatoryTitle: true, firstSignatoryTitle: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
     },
   });
 }
@@ -122,7 +122,7 @@ export async function listIssuances(params: {
         asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
         personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
         agreement: { select: { id: true, name: true, title: true } },
-        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, secondarySignatoryTitle: true, firstSignatoryTitle: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
       },
     }),
     prisma.assignment.count({ where }),
@@ -144,9 +144,11 @@ export async function createIssuance(params: {
   agreementId?: string;
   propertyOfficerName?: string;
   authorizedRepName?: string;
+  secondarySignatoryTitle?: string;
+  firstSignatoryTitle?: string;
   signatoryMode?: string;
 }, performedById: string, ipAddress?: string, userAgent?: string) {
-  const { assetId, personnelId, condition, notes, agreementText, agreementId, propertyOfficerName, authorizedRepName, signatoryMode: suppliedSignatoryMode } = params;
+  const { assetId, personnelId, condition, notes, agreementText, agreementId, propertyOfficerName, authorizedRepName, secondarySignatoryTitle, firstSignatoryTitle, signatoryMode: suppliedSignatoryMode } = params;
 
   // Verify asset is available
   const asset = await prisma.asset.findUnique({ where: { id: assetId } });
@@ -193,6 +195,12 @@ export async function createIssuance(params: {
   const effectiveAuthorizedRepName = effectiveSignatoryMode === 'recipientPropertyOfficerAuthorizedRep'
     ? (authorizedRepName || agreementTemplate?.defaultAuthorizedRep || resolvedTemplate?.defaultAuthorizedRep || null)
     : null;
+  const effectiveSecondarySignatoryTitle = (effectiveSignatoryMode === 'recipientPropertyOfficer' || effectiveSignatoryMode === 'recipientPropertyOfficerAuthorizedRep')
+    ? (secondarySignatoryTitle || agreementTemplate?.secondarySignatoryTitle || resolvedTemplate?.secondarySignatoryTitle || null)
+    : null;
+  const effectiveFirstSignatoryTitle = effectiveSignatoryMode === 'recipientPropertyOfficerAuthorizedRep'
+    ? (firstSignatoryTitle || agreementTemplate?.firstSignatoryTitle || resolvedTemplate?.firstSignatoryTitle || null)
+    : null;
 
   // Create immutable agreement document + assignment, then update asset status in a transaction
   const assignment = await prisma.$transaction(async (tx) => {
@@ -214,6 +222,8 @@ export async function createIssuance(params: {
         signatoryMode: effectiveSignatoryMode,
         propertyOfficerName: effectivePropertyOfficerName,
         authorizedRepName: effectiveAuthorizedRepName,
+        secondarySignatoryTitle: effectiveSecondarySignatoryTitle,
+        firstSignatoryTitle: effectiveFirstSignatoryTitle,
         issuedById: performedById,
       },
     });
@@ -235,7 +245,7 @@ export async function createIssuance(params: {
         asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
         personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
         agreement: { select: { id: true, name: true, title: true } },
-        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, secondarySignatoryTitle: true, firstSignatoryTitle: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
       },
     });
 
@@ -317,13 +327,15 @@ export async function bulkIssueAssets(
     agreementText?: string;
     propertyOfficerName?: string;
     authorizedRepName?: string;
+    secondarySignatoryTitle?: string;
+    firstSignatoryTitle?: string;
     signatoryMode?: string;
   },
   performedById: string,
   ipAddress?: string,
   userAgent?: string,
 ) {
-  const { personnelId, assetIds, condition, notes, agreementTemplateId, agreementText: suppliedAgreementText, propertyOfficerName, authorizedRepName, signatoryMode: suppliedSignatoryMode } = params;
+  const { personnelId, assetIds, condition, notes, agreementTemplateId, agreementText: suppliedAgreementText, propertyOfficerName, authorizedRepName, secondarySignatoryTitle, firstSignatoryTitle, signatoryMode: suppliedSignatoryMode } = params;
   const errors: Array<{ assetId: string; reason: string }> = [];
 
   // Generate a single batch ID for all assignments in this bulk operation
@@ -388,6 +400,12 @@ export async function bulkIssueAssets(
   const effectiveAuthorizedRepName = effectiveSignatoryMode === 'recipientPropertyOfficerAuthorizedRep'
     ? (authorizedRepName || agreementTemplate?.defaultAuthorizedRep || resolvedTemplate.defaultAuthorizedRep || null)
     : null;
+  const effectiveSecondarySignatoryTitle = (effectiveSignatoryMode === 'recipientPropertyOfficer' || effectiveSignatoryMode === 'recipientPropertyOfficerAuthorizedRep')
+    ? (secondarySignatoryTitle || agreementTemplate?.secondarySignatoryTitle || resolvedTemplate.secondarySignatoryTitle || null)
+    : null;
+  const effectiveFirstSignatoryTitle = effectiveSignatoryMode === 'recipientPropertyOfficerAuthorizedRep'
+    ? (firstSignatoryTitle || agreementTemplate?.firstSignatoryTitle || resolvedTemplate.firstSignatoryTitle || null)
+    : null;
 
   // Create one immutable agreement document for the batch, then link all assignments to it.
   const { assignments, agreementDocument } = await prisma.$transaction(async (tx) => {
@@ -413,6 +431,8 @@ export async function bulkIssueAssets(
         signatoryMode: effectiveSignatoryMode,
         propertyOfficerName: effectivePropertyOfficerName,
         authorizedRepName: effectiveAuthorizedRepName,
+        secondarySignatoryTitle: effectiveSecondarySignatoryTitle,
+        firstSignatoryTitle: effectiveFirstSignatoryTitle,
         issuedById: performedById,
       },
     });
@@ -437,7 +457,7 @@ export async function bulkIssueAssets(
           asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
           personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
           agreement: { select: { id: true, name: true, title: true } },
-          agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
+          agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, secondarySignatoryTitle: true, firstSignatoryTitle: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
         },
       });
 
@@ -646,7 +666,7 @@ export async function returnIssuance(
         asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
         personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
         agreement: { select: { id: true, name: true, title: true } },
-        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, secondarySignatoryTitle: true, firstSignatoryTitle: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
       },
     });
 
@@ -800,7 +820,7 @@ export async function bulkReturnAssets(
           asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
           personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
           agreement: { select: { id: true, name: true, title: true } },
-          agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
+          agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, secondarySignatoryTitle: true, firstSignatoryTitle: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
         },
       });
 
@@ -1001,6 +1021,8 @@ export async function transferAsset(
           }],
           propertyOfficerName: resolvedTemplate?.template?.defaultPropertyOfficer || null,
           authorizedRepName: resolvedTemplate?.template?.defaultAuthorizedRep || null,
+          secondarySignatoryTitle: resolvedTemplate?.template?.secondarySignatoryTitle || null,
+          firstSignatoryTitle: resolvedTemplate?.template?.firstSignatoryTitle || null,
           signatoryMode: resolvedTemplate?.template?.signatoryMode || 'recipientPropertyOfficerAuthorizedRep',
           issuedById: performedById,
         },
@@ -1027,7 +1049,7 @@ export async function transferAsset(
         asset: { select: { id: true, name: true, serialNumber: true, propertyNumber: true, status: true } },
         personnel: { select: { id: true, fullName: true, designation: true, project: true, designationLookup: { select: { name: true } }, projectLookup: { select: { name: true } }, institution: { select: { name: true } } } },
         agreement: { select: { id: true, name: true, title: true } },
-        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
+        agreementDocument: { select: { id: true, documentNumber: true, status: true, signedPdfPath: true, signedUploadedAt: true, title: true, resolvedText: true, propertyOfficerName: true, authorizedRepName: true, secondarySignatoryTitle: true, firstSignatoryTitle: true, templateVersion: true, templateVersionId: true, templateVersionRecord: { select: { id: true, versionNumber: true, createdAt: true } } } },
       },
     });
 
@@ -1279,8 +1301,12 @@ export function generateAgreementText(params: {
   serialNumber?: string;
   propertyNumber?: string;
   date: string;
+  secondarySignatoryTitle?: string | null;
+  firstSignatoryTitle?: string | null;
 }): string {
   const { personnelName, designation, project, assetName, serialNumber, propertyNumber, date } = params;
+  const secondaryTitle = params.secondarySignatoryTitle?.trim() || 'Property Officer';
+  const firstTitle = params.firstSignatoryTitle?.trim() || 'Authorized Representative';
   const formattedDate = new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   return `ISSUANCE AND ACCOUNTABILITY AGREEMENT
@@ -1295,7 +1321,7 @@ Terms and Conditions:
 1. The issued asset shall be used solely for official business purposes.
 2. The recipient shall exercise due diligence in the care and protection of the asset.
 3. The asset shall not be transferred to another individual without proper documentation.
-4. Any damage, loss, or theft must be reported immediately to the Property Officer.
+4. Any damage, loss, or theft must be reported immediately to the ${secondaryTitle}.
 5. The asset shall be returned upon resignation, transfer, or upon request by management.
 6. The recipient assumes full accountability for the asset during the period of possession.
 
@@ -1305,10 +1331,10 @@ ________________________________________
 ${personnelName} (Recipient)
 
 ________________________________________
-Property Officer
+${secondaryTitle}
 
 ________________________________________
-Authorized Representative`;
+${firstTitle}`;
 }
 
 /* ─── Resolve template placeholders server-side ─── */
@@ -1403,6 +1429,8 @@ export async function resolveTemplate(params: {
     templateTitle: usingFallbackTemplate ? FALLBACK_AGREEMENT_TITLE : template?.title ?? null,
     defaultPropertyOfficer: usingFallbackTemplate ? null : template?.defaultPropertyOfficer ?? null,
     defaultAuthorizedRep: usingFallbackTemplate ? null : template?.defaultAuthorizedRep ?? null,
+    secondarySignatoryTitle: usingFallbackTemplate ? null : template?.secondarySignatoryTitle ?? null,
+    firstSignatoryTitle: usingFallbackTemplate ? null : template?.firstSignatoryTitle ?? null,
     signatoryMode: usingFallbackTemplate ? 'recipientPropertyOfficerAuthorizedRep' : template?.signatoryMode ?? 'recipientPropertyOfficerAuthorizedRep',
     headerLogo: usingFallbackTemplate ? null : template?.headerLogo ?? null,
     template: usingFallbackTemplate ? null : template ?? null,

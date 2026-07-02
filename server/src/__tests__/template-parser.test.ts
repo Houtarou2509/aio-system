@@ -39,7 +39,7 @@ describe('agreement template parser', () => {
     expect(result).toContain('Multiple asset copy for 2 assets:');
     expect(result).toContain('Dell Latitude 5540');
     expect(result).toContain('HP LaserJet Pro');
-    expect(result).toContain('Property Number');
+    expect(result).toContain('Property No.');
     expect(result).not.toContain('Single asset copy');
   });
 
@@ -62,5 +62,39 @@ describe('agreement template parser', () => {
     expect(single).not.toContain('Multiple asset copy');
     expect(multiple).toContain('Multiple asset copy for 3 assets:');
     expect(multiple).not.toContain('Single asset copy');
+  });
+
+  it('resolves {{secondarySignatoryTitle}} to the provided value', () => {
+    const result = parseTemplate('Signatory: {{secondarySignatoryTitle}}', {
+      personnelName: 'Test',
+      secondarySignatoryTitle: 'Authorized Signatory',
+    });
+    expect(result).toContain('Signatory: Authorized Signatory');
+    expect(result).not.toContain('{{secondarySignatoryTitle}}');
+  });
+
+  it('defaults {{secondarySignatoryTitle}} to "Property Officer" when not provided', () => {
+    const result = parseTemplate('Signatory: {{secondarySignatoryTitle}}', {
+      personnelName: 'Test',
+    });
+    expect(result).toContain('Signatory: Property Officer');
+    expect(result).not.toContain('{{secondarySignatoryTitle}}');
+  });
+
+  it('resolves {{firstSignatoryTitle}} to the provided value', () => {
+    const result = parseTemplate('Title: {{firstSignatoryTitle}}', {
+      personnelName: 'Test',
+      firstSignatoryTitle: 'Project Director',
+    });
+    expect(result).toContain('Title: Project Director');
+    expect(result).not.toContain('{{firstSignatoryTitle}}');
+  });
+
+  it('defaults {{firstSignatoryTitle}} to "Authorized Representative" when not provided', () => {
+    const result = parseTemplate('Title: {{firstSignatoryTitle}}', {
+      personnelName: 'Test',
+    });
+    expect(result).toContain('Title: Authorized Representative');
+    expect(result).not.toContain('{{firstSignatoryTitle}}');
   });
 });

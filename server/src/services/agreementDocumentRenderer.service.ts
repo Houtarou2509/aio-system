@@ -48,6 +48,8 @@ export interface AgreementDocumentViewInput {
   assets?: AgreementDocumentAssetInput[] | null;
   propertyOfficerName?: string | null;
   authorizedRepName?: string | null;
+  secondarySignatoryTitle?: string | null;
+  firstSignatoryTitle?: string | null;
   signatoryMode?: 'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep' | null;
   recipientSignedAt?: string | Date | null;
   recipientSignatureName?: string | null;
@@ -62,7 +64,7 @@ export interface AgreementDocumentViewAsset {
 }
 
 export interface AgreementDocumentViewSignature {
-  role: 'Recipient' | 'Property Officer' | 'Authorized Representative';
+  role: string;
   label: string;
   subtitle?: string;
 }
@@ -175,18 +177,20 @@ function buildSignatures(input: AgreementDocumentViewInput): AgreementDocumentVi
   ];
 
   if (mode === 'recipientPropertyOfficer' || mode === 'recipientPropertyOfficerAuthorizedRep') {
+    const secondaryTitle = input.secondarySignatoryTitle?.trim() || 'Property Officer';
     signatures.push({
-      role: 'Property Officer',
+      role: secondaryTitle,
       label: input.propertyOfficerName?.trim() || '_________________',
-      subtitle: 'Property Officer',
+      subtitle: secondaryTitle,
     });
   }
 
   if (mode === 'recipientPropertyOfficerAuthorizedRep') {
+    const firstTitle = input.firstSignatoryTitle?.trim() || 'Authorized Representative';
     signatures.push({
-      role: 'Authorized Representative',
+      role: firstTitle,
       label: input.authorizedRepName?.trim() || '_________________',
-      subtitle: 'Authorized Representative',
+      subtitle: firstTitle,
     });
   }
 

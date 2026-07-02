@@ -22,6 +22,7 @@ export interface AssetFilterInput {
   purchaseDateTo?: string;
   warrantyExpiryFrom?: string;
   warrantyExpiryTo?: string;
+  qrPrintStatus?: 'printed' | 'not_printed';
 }
 
 export function buildAssetWhere(query: AssetFilterInput): Prisma.AssetWhereInput {
@@ -47,6 +48,8 @@ export function buildAssetWhere(query: AssetFilterInput): Prisma.AssetWhereInput
   if (query.owner) where.owner = { contains: query.owner, mode: 'insensitive' };
   if (query.assignedTo) where.assignedTo = { contains: query.assignedTo };
   if (query.manufacturer) where.manufacturer = { contains: query.manufacturer, mode: 'insensitive' };
+  if (query.qrPrintStatus === 'printed') where.qrPrintedAt = { not: null };
+  if (query.qrPrintStatus === 'not_printed') where.qrPrintedAt = null;
 
   // Date filters
   if (query.purchaseDateFrom || query.purchaseDateTo) {
@@ -98,6 +101,7 @@ export async function listAssets(query: {
   sortBy: string; sortOrder: string;
   purchaseDateFrom?: string; purchaseDateTo?: string;
   warrantyExpiryFrom?: string; warrantyExpiryTo?: string;
+  qrPrintStatus?: 'printed' | 'not_printed';
 }) {
   const where = buildAssetWhere(query);
 
@@ -203,6 +207,33 @@ export async function exportAssetsCsv(arg: any[] | AssetFilterInput): Promise<{ 
     esc(new Date(a.createdAt).toISOString().split('T')[0]),
   ].join(','));
   return { csv: [headers.join(','), ...rows].join('\n'), recordCount: assets.length };
+}
+
+export async function markAssetsQrPrinted(input: {
+  assetIds?: string[];
+  filters?: AssetFilterInput;
+  printedById: string;
+}): Promise<{ updated: number; printedAt: Date }> {
+  const printedAt = new Date();
+  const data = { qrPrintedAt: printedAt, qrPrintedById: input.printedById };
+
+  if (input.assetIds?.length) {
+    const result = await prisma.asset.updateMany({
+      where: { id: { in: input.assetIds }, deletedAt: null },
+      data,
+    });
+    return { updated: result.count, printedAt };
+  }
+
+  if (input.filters) {
+    const result = await prisma.asset.updateMany({
+      where: buildAssetWhere(input.filters),
+      data,
+    });
+    return { updated: result.count, printedAt };
+  }
+
+  return { updated: 0, printedAt };
 }
 
 // Helper to clean warranty and blank-string fields for DB

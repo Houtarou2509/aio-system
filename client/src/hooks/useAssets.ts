@@ -49,5 +49,15 @@ export function useAssets(initialFilters: AssetFilters = {}) {
     return ids;
   }, [apiFilters]);
 
-  return { assets, loading, error, meta, filters, setFilters, refetch: fetchAssets, fetchAllIds };
+  const markQrPrintedLocally = useCallback((ids: string[], printedAt = new Date().toISOString()) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setAssets(prev => prev.map(asset => (
+      idSet.has(asset.id)
+        ? { ...asset, qrPrintedAt: asset.qrPrintedAt || printedAt }
+        : asset
+    )));
+  }, []);
+
+  return { assets, loading, error, meta, filters, setFilters, refetch: fetchAssets, fetchAllIds, markQrPrintedLocally };
 }

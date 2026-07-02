@@ -29,6 +29,20 @@ const BOTTOM_TEXT_PT = 4;     // Property number font size
 const BOTTOM_TEXT_Y_PAD = 2;  // Padding below QR before bottom text
 const INNER_PAD = 4;          // Minimum top/bottom clearance inside cut border
 
+export interface LabelFilterInput {
+  type?: string;
+  status?: string;
+  location?: string;
+  owner?: string;
+  assignedTo?: string;
+  manufacturer?: string;
+  search?: string;
+  purchaseDateFrom?: string;
+  purchaseDateTo?: string;
+  warrantyExpiryFrom?: string;
+  warrantyExpiryTo?: string;
+  qrPrintStatus?: 'printed' | 'not_printed';
+}
 
 async function generateQRCode(data: string, size: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -57,19 +71,7 @@ function truncateText(doc: typeof PDFDocument['prototype'], text: string, maxWid
 }
 
 export async function countAssetsForLabels(
-  filters?: {
-    type?: string;
-    status?: string;
-    location?: string;
-    owner?: string;
-    assignedTo?: string;
-    manufacturer?: string;
-    search?: string;
-    purchaseDateFrom?: string;
-    purchaseDateTo?: string;
-    warrantyExpiryFrom?: string;
-    warrantyExpiryTo?: string;
-  }
+  filters?: LabelFilterInput
 ): Promise<number> {
   if (!filters) return 0;
   const { buildAssetWhere } = await import('./asset.service');
@@ -77,37 +79,24 @@ export async function countAssetsForLabels(
   return prisma.asset.count({ where });
 }
 
-export async function generateLabelsPdf(
+export async function resolveAssetsForLabels(
   assetIds?: string[],
-  filters?: {
-    type?: string;
-    status?: string;
-    location?: string;
-    owner?: string;
-    assignedTo?: string;
-    manufacturer?: string;
-    search?: string;
-    purchaseDateFrom?: string;
-    purchaseDateTo?: string;
-    warrantyExpiryFrom?: string;
-    warrantyExpiryTo?: string;
-  },
-  performedById?: string,
-  ipAddress?: string
-): Promise<Buffer> {
-  let assets: any[];
+  filters?: LabelFilterInput
+): Promise<any[]> {
   if (assetIds?.length) {
-    assets = await prisma.asset.findMany({
+    return prisma.asset.findMany({
       where: { id: { in: assetIds }, deletedAt: null },
     });
-  } else if (filters) {
+  }
+  if (filters) {
     const { buildAssetWhere } = await import('./asset.service');
     const where = buildAssetWhere(filters);
-    assets = await prisma.asset.findMany({ where, orderBy: { propertyNumber: 'asc' } });
-  } else {
-    throw new Error('No assets found');
+    return prisma.asset.findMany({ where, orderBy: { propertyNumber: 'asc' } });
   }
+  throw new Error('No assets found');
+}
 
+async function renderLabelsPdf(assets: any[]): Promise<Buffer> {
   if (assets.length === 0) throw new Error('No assets found');
 
   // Pre-generate all QR codes
@@ -181,6 +170,27 @@ export async function generateLabelsPdf(
 
     doc.end();
   });
+}
+
+export async function generateLabelsPdfWithAssets(
+  assetIds?: string[],
+  filters?: LabelFilterInput,
+  performedById?: string,
+  ipAddress?: string
+): Promise<{ pdf: Buffer; assetIds: string[]; count: number }> {
+  const assets = await resolveAssetsForLabels(assetIds, filters);
+  const pdf = await renderLabelsPdf(assets);
+  return { pdf, assetIds: assets.map((asset) => asset.id), count: assets.length };
+}
+
+export async function generateLabelsPdf(
+  assetIds?: string[],
+  filters?: LabelFilterInput,
+  performedById?: string,
+  ipAddress?: string
+): Promise<Buffer> {
+  const result = await generateLabelsPdfWithAssets(assetIds, filters, performedById, ipAddress);
+  return result.pdf;
 }
 
 // --- Template CRUD ---

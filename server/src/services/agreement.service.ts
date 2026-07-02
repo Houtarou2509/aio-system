@@ -22,6 +22,8 @@ interface TemplateCreateData {
   isDefault?: boolean;
   defaultPropertyOfficer?: string;
   defaultAuthorizedRep?: string;
+  secondarySignatoryTitle?: string;
+  firstSignatoryTitle?: string;
   signatoryMode?: SignatoryMode;
   headerLogo?: string;
   letterheadPath?: string;
@@ -35,6 +37,8 @@ interface TemplateUpdateData {
   isDefault?: boolean;
   defaultPropertyOfficer?: string;
   defaultAuthorizedRep?: string;
+  secondarySignatoryTitle?: string;
+  firstSignatoryTitle?: string;
   signatoryMode?: SignatoryMode;
   headerLogo?: string;
   letterheadPath?: string;
@@ -62,8 +66,8 @@ This Accountability Agreement is executed by and between the Demographic Researc
 Terms and Conditions:
 1. The issued asset(s) shall be used only for official DRDF work, approved project activities, or other authorized purposes.
 2. The recipient shall exercise due care in handling, securing, and maintaining the asset(s) and shall keep them protected from loss, theft, damage, misuse, or unauthorized access.
-3. The asset(s) shall not be sold, lent, transferred, reassigned, modified, or disposed of without prior approval and proper documentation from the authorized DRDF representative or Property Officer.
-4. Any loss, theft, damage, malfunction, or security incident involving the asset(s) shall be reported immediately to the Property Officer or authorized DRDF representative.
+3. The asset(s) shall not be sold, lent, transferred, reassigned, modified, or disposed of without prior approval and proper documentation from the authorized DRDF representative or {{secondarySignatoryTitle}}.
+4. Any loss, theft, damage, malfunction, or security incident involving the asset(s) shall be reported immediately to the {{secondarySignatoryTitle}} or authorized DRDF representative.
 5. The recipient shall make the asset(s) available for inspection, inventory, repair, reassignment, or recall when requested by DRDF.
 6. The recipient shall return the asset(s), including accessories and related materials, upon completion of assignment, separation from DRDF, transfer of responsibility, project closeout, or upon demand by DRDF.
 7. The recipient accepts accountability for the asset(s) from the date of issuance until the asset(s) are officially returned, transferred, or otherwise cleared in DRDF records.
@@ -74,10 +78,10 @@ ________________________________________
 {{personnelName}} (Recipient)
 
 ________________________________________
-Property Officer
+{{secondarySignatoryTitle}}
 
 ________________________________________
-Authorized Representative`;
+{{firstSignatoryTitle}}`;
 
 /* ═══════════════════════════════════════════════════════
    TEMPLATES CRUD
@@ -140,6 +144,8 @@ export async function createTemplate(
         isDefault: data.isDefault ?? false,
         defaultPropertyOfficer: data.defaultPropertyOfficer ?? null,
         defaultAuthorizedRep: data.defaultAuthorizedRep ?? null,
+        secondarySignatoryTitle: data.secondarySignatoryTitle ?? null,
+        firstSignatoryTitle: data.firstSignatoryTitle ?? null,
         signatoryMode: normalizeSignatoryMode(data.signatoryMode),
         currentVersion: 1,
         ...(logoPath ? { headerLogo: logoPath } : {}),
@@ -159,6 +165,8 @@ export async function createTemplate(
         letterheadPath: template.letterheadPath,
         defaultPropertyOfficer: template.defaultPropertyOfficer,
         defaultAuthorizedRep: template.defaultAuthorizedRep,
+        secondarySignatoryTitle: template.secondarySignatoryTitle,
+        firstSignatoryTitle: template.firstSignatoryTitle,
         signatoryMode: template.signatoryMode,
         changeSummary: 'Initial version',
       },
@@ -186,6 +194,8 @@ export async function updateTemplate(
   if (data.isDefault !== undefined) updateData.isDefault = data.isDefault;
   if (data.defaultPropertyOfficer !== undefined) updateData.defaultPropertyOfficer = data.defaultPropertyOfficer || null;
   if (data.defaultAuthorizedRep !== undefined) updateData.defaultAuthorizedRep = data.defaultAuthorizedRep || null;
+  if (data.secondarySignatoryTitle !== undefined) updateData.secondarySignatoryTitle = data.secondarySignatoryTitle || null;
+  if (data.firstSignatoryTitle !== undefined) updateData.firstSignatoryTitle = data.firstSignatoryTitle || null;
   if (data.signatoryMode !== undefined) updateData.signatoryMode = normalizeSignatoryMode(data.signatoryMode);
   if (logoPath && logoPath !== '') updateData.headerLogo = logoPath;
   else if (data.headerLogo === '') updateData.headerLogo = null;
@@ -204,6 +214,8 @@ export async function updateTemplate(
     letterheadPath: updateData.letterheadPath !== undefined ? updateData.letterheadPath : existing.letterheadPath,
     defaultPropertyOfficer: updateData.defaultPropertyOfficer ?? existing.defaultPropertyOfficer,
     defaultAuthorizedRep: updateData.defaultAuthorizedRep ?? existing.defaultAuthorizedRep,
+    secondarySignatoryTitle: updateData.secondarySignatoryTitle ?? existing.secondarySignatoryTitle,
+    firstSignatoryTitle: updateData.firstSignatoryTitle ?? existing.firstSignatoryTitle,
     signatoryMode: updateData.signatoryMode ?? existing.signatoryMode,
   };
 
@@ -215,6 +227,8 @@ export async function updateTemplate(
     nextSnapshot.letterheadPath !== existing.letterheadPath ||
     nextSnapshot.defaultPropertyOfficer !== existing.defaultPropertyOfficer ||
     nextSnapshot.defaultAuthorizedRep !== existing.defaultAuthorizedRep ||
+    nextSnapshot.secondarySignatoryTitle !== existing.secondarySignatoryTitle ||
+    nextSnapshot.firstSignatoryTitle !== existing.firstSignatoryTitle ||
     nextSnapshot.signatoryMode !== existing.signatoryMode ||
     JSON.stringify(nextSnapshot.contentJson) !== JSON.stringify(existing.contentJson);
 
@@ -245,6 +259,8 @@ export async function updateTemplate(
           letterheadPath: nextSnapshot.letterheadPath,
           defaultPropertyOfficer: nextSnapshot.defaultPropertyOfficer,
           defaultAuthorizedRep: nextSnapshot.defaultAuthorizedRep,
+          secondarySignatoryTitle: nextSnapshot.secondarySignatoryTitle,
+          firstSignatoryTitle: nextSnapshot.firstSignatoryTitle,
           signatoryMode: nextSnapshot.signatoryMode,
           changeSummary: 'Template edited',
 },
@@ -309,6 +325,8 @@ export async function duplicateTemplate(id: string) {
         isDefault: false,
         defaultPropertyOfficer: contentSource.defaultPropertyOfficer,
         defaultAuthorizedRep: contentSource.defaultAuthorizedRep,
+        secondarySignatoryTitle: contentSource.secondarySignatoryTitle,
+        firstSignatoryTitle: contentSource.firstSignatoryTitle,
         signatoryMode: contentSource.signatoryMode ?? 'recipientPropertyOfficerAuthorizedRep',
         headerLogo: contentSource.headerLogo,
         letterheadPath: contentSource.letterheadPath,
@@ -328,6 +346,8 @@ export async function duplicateTemplate(id: string) {
         letterheadPath: template.letterheadPath,
         defaultPropertyOfficer: template.defaultPropertyOfficer,
         defaultAuthorizedRep: template.defaultAuthorizedRep,
+        secondarySignatoryTitle: template.secondarySignatoryTitle,
+        firstSignatoryTitle: template.firstSignatoryTitle,
         signatoryMode: template.signatoryMode,
         changeSummary: 'Duplicated from template: ' + source.name,
       },
@@ -478,7 +498,7 @@ export async function backfillAgreementDocuments(params: { performedById: string
           institution: { select: { name: true } },
         },
       },
-      agreement: { select: { id: true, name: true, title: true, headerLogo: true, letterheadPath: true, defaultPropertyOfficer: true, defaultAuthorizedRep: true, signatoryMode: true, currentVersion: true, versions: { orderBy: { versionNumber: 'desc' }, take: 1, select: { id: true, versionNumber: true } } } },
+      agreement: { select: { id: true, name: true, title: true, headerLogo: true, letterheadPath: true, defaultPropertyOfficer: true, defaultAuthorizedRep: true, secondarySignatoryTitle: true, firstSignatoryTitle: true, signatoryMode: true, currentVersion: true, versions: { orderBy: { versionNumber: 'desc' }, take: 1, select: { id: true, versionNumber: true } } } },
     },
   });
 
@@ -554,6 +574,8 @@ export async function backfillAgreementDocuments(params: { performedById: string
           assetSnapshot: assets,
           propertyOfficerName: first.agreement?.defaultPropertyOfficer || null,
           authorizedRepName: first.agreement?.defaultAuthorizedRep || null,
+          secondarySignatoryTitle: first.agreement?.secondarySignatoryTitle || null,
+          firstSignatoryTitle: first.agreement?.firstSignatoryTitle || null,
           signatoryMode: first.agreement?.signatoryMode || 'recipientPropertyOfficerAuthorizedRep',
           status: getDocumentStatus(assignments),
           issuedAt: first.assignedAt,
@@ -1418,6 +1440,8 @@ export interface AgreementPdfParams {
   title?: string | null;
   propertyOfficerName?: string | null;
   authorizedRepName?: string | null;
+  secondarySignatoryTitle?: string | null;
+  firstSignatoryTitle?: string | null;
   signatoryMode?: SignatoryMode | null;
   assets?: Array<{ name: string; serialNumber?: string | null; propertyNumber?: string | null; condition?: string | null }>;
   recipientSignedAt?: string | Date | null;
@@ -1542,6 +1566,8 @@ export async function resolveAgreementPdfParams(p: AgreementPdfParams): Promise<
     title: document.title || p.title || null,
     propertyOfficerName: document.propertyOfficerName || p.propertyOfficerName || null,
     authorizedRepName: document.authorizedRepName || p.authorizedRepName || null,
+    secondarySignatoryTitle: document.secondarySignatoryTitle || p.secondarySignatoryTitle || null,
+    firstSignatoryTitle: document.firstSignatoryTitle || p.firstSignatoryTitle || null,
     signatoryMode: normalizeSignatoryMode(document.signatoryMode || p.signatoryMode || null),
     assets: resolvedAssets.length ? resolvedAssets : p.assets,
     recipientSignedAt: document.recipientSignedAt || p.recipientSignedAt || null,
@@ -1558,7 +1584,7 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
   const {
     personnelName, designation, position, project, institution, assetName, serialNumber,
     propertyNumber, condition, templateId, agreementText,
-    propertyOfficerName, authorizedRepName, assets, recipientSignedAt, recipientSignatureName, documentNumber,
+    propertyOfficerName, authorizedRepName, secondarySignatoryTitle, firstSignatoryTitle, assets, recipientSignedAt, recipientSignatureName, documentNumber,
   } = p;
 
   const renderMode: 'preprinted' | 'fullDigital' = input.renderMode ?? 'preprinted';
@@ -1579,6 +1605,8 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
     serialNumber: serialNumber || undefined,
     propertyNumber: propertyNumber || undefined,
     condition: condition || undefined,
+    secondarySignatoryTitle: secondarySignatoryTitle || tmpl?.secondarySignatoryTitle || undefined,
+    firstSignatoryTitle: firstSignatoryTitle || tmpl?.firstSignatoryTitle || undefined,
     assets: assets?.map(a => ({
       name: a.name,
       serialNumber: a.serialNumber || undefined,
@@ -1631,6 +1659,8 @@ export async function generateAgreementPdf(input: AgreementPdfParams): Promise<B
     })),
     propertyOfficerName: propertyOfficerName || tmpl?.defaultPropertyOfficer,
     authorizedRepName: authorizedRepName || tmpl?.defaultAuthorizedRep,
+    secondarySignatoryTitle: secondarySignatoryTitle || tmpl?.secondarySignatoryTitle || undefined,
+    firstSignatoryTitle: firstSignatoryTitle || tmpl?.firstSignatoryTitle || undefined,
     signatoryMode: normalizeSignatoryMode(p.signatoryMode || tmpl?.signatoryMode || null),
     recipientSignedAt,
     recipientSignatureName,

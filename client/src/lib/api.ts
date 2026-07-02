@@ -215,6 +215,9 @@ export interface Asset {
   disposalReason?: string;
   disposalDate?: string;
   disposalMethod?: string;
+  qrPrintedAt?: string | null;
+  qrPrintedById?: string | null;
+  qrPrintedBy?: { id: string; username: string; fullName?: string | null } | null;
   deletedAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -254,6 +257,7 @@ export interface AssetFilters {
   purchaseDateTo?: string;
   warrantyExpiryFrom?: string;
   warrantyExpiryTo?: string;
+  qrPrintStatus?: 'printed' | 'not_printed';
 }
 
 export interface AssetLifecycleEvent {
@@ -283,6 +287,8 @@ export const assetsApi = {
   exportSelectedCsv: async (assetIds: string[]) => {
     return apiFetchBlob('/assets/export-csv', { method: 'POST', body: { assetIds } });
   },
+  markQrPrinted: (body: { assetIds?: string[]; filters?: AssetFilters }) =>
+    request<{ data: { updated: number; printedAt: string } }>('/assets/mark-qr-printed', { method: 'POST', body: JSON.stringify(body) }),
   get: (id: string) => request<{ data: Asset & { assignments: Assignment[]; maintenanceLogs: any[] } }>(`/assets/${id}`),
   lifecycle: (id: string) => request<{ data: AssetLifecycleEvent[] }>(`/assets/${id}/lifecycle`),
   create: (data: Partial<Asset>) => request<{ data: Asset }>('/assets', { method: 'POST', body: JSON.stringify(data) }),

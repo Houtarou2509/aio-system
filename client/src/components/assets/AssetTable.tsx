@@ -1,7 +1,7 @@
 import { Asset } from '../../lib/api';
 import { getWarrantyStatus, formatWarrantyDate } from '../../lib/warranty';
 import { getMaintenanceWarning } from '../../utils/maintenanceUtils';
-import { Package } from 'lucide-react';
+import { Package, QrCode } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useRef, useEffect } from 'react';
 
@@ -78,6 +78,39 @@ function SelectionCheckbox({
 
 /* ── Table component ──────────────────────────────────────── */
 
+function formatQrPrintedDate(value?: string | null) {
+  if (!value) return '';
+  return new Date(value).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function QrPrintBadge({ asset, compact = false }: { asset: Asset; compact?: boolean }) {
+  const printedDate = formatQrPrintedDate(asset.qrPrintedAt);
+  if (asset.qrPrintedAt) {
+    return (
+      <span
+        title={printedDate ? `QR printed on ${printedDate}` : 'QR printed'}
+        className={`inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 ${compact ? 'px-2 py-0.5 text-[9px]' : 'px-2.5 py-0.5 text-[10px]'} font-semibold tracking-wide whitespace-nowrap`}
+      >
+        <QrCode className={compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
+        QR printed
+      </span>
+    );
+  }
+  return (
+    <span
+      title="QR label has not been generated yet"
+      className={`inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200 ${compact ? 'px-2 py-0.5 text-[9px]' : 'px-2.5 py-0.5 text-[10px]'} font-semibold tracking-wide whitespace-nowrap`}
+    >
+      <QrCode className={compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
+      No QR yet
+    </span>
+  );
+}
+
 export function AssetTable({
   assets, onView, onSort, sortBy, sortOrder,
   selectedIds, onToggleSelect, onToggleSelectAll,
@@ -117,6 +150,7 @@ export function AssetTable({
               <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Location</th>
               <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Assigned To</th>
               <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">Property #</th>
+              <th className="px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase">QR</th>
               {!isGuest && (
                 <th className="cursor-pointer px-3 py-2.5 text-[10px] font-semibold tracking-widest text-white/70 uppercase" onClick={() => onSort('purchasePrice')}>
                   Price{sortIcon('purchasePrice')}
@@ -202,6 +236,10 @@ export function AssetTable({
                   {/* Property # */}
                   <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 font-mono">{(a as any).propertyNumber || <span className="text-slate-300">—</span>}</td>
 
+                  <td className="px-3 py-2">
+                    <QrPrintBadge asset={a} />
+                  </td>
+
                   {/* Price */}
                   {!isGuest && (
                     <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">
@@ -219,7 +257,7 @@ export function AssetTable({
 
             {assets.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-12 text-center text-sm text-slate-400">
+                <td colSpan={11} className="px-3 py-12 text-center text-sm text-slate-400">
                   No assets found
                 </td>
               </tr>
@@ -292,6 +330,10 @@ export function AssetTable({
                     {(a as any).propertyNumber && (
                       <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono shrink-0">{(a as any).propertyNumber}</span>
                     )}
+                  </div>
+
+                  <div className="mt-1">
+                    <QrPrintBadge asset={a} compact />
                   </div>
 
                   {/* Row 3: Location */}

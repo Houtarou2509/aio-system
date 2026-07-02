@@ -14,6 +14,7 @@ export const generatePdfSchema = z.object({
     purchaseDateTo: z.string().optional(),
     warrantyExpiryFrom: z.string().optional(),
     warrantyExpiryTo: z.string().optional(),
+    qrPrintStatus: z.enum(['printed', 'not_printed']).optional(),
   }).optional(),
 }).refine((data) => (data.assetIds?.length ?? 0) > 0 || !!data.filters, {
   message: 'Either assetIds or filters is required',

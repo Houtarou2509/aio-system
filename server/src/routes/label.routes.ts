@@ -5,6 +5,7 @@ import { validate } from '../middleware/validate';
 import { success, error } from '../utils/response';
 import { logAudit } from '../services/auditLog.service';
 import { generatePdfSchema, createTemplateSchema, updateTemplateSchema } from './label.schema';
+import { markAssetsQrPrinted } from '../services/asset.service';
 
 const router = Router();
 
@@ -17,17 +18,21 @@ function getClientIp(req: Request): string {
 router.post('/generate-pdf', authenticate, authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), validate(generatePdfSchema), async (req: Request, res: Response) => {
   try {
     const { assetIds, filters } = req.body;
-    const pdf = await labelService.generateLabelsPdf(assetIds, filters as any, req.user!.id, getClientIp(req));
+    const result = await labelService.generateLabelsPdfWithAssets(assetIds, filters as any, req.user!.id, getClientIp(req));
+    const printed = await markAssetsQrPrinted({ assetIds: result.assetIds, printedById: req.user!.id });
+    if (printed.updated !== result.assetIds.length) {
+      throw new Error(`Failed to record QR printed status for all generated labels. Recorded ${printed.updated} of ${result.assetIds.length}.`);
+    }
 
     // Audit: label print event
-    const totalCount = assetIds?.length ?? (await labelService.countAssetsForLabels(filters as any));
+    const totalCount = result.count;
     await logAudit({
       userId: req.user!.id,
       action: 'label.printed',
       entityType: 'Asset',
-      entityId: assetIds?.length === 1 ? assetIds[0] : null,
+      entityId: result.assetIds.length === 1 ? result.assetIds[0] : null,
       ipAddress: getClientIp(req),
-      metadata: { count: totalCount, filters, assetIds, summary: `Printed ${totalCount} label(s)` },
+      metadata: { count: totalCount, filters, assetIds: result.assetIds, summary: `Printed ${totalCount} label(s)` },
     });
 
     // Professional PDF filename: AIO-System-QR-Labels-YYYY-MM-DD-N-assets.pdf
@@ -39,7 +44,9 @@ router.post('/generate-pdf', authenticate, authorize(['ADMIN', 'STAFF_ADMIN', 'S
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
     res.setHeader('X-Filename', filename);
-    return res.send(pdf);
+    res.setHeader('X-QR-Printed-Asset-Ids', result.assetIds.join(','));
+    res.setHeader('X-QR-Printed-At', printed.printedAt.toISOString());
+    return res.send(result.pdf);
   } catch (err: any) {
     console.error('PDF generation error:', err);
     return res.status(err.message === 'No assets found' ? 404 : 500).json({ error: err.message });

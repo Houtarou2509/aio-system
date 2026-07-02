@@ -17,6 +17,8 @@ interface AgreementDocumentDetails {
   assetSnapshot: any;
   propertyOfficerName?: string | null;
   authorizedRepName?: string | null;
+  secondarySignatoryTitle?: string | null;
+  firstSignatoryTitle?: string | null;
   recipientSignedAt?: string | null;
   recipientSignatureName?: string | null;
   signedPdfPath?: string | null;
@@ -206,8 +208,8 @@ export default function AgreementDocumentDetailModal({
                 <DetailField label="Institution" value={details.institutionSnapshot} />
                 <DetailField label="Issue Date" value={formatDate(details.issuedAt)} />
                 <DetailField label="Template Version" value={details.templateVersion ? `v${details.templateVersion}` : null} />
-                <DetailField label="Property Officer" value={details.propertyOfficerName} />
-                <DetailField label="Authorized Rep." value={details.authorizedRepName} />
+                <DetailField label={details.secondarySignatoryTitle || 'Property Officer'} value={details.propertyOfficerName} />
+                <DetailField label={details.firstSignatoryTitle || 'Authorized Representative'} value={details.authorizedRepName} />
               </div>
 
               {/* Signature info */}

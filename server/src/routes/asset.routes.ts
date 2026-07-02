@@ -62,6 +62,7 @@ import {
   bulkUpdateSchema,
   exportAssetsQuerySchema,
   exportSelectedCsvSchema,
+  markQrPrintedSchema,
 } from './asset.schema';
 import { disposeAssetSchema } from './disposal.schema';
 
@@ -220,6 +221,38 @@ router.post('/export-csv', async (req: Request, res: Response) => {
     return res.send(csv);
   } catch (err: any) {
     return error(res, err.message, 400);
+  }
+});
+
+// POST /api/assets/mark-qr-printed — explicit QR printed state update after PDF generation succeeds
+router.post('/mark-qr-printed', authorize(['ADMIN', 'STAFF_ADMIN', 'STAFF']), async (req: Request, res: Response) => {
+  try {
+    const parsed = markQrPrintedSchema.safeParse(req.body);
+    if (!parsed.success) return error(res, formatValidationError(parsed.error), 422);
+
+    const result = await assetService.markAssetsQrPrinted({
+      assetIds: parsed.data.assetIds,
+      filters: parsed.data.filters,
+      printedById: req.user!.id,
+    });
+
+    await logAudit({
+      userId: req.user!.id,
+      action: 'asset.qr_printed_marked',
+      entityType: 'Asset',
+      entityId: parsed.data.assetIds?.length === 1 ? parsed.data.assetIds[0] : null,
+      ipAddress: getClientIp(req),
+      metadata: {
+        count: result.updated,
+        assetIds: parsed.data.assetIds,
+        filters: parsed.data.filters,
+        printedAt: result.printedAt.toISOString(),
+      },
+    });
+
+    return success(res, { updated: result.updated, printedAt: result.printedAt }, 200);
+  } catch (err: any) {
+    return error(res, err.message || 'Failed to mark QR printed', 400);
   }
 });
 

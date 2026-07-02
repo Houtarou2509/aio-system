@@ -9,6 +9,8 @@ export const createIssuanceSchema = z.object({
   agreementId: z.string().uuid().optional().nullable(),
   propertyOfficerName: z.string().max(200).optional().nullable(),
   authorizedRepName: z.string().max(200).optional().nullable(),
+  secondarySignatoryTitle: z.string().max(200).optional().nullable(),
+  firstSignatoryTitle: z.string().max(200).optional().nullable(),
   signatoryMode: z.enum(['recipientOnly', 'recipientPropertyOfficer', 'recipientPropertyOfficerAuthorizedRep']).optional().nullable(),
 });
 
@@ -42,6 +44,8 @@ export const bulkIssuanceSchema = z.object({
   agreementText: z.string().max(100000).optional().nullable(),
   propertyOfficerName: z.string().max(200).optional().nullable(),
   authorizedRepName: z.string().max(200).optional().nullable(),
+  secondarySignatoryTitle: z.string().max(200).optional().nullable(),
+  firstSignatoryTitle: z.string().max(200).optional().nullable(),
   signatoryMode: z.enum(['recipientOnly', 'recipientPropertyOfficer', 'recipientPropertyOfficerAuthorizedRep']).optional().nullable(),
 });
 

@@ -127,6 +127,23 @@ describe('Label Generation', () => {
 
     expect(logs.length).toBeGreaterThanOrEqual(1);
   });
+
+  it('marks selected assets as QR printed after successful PDF generation', async () => {
+    const asset = await createAsset({ name: 'QR Printed State', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .post('/api/labels/generate-pdf')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ assetIds: [asset.id] });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['x-qr-printed-asset-ids']).toBe(asset.id);
+    expect(res.headers['x-qr-printed-at']).toBeTruthy();
+
+    const updated = await prisma.asset.findUnique({ where: { id: asset.id } });
+    expect(updated?.qrPrintedAt).toBeTruthy();
+    expect(updated?.qrPrintedById).toBe(users.ADMIN.id);
+  });
 });
 
 describe('Label Templates', () => {
@@ -441,6 +458,38 @@ describe('Label Generation — Filtered', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('application/pdf');
     expect(res.headers['content-disposition']).toContain('5-assets.pdf');
+  });
+
+  it('marks every asset matched by filtered QR generation', async () => {
+    const roomAssets: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const a = await createAsset({ name: `Filtered QR-${i}`, location: 'QR Room', adminToken: users.ADMIN.accessToken });
+      roomAssets.push(a.id);
+    }
+    const other = await createAsset({ name: 'Filtered QR Other', location: 'Other Room', adminToken: users.ADMIN.accessToken });
+
+    const res = await request(app)
+      .post('/api/labels/generate-pdf')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`)
+      .send({ filters: { location: 'QR Room' } });
+
+    expect(res.status).toBe(200);
+    const printedHeaderIds = String(res.headers['x-qr-printed-asset-ids']).split(',');
+    expect(printedHeaderIds.sort()).toEqual([...roomAssets].sort());
+    expect(res.headers['x-qr-printed-at']).toBeTruthy();
+
+    const printed = await prisma.asset.count({
+      where: { id: { in: roomAssets }, qrPrintedAt: { not: null }, qrPrintedById: users.ADMIN.id },
+    });
+    const otherAsset = await prisma.asset.findUnique({ where: { id: other.id } });
+    expect(printed).toBe(4);
+    expect(otherAsset?.qrPrintedAt).toBeNull();
+
+    const unprintedRes = await request(app)
+      .get('/api/assets?location=QR%20Room&qrPrintStatus=not_printed')
+      .set('Authorization', `Bearer ${users.ADMIN.accessToken}`);
+    expect(unprintedRes.status).toBe(200);
+    expect(unprintedRes.body.meta.total).toBe(0);
   });
 
   it('generates PDF by manufacturer filter', async () => {

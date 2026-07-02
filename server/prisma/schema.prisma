@@ -36,6 +36,7 @@ model User {
   issueReports       IssueReport[]       @relation("IssueReportReporter")
   notifications      Notification[]      @relation("UserNotifications")
   documentArchiveUploads DocumentArchiveItem[] @relation("DocumentUploader")
+  qrPrintedAssets Asset[] @relation("AssetQrPrintedBy")
 
   @@map("users")
 }
@@ -90,6 +91,9 @@ model Asset {
   warrantyExpiry   DateTime?
   warrantyNotes     String?
   deletedAt        DateTime?
+  qrPrintedAt      DateTime?
+  qrPrintedById    String?
+  qrPrintedBy      User?         @relation("AssetQrPrintedBy", fields: [qrPrintedById], references: [id], onDelete: SetNull)
 
   disposalReason   String?           @db.Text
   disposalDate     DateTime?
@@ -108,6 +112,8 @@ model Asset {
   documentArchiveItems DocumentArchiveItem[] @relation("AssetDocuments")
 
   @@index([propertyNumber])
+  @@index([qrPrintedAt])
+  @@index([qrPrintedById])
   @@map("assets")
 }
 
@@ -401,10 +407,12 @@ model AgreementTemplate {
   contentJson            Json?    // structured Tiptap editor content (JSON)
   defaultLogo            String?  // path to a system-wide default logo fallback
   isDefault              Boolean  @default(false)
-  defaultPropertyOfficer String?  // default name for Property Officer signatory
-  defaultAuthorizedRep   String?  // default name for Authorized Representative signatory
-  signatoryMode          String   @default("recipientPropertyOfficerAuthorizedRep")
-  currentVersion         Int      @default(1)
+  defaultPropertyOfficer   String?  // default name for second signatory (legacy field name)
+  defaultAuthorizedRep     String?  // default name for first signatory (legacy field name)
+  secondarySignatoryTitle  String?  // configurable role label for the second signatory
+  firstSignatoryTitle      String?  // configurable role label for the first signatory (formerly Authorized Representative)
+  signatoryMode            String   @default("recipientPropertyOfficerAuthorizedRep")
+  currentVersion           Int      @default(1)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
   assignments            Assignment[] @relation("AssignmentAgreement")
@@ -424,9 +432,11 @@ model AgreementTemplateVersion {
   headerLogo             String?
   letterheadPath         String?  // full A4 letterhead background (PDF/PNG/JPG) for digital mode
   contentJson            Json?    // structured Tiptap editor content (JSON)
-  defaultPropertyOfficer String?
-  defaultAuthorizedRep   String?
-  signatoryMode          String   @default("recipientPropertyOfficerAuthorizedRep")
+  defaultPropertyOfficer   String?
+  defaultAuthorizedRep     String?
+  secondarySignatoryTitle  String?
+  firstSignatoryTitle      String?
+  signatoryMode            String   @default("recipientPropertyOfficerAuthorizedRep")
   changeSummary          String?
   createdAt              DateTime @default(now())
 
@@ -457,6 +467,8 @@ model AgreementDocument {
   assetSnapshot              Json
   propertyOfficerName        String?
   authorizedRepName          String?
+  secondarySignatoryTitle    String?
+  firstSignatoryTitle        String?
   signatoryMode              String   @default("recipientPropertyOfficerAuthorizedRep")
   status                     String   @default("issued")
   issuedAt                   DateTime @default(now())

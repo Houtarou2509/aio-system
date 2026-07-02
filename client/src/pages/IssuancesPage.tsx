@@ -26,7 +26,7 @@ interface Issuance {
   condition: string | null; conditionAtIssue?: string | null; conditionAtReturn?: string | null; returnRemarks?: string | null; accountabilityStatus?: string | null; accountabilityClosedAt?: string | null;
   notes: string | null; agreementText: string | null; agreementId: string | null; bulkBatchId: string | null;
   recipientSignedAt: string | null; recipientSignatureName: string | null;
-  agreementDocument: { id: string; documentNumber: string; status: string; signedPdfPath: string | null; signedUploadedAt: string | null; title: string; resolvedText: string | null; propertyOfficerName: string | null; authorizedRepName: string | null } | null;
+  agreementDocument: { id: string; documentNumber: string; status: string; signedPdfPath: string | null; signedUploadedAt: string | null; title: string; resolvedText: string | null; propertyOfficerName: string | null; authorizedRepName: string | null; secondarySignatoryTitle: string | null; firstSignatoryTitle: string | null } | null;
   asset: { id: string; name: string; serialNumber: string | null; propertyNumber: string | null; status: string } | null;
   personnel: { id: string; fullName: string; position: string | null; project: string | null; department: string | null; designation: string | null; designationLookup: { name: string } | null } | null;
 }
@@ -976,6 +976,8 @@ export default function IssuancesPage() {
                                 documentNumber: iss.agreementDocument?.documentNumber || undefined,
                                 propertyOfficerName: iss.agreementDocument?.propertyOfficerName || undefined,
                                 authorizedRepName: iss.agreementDocument?.authorizedRepName || undefined,
+                                secondarySignatoryTitle: iss.agreementDocument?.secondarySignatoryTitle || undefined,
+                                firstSignatoryTitle: iss.agreementDocument?.firstSignatoryTitle || undefined,
                                 agreementDocumentId: iss.agreementDocument?.id || undefined,
                                 signedPdfPath: iss.agreementDocument?.signedPdfPath || undefined,
                                 signedUploadedAt: iss.agreementDocument?.signedUploadedAt || undefined,
@@ -1163,6 +1165,8 @@ export default function IssuancesPage() {
                             documentNumber: batchAgreementDocument?.documentNumber || undefined,
                             propertyOfficerName: batchAgreementDocument?.propertyOfficerName || undefined,
                             authorizedRepName: batchAgreementDocument?.authorizedRepName || undefined,
+                            secondarySignatoryTitle: batchAgreementDocument?.secondarySignatoryTitle || undefined,
+                            firstSignatoryTitle: batchAgreementDocument?.firstSignatoryTitle || undefined,
                             agreementDocumentId: batchAgreementDocument?.id || undefined,
                             signedPdfPath: batchAgreementDocument?.signedPdfPath || undefined,
                             signedUploadedAt: batchAgreementDocument?.signedUploadedAt || undefined,
@@ -1396,6 +1400,8 @@ export default function IssuancesPage() {
                             documentNumber: iss.agreementDocument?.documentNumber || undefined,
                             propertyOfficerName: iss.agreementDocument?.propertyOfficerName || undefined,
                             authorizedRepName: iss.agreementDocument?.authorizedRepName || undefined,
+                            secondarySignatoryTitle: iss.agreementDocument?.secondarySignatoryTitle || undefined,
+                            firstSignatoryTitle: iss.agreementDocument?.firstSignatoryTitle || undefined,
                             agreementDocumentId: iss.agreementDocument?.id || undefined,
                             signedPdfPath: iss.agreementDocument?.signedPdfPath || undefined,
                             signedUploadedAt: iss.agreementDocument?.signedUploadedAt || undefined,
@@ -1610,6 +1616,8 @@ export default function IssuancesPage() {
                           documentNumber: batchAgreementDocument?.documentNumber || undefined,
                           propertyOfficerName: batchAgreementDocument?.propertyOfficerName || undefined,
                           authorizedRepName: batchAgreementDocument?.authorizedRepName || undefined,
+                          secondarySignatoryTitle: batchAgreementDocument?.secondarySignatoryTitle || undefined,
+                          firstSignatoryTitle: batchAgreementDocument?.firstSignatoryTitle || undefined,
                           agreementDocumentId: batchAgreementDocument?.id || undefined,
                           signedPdfPath: batchAgreementDocument?.signedPdfPath || undefined,
                           signedUploadedAt: batchAgreementDocument?.signedUploadedAt || undefined,

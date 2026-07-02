@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAssets } from '../hooks/useAssets';
-import { assetsApi, Asset, ApiError } from '../lib/api';
+import { assetsApi, Asset, ApiError, AssetFilters } from '../lib/api';
 import { getPageSelectionState, togglePageSelection } from '../lib/assetSelection';
 import { PermissionGate } from '../components/auth';
 import { AssetTable, AssetDetailModal, AssetFormModal, ImportAssetsModal, BulkActionModal, FilterPresetManager } from '../components/assets';
@@ -67,7 +67,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
 /* ── Page component ──────────────────────────────────────── */
 
 export default function AssetsPage() {
-  const { assets, loading, meta, filters, setFilters, refetch, fetchAllIds } = useAssets();
+  const { assets, loading, meta, filters, setFilters, refetch, fetchAllIds, markQrPrintedLocally } = useAssets();
   const [searchParams, setSearchParams] = useSearchParams();
   const { options: typeFilterOptions } = useLookupOptions('asset-types');
   const { options: manufacturerOptions } = useLookupOptions('manufacturers');
@@ -89,6 +89,7 @@ export default function AssetsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAllMatching, setSelectAllMatching] = useState(false);
   const [selectAllLoading, setSelectAllLoading] = useState(false);
+  const [unprintedQrCount, setUnprintedQrCount] = useState<number | null>(null);
 
   // Search ref for keyboard shortcut
   const searchRef = useRef<HTMLInputElement>(null);
@@ -143,6 +144,48 @@ export default function AssetsPage() {
   useEffect(() => {
     refetchKpi();
   }, [refetchKpi]);
+
+  const currentFiltersWithoutPaging = useCallback((overrides: AssetFilters = {}): AssetFilters => ({
+    type: filters.type,
+    status: filters.status,
+    location: filters.location,
+    manufacturer: filters.manufacturer,
+    search: filters.search,
+    purchaseDateFrom: filters.purchaseDateFrom,
+    purchaseDateTo: filters.purchaseDateTo,
+    warrantyExpiryFrom: filters.warrantyExpiryFrom,
+    warrantyExpiryTo: filters.warrantyExpiryTo,
+    qrPrintStatus: filters.qrPrintStatus,
+    ...overrides,
+  }), [
+    filters.type,
+    filters.status,
+    filters.location,
+    filters.manufacturer,
+    filters.search,
+    filters.purchaseDateFrom,
+    filters.purchaseDateTo,
+    filters.warrantyExpiryFrom,
+    filters.warrantyExpiryTo,
+    filters.qrPrintStatus,
+  ]);
+
+  const refetchUnprintedQrCount = useCallback(async () => {
+    try {
+      const res = await assetsApi.list({
+        ...currentFiltersWithoutPaging({ qrPrintStatus: 'not_printed' }),
+        page: 1,
+        limit: 1,
+      });
+      setUnprintedQrCount(res.meta?.total ?? res.data.length);
+    } catch {
+      setUnprintedQrCount(null);
+    }
+  }, [currentFiltersWithoutPaging]);
+
+  useEffect(() => {
+    refetchUnprintedQrCount();
+  }, [refetchUnprintedQrCount]);
 
   // Stable helper to remove a single query param using the latest URL state.
   // This avoids stale closure issues when multiple param handlers run concurrently.
@@ -286,6 +329,10 @@ export default function AssetsPage() {
     () => getPageSelectionState(currentPageIds, selectedIds),
     [currentPageIds, selectedIds]
   );
+  const selectedPrintedVisibleCount = useMemo(
+    () => assets.filter(asset => selectedIds.has(asset.id) && asset.qrPrintedAt).length,
+    [assets, selectedIds]
+  );
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -316,7 +363,7 @@ export default function AssetsPage() {
 
   const deselectAll = () => { setSelectedIds(new Set()); setSelectAllMatching(false); };
 
-  const hasActiveFilters = Boolean(filters.type || filters.status || filters.location || filters.search || filters.manufacturer || filters.purchaseDateFrom || filters.purchaseDateTo || filters.warrantyExpiryFrom || filters.warrantyExpiryTo);
+  const hasActiveFilters = Boolean(filters.type || filters.status || filters.location || filters.search || filters.manufacturer || filters.purchaseDateFrom || filters.purchaseDateTo || filters.warrantyExpiryFrom || filters.warrantyExpiryTo || filters.qrPrintStatus);
 
   const handleClearAllFilters = () => {
     setFilters({
@@ -330,6 +377,7 @@ export default function AssetsPage() {
       purchaseDateTo: undefined,
       warrantyExpiryFrom: undefined,
       warrantyExpiryTo: undefined,
+      qrPrintStatus: undefined,
       page: 1,
     });
     setSelectedIds(new Set());
@@ -342,25 +390,17 @@ export default function AssetsPage() {
     setSelectAllMatching(false);
   };
 
-  // Print QR labels for selected or filtered assets
-  const handlePrintQR = async (mode: 'selected' | 'filtered') => {
+  // Print QR labels for selected, filtered, or only unprinted matching assets
+  const handlePrintQR = async (mode: 'selected' | 'filtered' | 'unprinted') => {
     setPrintLoading(true);
     try {
       const body: any = {};
       if (mode === 'selected') {
         body.assetIds = Array.from(selectedIds);
       } else {
-        body.filters = {
-          type: filters.type,
-          status: filters.status,
-          location: filters.location,
-          manufacturer: filters.manufacturer,
-          search: filters.search,
-          purchaseDateFrom: filters.purchaseDateFrom,
-          purchaseDateTo: filters.purchaseDateTo,
-          warrantyExpiryFrom: filters.warrantyExpiryFrom,
-          warrantyExpiryTo: filters.warrantyExpiryTo,
-        };
+        body.filters = currentFiltersWithoutPaging(
+          mode === 'unprinted' ? { qrPrintStatus: 'not_printed' } : {}
+        );
       }
       const res = await fetch('/api/labels/generate-pdf', {
         method: 'POST',
@@ -374,10 +414,15 @@ export default function AssetsPage() {
       const datePart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const countPart = mode === 'selected'
         ? (selectedIds.size === 1 ? '1-asset' : `${selectedIds.size}-assets`)
-        : 'filtered-assets';
+        : mode === 'unprinted' ? 'unprinted-assets' : 'filtered-assets';
       const defaultFilename = `AIO-System-QR-Labels-${datePart}-${countPart}.pdf`;
       const filename = res.headers.get('X-Filename') || defaultFilename;
-      const countLabel = mode === 'selected' ? String(selectedIds.size) : 'filtered results';
+      const printedAt = res.headers.get('X-QR-Printed-At') || now.toISOString();
+      const printedAssetIds = (res.headers.get('X-QR-Printed-Asset-Ids') || '')
+        .split(',')
+        .map(id => id.trim())
+        .filter(Boolean);
+      const countLabel = mode === 'selected' ? String(selectedIds.size) : mode === 'unprinted' ? 'unprinted results' : 'filtered results';
 
       const url = URL.createObjectURL(blob);
       const w = window.open('', '_blank');
@@ -395,8 +440,29 @@ export default function AssetsPage() {
         w.document.close();
       }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
+      const printedVisibleIds = printedAssetIds.length > 0
+        ? printedAssetIds
+        : mode === 'selected'
+          ? Array.from(selectedIds)
+          : assets
+              .filter(asset => mode === 'filtered' || !asset.qrPrintedAt)
+              .map(asset => asset.id);
+      const visibleUnprintedPrintedCount = assets.filter(asset => printedVisibleIds.includes(asset.id) && !asset.qrPrintedAt).length;
+
+      markQrPrintedLocally(printedVisibleIds, printedAt);
+      if (mode === 'unprinted' || mode === 'filtered') {
+        setUnprintedQrCount(prev => {
+          if (prev == null) return 0;
+          return Math.max(0, prev - Math.max(printedAssetIds.length, visibleUnprintedPrintedCount));
+        });
+      } else if (visibleUnprintedPrintedCount > 0) {
+        setUnprintedQrCount(prev => prev == null ? prev : Math.max(0, prev - visibleUnprintedPrintedCount));
+      }
+      await Promise.allSettled([refetch(), refetchUnprintedQrCount()]);
       showToast('Label opened — use browser Print or Download button');
-    } catch { showToast('Failed to generate labels. Please try again.'); }
+    } catch {
+      showToast('Failed to generate labels. Please try again.');
+    }
     finally { setPrintLoading(false); }
   };
 
@@ -419,6 +485,7 @@ export default function AssetsPage() {
           purchaseDateTo: filters.purchaseDateTo,
           warrantyExpiryFrom: filters.warrantyExpiryFrom,
           warrantyExpiryTo: filters.warrantyExpiryTo,
+          qrPrintStatus: filters.qrPrintStatus,
         });
         const filename = `assets-export-${new Date().toISOString().split('T')[0]}-filtered.csv`;
         downloadBlob(blob, filename);
@@ -558,6 +625,7 @@ export default function AssetsPage() {
                   filters.purchaseDateTo,
                   filters.warrantyExpiryFrom,
                   filters.warrantyExpiryTo,
+                  filters.qrPrintStatus,
                 ].filter(Boolean).length}
               </span>
             )}
@@ -581,6 +649,11 @@ export default function AssetsPage() {
             <select value={filters.status || ''} onChange={e => setFilters({ ...filters, status: e.target.value || undefined, page: 1 })} className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-2 text-xs text-slate-700 dark:text-slate-300 h-9 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none">
               <option value="">Status: All</option>
               {ASSET_STATUSES.map(s => <option key={s} value={s}>{ASSET_STATUS_LABELS[s] || s}</option>)}
+            </select>
+            <select value={filters.qrPrintStatus || ''} onChange={e => setFilters({ ...filters, qrPrintStatus: e.target.value as AssetFilters['qrPrintStatus'] || undefined, page: 1 })} className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-2 text-xs text-slate-700 dark:text-slate-300 h-9 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none">
+              <option value="">All QR statuses</option>
+              <option value="not_printed">QR not printed</option>
+              <option value="printed">QR printed</option>
             </select>
             <select value={filters.manufacturer} onChange={e => setFilters({ ...filters, manufacturer: e.target.value || undefined, page: 1 })} className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-2 text-xs text-slate-700 dark:text-slate-300 h-9 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none">
               <option value="">Manufacturer: All</option>
@@ -649,6 +722,17 @@ export default function AssetsPage() {
           >
             <option value="">Status: All</option>
             {ASSET_STATUSES.map(s => <option key={s} value={s}>{ASSET_STATUS_LABELS[s] || s}</option>)}
+          </select>
+
+          {/* QR print status filter */}
+          <select
+            value={filters.qrPrintStatus || ''}
+            onChange={e => setFilters({ ...filters, qrPrintStatus: e.target.value as AssetFilters['qrPrintStatus'] || undefined, page: 1 })}
+            className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 h-8 focus:border-[#f8931f] focus:ring-1 focus:ring-[#f8931f] focus:outline-none"
+          >
+            <option value="">QR: All</option>
+            <option value="not_printed">QR not printed</option>
+            <option value="printed">QR printed</option>
           </select>
 
           {/* Manufacturer filter */}
@@ -775,6 +859,16 @@ export default function AssetsPage() {
               <span className="text-xs text-slate-500 dark:text-slate-400">{meta.total} asset{meta.total !== 1 ? 's' : ''} match current filters</span>
             )}
           </div>
+          {selectedPrintedVisibleCount > 0 && (
+            <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              {selectedPrintedVisibleCount} visible selected asset{selectedPrintedVisibleCount !== 1 ? 's' : ''} already have QR labels. Reprinting is allowed if labels were lost or damaged.
+            </div>
+          )}
+          {selectAllMatching && filters.qrPrintStatus !== 'not_printed' && (
+            <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              This cross-page selection may include assets that already have QR labels. Use the QR not printed filter to avoid duplicates.
+            </div>
+          )}
           <div className="flex items-center gap-2 overflow-x-auto flex-nowrap pb-1">
             <div className="relative shrink-0" ref={statusDropdownRef}>
               <button onClick={() => setStatusDropdown(!statusDropdown)} disabled={bulkLoading}
@@ -815,6 +909,24 @@ export default function AssetsPage() {
             </PermissionGate>
             <button onClick={deselectAll}
               className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 shrink-0">Deselect All</button>
+          </div>
+        </div>
+      )}
+
+      {selectedIds.size === 0 && filters.qrPrintStatus !== 'printed' && filters.qrPrintStatus !== 'not_printed' && (unprintedQrCount ?? 0) > 0 && (
+        <div className="shrink-0 px-4 sm:px-6 py-2 bg-amber-50 dark:bg-amber-950 border-b border-amber-200 dark:border-amber-800">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <span className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+              {unprintedQrCount} matching asset{unprintedQrCount !== 1 ? 's' : ''} have no QR label yet
+            </span>
+            <button
+              onClick={() => handlePrintQR('unprinted')}
+              disabled={printLoading}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#012061] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#012061]/90 disabled:opacity-50 shrink-0"
+            >
+              <ScanLine className="h-3.5 w-3.5" />
+              {printLoading ? 'Generating...' : `Print QR for new/unprinted assets (${unprintedQrCount})`}
+            </button>
           </div>
         </div>
       )}

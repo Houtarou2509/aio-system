@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { apiFetch, ApiError, AUTH_EXPIRED_EVENT } from '../lib/api';
 import AgreementTemplateRichEditor from '../components/agreement/AgreementTemplateRichEditor';
+import SignatoryTitleInput from '../components/issuances/SignatoryTitleInput';
 
 /* ─── Types ─── */
 
@@ -21,6 +22,8 @@ interface AgreementTemplate {
   isDefault: boolean;
   defaultPropertyOfficer: string | null;
   defaultAuthorizedRep: string | null;
+  secondarySignatoryTitle: string | null;
+  firstSignatoryTitle: string | null;
   signatoryMode: 'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep';
   currentVersion: number;
   versions?: AgreementTemplateVersion[];
@@ -41,6 +44,8 @@ interface AgreementTemplateVersion {
   letterheadPath: string | null;
   defaultPropertyOfficer: string | null;
   defaultAuthorizedRep: string | null;
+  secondarySignatoryTitle: string | null;
+  firstSignatoryTitle: string | null;
   signatoryMode: 'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep';
   changeSummary: string | null;
   createdAt: string;
@@ -161,6 +166,8 @@ export default function AccountabilityTemplatesPage() {
   const [editLetterheadPreview, setEditLetterheadPreview] = useState<string | null>(null);
   const [editPropertyOfficer, setEditPropertyOfficer] = useState('');
   const [editAuthorizedRep, setEditAuthorizedRep] = useState('');
+  const [editSecondarySignatoryTitle, setEditSecondarySignatoryTitle] = useState('');
+  const [editFirstSignatoryTitle, setEditFirstSignatoryTitle] = useState('');
   const [editSignatoryMode, setEditSignatoryMode] = useState<'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep'>('recipientPropertyOfficerAuthorizedRep');
 
   // Is this a new (unsaved) template?
@@ -248,6 +255,8 @@ export default function AccountabilityTemplatesPage() {
     setEditLetterheadPreview(template.letterheadPath || null);
     setEditPropertyOfficer(template.defaultPropertyOfficer || '');
     setEditAuthorizedRep(template.defaultAuthorizedRep || '');
+    setEditSecondarySignatoryTitle(template.secondarySignatoryTitle || '');
+    setEditFirstSignatoryTitle(template.firstSignatoryTitle || '');
     setEditSignatoryMode(template.signatoryMode || 'recipientPropertyOfficerAuthorizedRep');
     setIsNew(newFlag);
   }
@@ -273,6 +282,8 @@ export default function AccountabilityTemplatesPage() {
       isDefault: false,
       defaultPropertyOfficer: null,
       defaultAuthorizedRep: null,
+      secondarySignatoryTitle: null,
+      firstSignatoryTitle: null,
       signatoryMode: 'recipientPropertyOfficerAuthorizedRep',
       currentVersion: 1,
       createdAt: '',
@@ -352,6 +363,8 @@ export default function AccountabilityTemplatesPage() {
         isDefault: String(editIsDefault),
         defaultPropertyOfficer: editPropertyOfficer,
         defaultAuthorizedRep: editAuthorizedRep,
+        secondarySignatoryTitle: editSecondarySignatoryTitle.trim() || undefined,
+        firstSignatoryTitle: editFirstSignatoryTitle.trim() || undefined,
         signatoryMode: editSignatoryMode,
         ...(letterheadPathToSave ? { letterheadPath: letterheadPathToSave } : {}),
       };
@@ -555,11 +568,13 @@ export default function AccountabilityTemplatesPage() {
       editIsDefault !== (selected.isDefault || false) ||
       editPropertyOfficer !== (selected.defaultPropertyOfficer || '') ||
       editAuthorizedRep !== (selected.defaultAuthorizedRep || '') ||
+      editSecondarySignatoryTitle !== (selected.secondarySignatoryTitle || '') ||
+      editFirstSignatoryTitle !== (selected.firstSignatoryTitle || '') ||
       editSignatoryMode !== (selected.signatoryMode || 'recipientPropertyOfficerAuthorizedRep') ||
       editLogoFile !== null ||
       editLetterheadFile !== null
     );
-  }, [isNew, selected, editName, editTitle, editContent, editContentJson, editIsDefault, editPropertyOfficer, editAuthorizedRep, editSignatoryMode, editLogoFile, editLetterheadFile]);
+  }, [isNew, selected, editName, editTitle, editContent, editContentJson, editIsDefault, editPropertyOfficer, editAuthorizedRep, editSecondarySignatoryTitle, editFirstSignatoryTitle, editSignatoryMode, editLogoFile, editLetterheadFile]);
 
   /* ─── Filtered templates ─── */
 
@@ -1052,15 +1067,15 @@ export default function AccountabilityTemplatesPage() {
                       className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow bg-white dark:bg-slate-800"
                     >
                       <option value="recipientOnly">Recipient only</option>
-                      <option value="recipientPropertyOfficer">Recipient + Property Officer</option>
-                      <option value="recipientPropertyOfficerAuthorizedRep">Recipient + Property Officer + Authorized Representative</option>
+                      <option value="recipientPropertyOfficer">Recipient + Second Signatory</option>
+                      <option value="recipientPropertyOfficerAuthorizedRep">Recipient + Second Signatory + First Signatory</option>
                     </select>
                   </div>
 
                   {editSignatoryMode !== 'recipientOnly' && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Property Officer</label>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Second Signatory Name</label>
                         <input
                           type="text"
                           value={editPropertyOfficer}
@@ -1070,7 +1085,15 @@ export default function AccountabilityTemplatesPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Authorized Representative</label>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Second Signatory Title</label>
+                        <SignatoryTitleInput
+                          value={editSecondarySignatoryTitle}
+                          onChange={setEditSecondarySignatoryTitle}
+                          placeholder="e.g., Director"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">First Signatory Name</label>
                         <input
                           type="text"
                           value={editAuthorizedRep}
@@ -1078,6 +1101,14 @@ export default function AccountabilityTemplatesPage() {
                           placeholder="e.g., Maria Santos"
                           disabled={editSignatoryMode !== 'recipientPropertyOfficerAuthorizedRep'}
                           className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-[#f8931f]/50 focus:border-[#f8931f] transition-shadow disabled:bg-slate-100 disabled:text-slate-400 dark:disabled:bg-slate-700"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">First Signatory Title</label>
+                        <SignatoryTitleInput
+                          value={editFirstSignatoryTitle}
+                          onChange={setEditFirstSignatoryTitle}
+                          placeholder="e.g., Project Director"
                         />
                       </div>
                     </div>
@@ -1364,14 +1395,14 @@ export default function AccountabilityTemplatesPage() {
                       <div className="text-center">
                         <div className="border-b border-slate-300 dark:border-slate-600 mb-1.5" />
                         <p className="text-[10px] text-slate-600 dark:text-slate-400">{editPropertyOfficer || '_________________'}</p>
-                        <p className="text-[8px] text-slate-400 uppercase tracking-wider">Property Officer</p>
+                        <p className="text-[8px] text-slate-400 uppercase tracking-wider">{editSecondarySignatoryTitle || 'Property Officer'}</p>
                       </div>
                     )}
                     {editSignatoryMode === 'recipientPropertyOfficerAuthorizedRep' && (
                       <div className="text-center">
                         <div className="border-b border-slate-300 dark:border-slate-600 mb-1.5" />
                         <p className="text-[10px] text-slate-600 dark:text-slate-400">{editAuthorizedRep || '_________________'}</p>
-                        <p className="text-[8px] text-slate-400 uppercase tracking-wider">Authorized Rep.</p>
+                        <p className="text-[8px] text-slate-400 uppercase tracking-wider">{editFirstSignatoryTitle || 'Authorized Representative'}</p>
                       </div>
                     )}
                   </div>

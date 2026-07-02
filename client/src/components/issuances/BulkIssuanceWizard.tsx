@@ -4,14 +4,15 @@ import { useDebounce } from '../../hooks/useDebounce';
 import {
   FileSignature, Search, X, ChevronRight, Users, FileText, Loader2, CheckSquare, Square,
 } from 'lucide-react';
+import SignatoryTitleInput from './SignatoryTitleInput';
 
 /*
   QA Signatory UI Checklist:
   1. Open Bulk Issuance Wizard.
   2. Select assets and personnel to reach the Agreement step.
   3. Choose a template with signatoryMode=recipientOnly -> only Agreement text shown; no Signatories section.
-  4. Choose recipientPropertyOfficer -> Signatories section shows Property Officer input only.
-  5. Choose recipientPropertyOfficerAuthorizedRep -> Signatories section shows Property Officer + Authorized Representative.
+  4. Choose recipientPropertyOfficer -> Signatories section shows Second Signatory input only.
+  5. Choose recipientPropertyOfficerAuthorizedRep -> Signatories section shows Second Signatory + First Signatory.
   6. Confirm the issued document snapshot only stores names required by the selected mode.
 */
 
@@ -44,6 +45,8 @@ interface TemplateOption {
   isDefault: boolean;
   defaultPropertyOfficer?: string | null;
   defaultAuthorizedRep?: string | null;
+  secondarySignatoryTitle?: string | null;
+  firstSignatoryTitle?: string | null;
   signatoryMode?: 'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep';
 }
 
@@ -85,6 +88,8 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
   // Signatory names
   const [propertyOfficerName, setPropertyOfficerName] = useState('');
   const [authorizedRepName, setAuthorizedRepName] = useState('');
+  const [secondarySignatoryTitle, setSecondarySignatoryTitle] = useState('');
+  const [firstSignatoryTitle, setFirstSignatoryTitle] = useState('');
   const [signatoryMode, setSignatoryMode] = useState<'recipientOnly' | 'recipientPropertyOfficer' | 'recipientPropertyOfficerAuthorizedRep'>('recipientPropertyOfficerAuthorizedRep');
 
   // Debounced asset search
@@ -124,6 +129,8 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
           setSelectedTemplateId(def.id);
           setPropertyOfficerName(def.defaultPropertyOfficer || '');
           setAuthorizedRepName(def.defaultAuthorizedRep || '');
+          setSecondarySignatoryTitle(def.secondarySignatoryTitle || '');
+          setFirstSignatoryTitle(def.firstSignatoryTitle || '');
           setSignatoryMode(def.signatoryMode || 'recipientPropertyOfficerAuthorizedRep');
         }
       } catch { /* non-critical */ }
@@ -222,6 +229,8 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
         if (data.templateId && !selectedTemplateId) setSelectedTemplateId(data.templateId);
         if (data.defaultPropertyOfficer && !propertyOfficerName) setPropertyOfficerName(data.defaultPropertyOfficer);
         if (data.defaultAuthorizedRep && !authorizedRepName) setAuthorizedRepName(data.defaultAuthorizedRep);
+        if (data.secondarySignatoryTitle && !secondarySignatoryTitle) setSecondarySignatoryTitle(data.secondarySignatoryTitle);
+        if (data.firstSignatoryTitle && !firstSignatoryTitle) setFirstSignatoryTitle(data.firstSignatoryTitle);
         if (data.signatoryMode) setSignatoryMode(data.signatoryMode);
         setAgreement(data.resolvedText);
       } catch {
@@ -235,7 +244,7 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
           assetTable += `${a.name} | S/N: ${a.serialNumber || 'N/A'} | Prop#: ${a.propertyNumber || 'N/A'}\n`;
         }
 
-        const fallback = `ISSUANCE AND ACCOUNTABILITY AGREEMENT\n\nDate: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}\n\nThis certifies that ${selectedPersonnel.fullName}${designation ? `, ${designation}` : ''}${institution ? ` of ${institution}` : ''}${project ? ` (${project})` : ''} has been issued the following assets for official use:\n\n${assetTable}\nTerms and Conditions:\n1. All assets shall be used solely for official business purposes.\n2. The recipient shall exercise due diligence in the care and protection of each asset.\n3. Assets shall not be transferred to another individual without proper documentation.\n4. Any damage, loss, or theft must be reported immediately to the Property Officer.\n5. All assets shall be returned upon resignation, transfer, or upon request by management.\n6. The recipient assumes full accountability for all issued assets during the period of possession.\n\n________________________________________\n${selectedPersonnel.fullName} (Recipient)\n\n________________________________________\nProperty Officer\n\n________________________________________\nAuthorized Representative`;
+        const fallback = `ISSUANCE AND ACCOUNTABILITY AGREEMENT\\n\\nDate: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}\\n\\nThis certifies that ${selectedPersonnel.fullName}${designation ? `, ${designation}` : ''}${institution ? ` of ${institution}` : ''}${project ? ` (${project})` : ''} has been issued the following assets for official use:\\n\\n${assetTable}\\nTerms and Conditions:\\n1. All assets shall be used solely for official business purposes.\\n2. The recipient shall exercise due diligence in the care and protection of each asset.\\n3. Assets shall not be transferred to another individual without proper documentation.\\n4. Any damage, loss, or theft must be reported immediately to the ${secondarySignatoryTitle || 'Property Officer'}.\\n5. All assets shall be returned upon resignation, transfer, or upon request by management.\\n6. The recipient assumes full accountability for all issued assets during the period of possession.\\n\\n________________________________________\\n${selectedPersonnel.fullName} (Recipient)\\n\\n________________________________________\\n${secondarySignatoryTitle || 'Property Officer'}\\n\\n________________________________________\\n${firstSignatoryTitle || 'Authorized Representative'}`;
         setAgreement(fallback);
       }
     };
@@ -259,6 +268,8 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
           agreementText: agreement,
           propertyOfficerName: (signatoryMode === 'recipientPropertyOfficer' || signatoryMode === 'recipientPropertyOfficerAuthorizedRep') ? propertyOfficerName || undefined : undefined,
           authorizedRepName: signatoryMode === 'recipientPropertyOfficerAuthorizedRep' ? authorizedRepName || undefined : undefined,
+          secondarySignatoryTitle: (signatoryMode === 'recipientPropertyOfficer' || signatoryMode === 'recipientPropertyOfficerAuthorizedRep') ? secondarySignatoryTitle.trim() || undefined : undefined,
+          firstSignatoryTitle: signatoryMode === 'recipientPropertyOfficerAuthorizedRep' ? firstSignatoryTitle.trim() || undefined : undefined,
           signatoryMode,
         },
       });
@@ -297,6 +308,8 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
       templateId: selectedTemplateId || undefined,
       propertyOfficerName: (signatoryMode === 'recipientPropertyOfficer' || signatoryMode === 'recipientPropertyOfficerAuthorizedRep') ? propertyOfficerName || undefined : undefined,
       authorizedRepName: signatoryMode === 'recipientPropertyOfficerAuthorizedRep' ? authorizedRepName || undefined : undefined,
+      secondarySignatoryTitle: (signatoryMode === 'recipientPropertyOfficer' || signatoryMode === 'recipientPropertyOfficerAuthorizedRep') ? secondarySignatoryTitle.trim() || undefined : undefined,
+      firstSignatoryTitle: signatoryMode === 'recipientPropertyOfficerAuthorizedRep' ? firstSignatoryTitle.trim() || undefined : undefined,
       signatoryMode,
       personnelId: selectedPersonnel?.id || undefined,
     });
@@ -471,6 +484,8 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
                           const tpl = templates.find(t => t.id === e.target.value);
                           setPropertyOfficerName(tpl?.defaultPropertyOfficer || '');
                           setAuthorizedRepName(tpl?.defaultAuthorizedRep || '');
+                          setSecondarySignatoryTitle(tpl?.secondarySignatoryTitle || '');
+                          setFirstSignatoryTitle(tpl?.firstSignatoryTitle || '');
                           setSignatoryMode(tpl?.signatoryMode || 'recipientPropertyOfficerAuthorizedRep');
                         }}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-[#f8931f] focus:border-transparent appearance-none bg-white"
@@ -497,13 +512,29 @@ export default function BulkIssuanceWizard({ onClose, onSave, onPreviewPdf, pres
                       <div className="space-y-2 mt-1">
                         {(signatoryMode === 'recipientPropertyOfficer' || signatoryMode === 'recipientPropertyOfficerAuthorizedRep') && (
                           <input type="text" value={propertyOfficerName} onChange={e => setPropertyOfficerName(e.target.value)}
-                            placeholder="Property Officer name"
+                            placeholder="Signatory name"
                             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                        )}
+                        {(signatoryMode === 'recipientPropertyOfficer' || signatoryMode === 'recipientPropertyOfficerAuthorizedRep') && (
+                          <SignatoryTitleInput
+                            value={secondarySignatoryTitle}
+                            onChange={setSecondarySignatoryTitle}
+                            placeholder="Signatory title (e.g., Director)"
+                            className="border-slate-200 text-xs"
+                          />
                         )}
                         {signatoryMode === 'recipientPropertyOfficerAuthorizedRep' && (
                           <input type="text" value={authorizedRepName} onChange={e => setAuthorizedRepName(e.target.value)}
-                            placeholder="Authorized Representative name"
+                            placeholder="First Signatory name"
                             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs focus:ring-2 focus:ring-[#f8931f] focus:border-transparent" />
+                        )}
+                        {signatoryMode === 'recipientPropertyOfficerAuthorizedRep' && (
+                          <SignatoryTitleInput
+                            value={firstSignatoryTitle}
+                            onChange={setFirstSignatoryTitle}
+                            placeholder="First Signatory title (e.g., Director)"
+                            className="border-slate-200 text-xs"
+                          />
                         )}
                       </div>
                     </div>
